@@ -200,7 +200,7 @@ Confirmed empirically: reopening the fixture parses the v1 prefix
 (`version=4`) carrying the authored channel items, and regeneration is
 byte-stable.
 
-The oracle in `crates/pictura-codec/tests/agpsd_oracle.rs` adds a second test
+The oracle in `crates/pictura-codec/tests/psd/agpsd_oracle.rs` adds a second test
 that runs `node -e "<script>" <fixture>` with
 `require('ag-psd').readPsd(bytes, { skipLayerImageData: true,
 skipCompositeImageData: true })` and prints one whitespace-separated line per
@@ -213,7 +213,7 @@ change is needed.
 
 ### D8. A cheap psd-tools partial check always runs
 
-`crates/pictura-render/tests/adjustment_oracle.rs` gains a third test that feeds
+`crates/pictura-render/tests/oracle/adjustment_oracle.rs` gains a third test that feeds
 the fixture's composite-only `curv` bytes to
 `psd_tools.psd.adjustments.Curves.read` and asserts `version == 1`, the
 `count_map` low-16-bit bitmask, and the first curve's points equal the authored

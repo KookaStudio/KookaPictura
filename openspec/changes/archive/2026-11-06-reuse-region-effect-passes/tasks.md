@@ -13,7 +13,7 @@
 
 ## 3. Bevel performance evidence
 
-- [x] 3.1 Write ignored `warm_bevel_region_replay_profile` in `tests/source_cache_profile.rs` using design.md's fixed generated fixture, regions and dedicated one-worker rayon pool. After three warm-up rounds, measure nine alternating-order rounds of the adjacent 128-row pair versus its exact 256-row union, assert the ratio of median summed-pair time to median union time is at most 4.0, and compare all outputs to full slices outside timing. Assert four warm source-cache hits per short call for this fixture, including two pass hits, zero warm source misses and zero effect decodes; report these as reuse signals, with direct zero-build assertions in task 2.1's unit tests. Report cold short and warm full times too. Finish this assertion-bearing test source before any build.
+- [x] 3.1 Write ignored `warm_bevel_region_replay_profile` in `examples/source_cache_profile.rs` using design.md's fixed generated fixture, regions and dedicated one-worker rayon pool. After three warm-up rounds, measure nine alternating-order rounds of the adjacent 128-row pair versus its exact 256-row union, assert the ratio of median summed-pair time to median union time is at most 4.0, and compare all outputs to full slices outside timing. Assert four warm source-cache hits per short call for this fixture, including two pass hits, zero warm source misses and zero effect decodes; report these as reuse signals, with direct zero-build assertions in task 2.1's unit tests. Report cold short and warm full times too. Finish this assertion-bearing test source before any build.
 
 ## 4. Integrated verification and shipping
 

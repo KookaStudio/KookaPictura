@@ -24,5 +24,5 @@ None.
 ## Impact
 
 - Implementation: `crates/pictura-render/src/layer_source/mod.rs`; existing CPU/GPU pass replay should need no change.
-- Coverage: layer-source tests, layer-effect cache tests, and `crates/pictura-render/tests/source_cache_profile.rs`.
+- Coverage: layer-source tests, layer-effect cache tests, and `crates/pictura-render/examples/source_cache_profile.rs`.
 - No new dependencies, public API changes, pixel-baseline changes, or bevel algorithm changes. Parallel cold-pass preparation (#1179) and blur optimization (#1178) remain separate.

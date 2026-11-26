@@ -3,7 +3,7 @@
 ## 1. Engine
 
 - [x] 1.1 `pictura-render/src/apply_image.rs`: planes, modes, kernel, native write.
-- [x] 1.2 `tests/apply_image.rs`.
+- [x] 1.2 `tests/document/apply_image.rs`.
 
 ## 2. App
 

@@ -39,7 +39,7 @@ current inert behavior gives `(0, 127, 128)`, so the oracle proves the change.
 - `crates/pictura-render/src/composite.rs`: the isolated group branch threads an
   empty initial-backdrop canvas as the children's base.
 - `scripts/generate-fixtures.py`, `scripts/psd_knockout_reference.py`,
-  `crates/pictura-render/tests/knockout_oracle.rs`.
+  `crates/pictura-render/tests/oracle/knockout_oracle.rs`.
 - No new dependency, no app UI, no PSD byte-layout change.
 - Ceilings unchanged: nested-shallow targets beyond the enclosing group,
   clipping bases, `Transparency Shapes Layers`, non-Background bottom nuance.

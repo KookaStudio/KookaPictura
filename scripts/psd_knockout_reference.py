@@ -8,7 +8,7 @@ the blend modes and psd-tools itself is for the codec.
 
 `gen` opens a committed fixture, composites it, converts to RGBA, and writes raw
 interleaved RGBA8 to the fixture's reference path, which
-`tests/knockout_oracle.rs` reads without a codec dependency. The fixture is
+`tests/oracle/knockout_oracle.rs` reads without a codec dependency. The fixture is
 chosen from the `--out` stem (`knockout_deep` -> `knockout.psd`,
 `knockout_group` -> `knockout_group.psd`); pass `--fixture` to override.
 

@@ -40,7 +40,7 @@ None.
 - `crates/pictura-core/src/layer_content/mod.rs`: one predicate on `Layer`.
 - `crates/pictura-render/src/document_ops/layer_ops/auto_blend/mod.rs`: refusal
   path and the stale "no video or 3D refusal" note.
-- Tests in `auto_blend/tests.rs` and `crates/pictura-codec/tests/layer_content.rs`.
+- Tests in `auto_blend/tests.rs` and `crates/pictura-codec/tests/psd/layer_content.rs`.
 - No docs, roadmap, dependency, or build-system changes.
 - Files that predate `PxSD` or use an undocumented key remain undetected; the
   public specification exposes no other 3D/video layer key, so none is guessed.

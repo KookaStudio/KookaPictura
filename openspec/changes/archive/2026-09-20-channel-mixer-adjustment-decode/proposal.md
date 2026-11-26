@@ -82,9 +82,9 @@ create a layer, a committed fixture plus an ag-psd oracle, and the panel wiring.
 - `crates/pictura-render/src/tests/adjustment.rs`: decode, malformed-rejection,
   encoder round-trip, fixture-decode, and composite tests; drop `mixr` from the
   deferred set.
-- `crates/pictura-render/tests/adjustment_oracle.rs`: a psd-tools partial read
+- `crates/pictura-render/tests/oracle/adjustment_oracle.rs`: a psd-tools partial read
   of the fixture's `mixr` block (optional, always-run-with-psd-tools).
-- `crates/pictura-codec/tests/agpsd_oracle.rs`: new ag-psd oracle over the
+- `crates/pictura-codec/tests/psd/agpsd_oracle.rs`: new ag-psd oracle over the
   fixture (self-skips without `node`/`ag-psd`).
 - `crates/pictura-app/src/cxxqt_object/helpers.rs`: a `"channel-mixer"` arm in
   `adjustment_layer`.

@@ -67,6 +67,6 @@ None.
 - `crates/pictura-render/src/composite.rs` — the shared `u8` unit table.
 - `crates/pictura-render/src/tests/` — the parity matrix, the override and
   switch-composition tests, and the forced-general switch.
-- `crates/pictura-render/tests/composite_profile.rs` — the kernel-eligible
+- `crates/pictura-render/examples/composite_profile.rs` — the kernel-eligible
   target profile cases.
 - No new dependencies. No `docs/` change.

@@ -91,7 +91,7 @@ equals `composite_rgba(doc)` immediately after the call.
 ### Requirement: Document canvas resize oracle
 
 The system SHALL ship an oracle for `resize_canvas_document` in
-`crates/pictura-render/tests/document_oracle.rs` that (a) writes the resized
+`crates/pictura-render/tests/document/document_oracle.rs` that (a) writes the resized
 document with `pictura_codec::write_psd`, re-reads it with
 `pictura_codec::read_psd`, and confirms the structural round-trip, (b) opens the
 written file with the independent `psd-tools` library and confirms the reported

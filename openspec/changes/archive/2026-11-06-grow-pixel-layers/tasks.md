@@ -11,7 +11,7 @@
       fill_outside_rect_grows_layer, a_bucket_fills_an_empty_layer}`
 - [x] 1.4 `pictura_codec::{empty_layer_round_trips, grown_layer_round_trips,
       existing_files_stay_byte_identical}` and
-      `crates/pictura-codec/tests/empty_layer_oracle.rs`
+      `crates/pictura-codec/tests/psd/empty_layer_oracle.rs`
 - [x] 1.5 `pictura_app::memory_gate::{a_fill_that_grows_the_layer_forks_the_grown_bands,
       a_write_forks_the_bands_it_crosses}` and
       `pictura_app::impl_filters::tests::blur_grows_the_layer`

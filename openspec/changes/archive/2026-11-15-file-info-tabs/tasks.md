@@ -29,7 +29,7 @@
 
 ## 6. Oracles and templates
 
-- [x] 6.1 Extend `crates/pictura-codec/tests/metadata_oracle.rs` with the GPS, IPTC Origin/Keywords, and expanded XMP tags, including `parsed_xmp_agrees_with_exiftool`; verify `metadata_decodes_and_agrees_with_exiftool` and `parsed_xmp_agrees_with_exiftool` pass.
+- [x] 6.1 Extend `crates/pictura-codec/tests/metadata/metadata_oracle.rs` with the GPS, IPTC Origin/Keywords, and expanded XMP tags, including `parsed_xmp_agrees_with_exiftool`; verify `metadata_decodes_and_agrees_with_exiftool` and `parsed_xmp_agrees_with_exiftool` pass.
 - [x] 6.2 Extend the extension and raw-packet oracle coverage; verify `parsed_extension_fields_agree_with_exiftool`, `edited_extension_fields_survive_save_and_exiftool`, and `raw_packet_round_trips_through_save` pass (self-skipping without `exiftool`).
 - [x] 6.3 Extend the template coverage; verify `template_origin_field_reaches_both_channels` and `template_keyword_list_reaches_both_channels` pass.
 

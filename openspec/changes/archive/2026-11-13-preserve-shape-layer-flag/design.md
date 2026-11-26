@@ -120,7 +120,7 @@ layer remains a fill layer and bit 4 is still correct. `drop_type` and
 `vector_fill.psd` is the positive case (bits set) and `vector_mask.psd` is the
 negative case (vector-masked fill layers with bit clear); no fixture or
 generator change is needed. A new focused integration test file,
-`crates/pictura-codec/tests/layer_record_flags.rs`, covers reading, PSD/PSB
+`crates/pictura-codec/tests/psd/layer_record_flags.rs`, covers reading, PSD/PSB
 round trips with the PSB container flag normalized, the no-inference case, the
 no-gain case, psd-tools classification of written copies, and the rasterized
 save. `crates/pictura-render/src/tests/rasterize.rs` gains one test per

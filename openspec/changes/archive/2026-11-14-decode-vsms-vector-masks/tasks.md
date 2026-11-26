@@ -11,7 +11,7 @@ execution happen in group 6, following the compile-last rule.
 ## 2. Codec decode
 
 - [x] 2.1 Add codec unit tests in `crates/pictura-codec/src/vector_mask.rs`: `a_vsms_block_decodes_when_vmsk_is_absent`, `vmsk_wins_when_both_blocks_exist`, `a_malformed_vsms_block_is_unset_and_preserved`, `a_valid_vmsk_wins_over_a_malformed_vsms`, `a_malformed_vmsk_does_not_fall_back_to_vsms`, and `a_vsms_block_round_trips_verbatim`; verify each builds the version-3 body under `b"vsms"`/`b"vmsk"` and asserts the derived view, precedence, and preserved raw blocks.
-- [x] 2.2 Extend `crates/pictura-codec/tests/vector_mask_oracle.rs` so its psd-tools script falls back to `Tag.VECTOR_MASK_SETTING2`, and add the non-skipping `vsms_fixture_decodes` and `vsms_fixture_round_trips` plus the oracle `vsms_fixture_matches_psd_tools`; verify only the oracle self-skips without psd-tools and the fixture read/round trip asserts the authored rectangle and byte-identical `vsms` block.
+- [x] 2.2 Extend `crates/pictura-codec/tests/psd/vector_mask_oracle.rs` so its psd-tools script falls back to `Tag.VECTOR_MASK_SETTING2`, and add the non-skipping `vsms_fixture_decodes` and `vsms_fixture_round_trips` plus the oracle `vsms_fixture_matches_psd_tools`; verify only the oracle self-skips without psd-tools and the fixture read/round trip asserts the authored rectangle and byte-identical `vsms` block.
 - [x] 2.3 Change `resolve_vector_masks` in `crates/pictura-codec/src/vector_mask.rs` to select `b"vmsk"` by presence and otherwise `b"vsms"`, leaving the decode, flags, placeholder density/feather merge, and raw-block preservation untouched; update the derivation comments to say `vmsk`/`vsms`. Verify the tests from 2.1–2.2 pass once the final build runs.
 
 ## 3. Vector-mask authoring on `vsms`

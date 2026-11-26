@@ -37,6 +37,6 @@ Each test is written against the counters or behavior named below and must fail 
 
 ## 6. Profile and integration
 
-- [x] 6.1 Extend `crates/pictura-render/tests/composite_profile.rs` with a 4000² stack carrying Curves, Color Lookup, a proxy-less type layer, and a styled layer; verify `cargo test -p pictura-render --test composite_profile -- --ignored --nocapture` prints a timing for it.
+- [x] 6.1 Extend `crates/pictura-render/examples/composite_profile.rs` with a 4000² stack carrying Curves, Color Lookup, a proxy-less type layer, and a styled layer; verify `cargo run -p pictura-render --example composite_profile` prints a timing for it.
 - [x] 6.2 Record the before (`origin/master`) and after timings in the PR body; verify the table lists both runs on the same machine and build profile (manual: wall time is machine-dependent and no fixed threshold is set).
 - [ ] 6.3 Run `bash scripts/verify-fast.sh` and the oracle suites; verify it passes with no baseline changes.

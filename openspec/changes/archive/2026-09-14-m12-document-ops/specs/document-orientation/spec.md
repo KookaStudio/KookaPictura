@@ -108,7 +108,7 @@ The composite MUST be recomputed from the remapped layer tree so that
 ### Requirement: Document orientation oracle
 
 The system SHALL ship an oracle for `rotate_document` and `flip_document` in
-`crates/pictura-render/tests/document_oracle.rs` that (a) writes the rotated or
+`crates/pictura-render/tests/document/document_oracle.rs` that (a) writes the rotated or
 flipped document with `pictura_codec::write_psd`, re-reads it with
 `pictura_codec::read_psd`, and confirms the structural round-trip, (b) opens the
 written file with the independent `psd-tools` library and confirms the reported

@@ -154,7 +154,7 @@ mutation.
 ### Requirement: Document-scope rotation oracle
 
 The system SHALL ship an oracle for `rotate_document_in` in
-`crates/pictura-render/tests/document_oracle.rs`. Right-angle calls SHALL be
+`crates/pictura-render/tests/document/document_oracle.rs`. Right-angle calls SHALL be
 compared bit-exactly against `rotate_document` (zero tolerance). Arbitrary
 angles SHALL be compared against the `pictura_ops::rotate_in` kernel on the
 document's composited result, and against ImageMagick `magick -rotate` on the

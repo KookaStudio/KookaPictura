@@ -4,7 +4,7 @@ This plan covers `vendor-camera-matrices` (#1465): the new capability
 `codec/camera-matrices` and the modified `codec/vendor-raw-containers`.
 
 **Fixtures.** Synthetic CR2s are written in the test by
-`tests/raw/cr2_builder.rs`, which gains maker-note colour data (tag `0x4001`)
+`tests/camera_raw/raw/cr2_builder.rs`, which gains maker-note colour data (tag `0x4001`)
 and IFD0 make/model; planes are deterministic (fixed LCG seed). The corpus row
 reads user-supplied camera files, opt-in through `PICTURA_RAW_CORPUS`.
 
@@ -17,7 +17,7 @@ reads user-supplied camera files, opt-in through `PICTURA_RAW_CORPUS`.
 | `cr2_as_shot_layouts` | CR2s with colour data of 582/653 entries and versions 1, 6, 10, 15, 17, -3, 33, 48; multipliers (2000, 1000, 1024, 1500) at the layout's index | `AsShotNeutral` (1012/2000, 1, 1012/1500) within 1e-9 | `pictura-codec::cr2_as_shot_neutral_by_layout` |
 | `cr2_as_shot_refused` | Version 25; version 10 with 40 entries; version 10 with red 0 | Reads; no `AsShotNeutral` | `pictura-codec::unusable_colour_data_leaves_no_neutral` |
 | `cr2_known_camera_decodes` | "Canon EOS 5DS" CR2, version 12, multipliers (2208, 1024, 1024, 1967); `decode_raw_source` | Ok; as-shot = `as_shot_transform(color)`, 2000–12000 K | `pictura-codec::known_camera_cr2_decodes` |
-| `cr2_colour_corpus` | `PICTURA_RAW_CORPUS=<dir> cargo test -p pictura-codec --test raw_camera_matrices corpus` | Table cameras decode with 2000–12000 K; others refused (checked on 16 files: 13 table bodies decode; 450D, 350D and 600D refused) | `pictura-codec::cr2_corpus_colour_when_present` |
+| `cr2_colour_corpus` | `PICTURA_RAW_CORPUS=<dir> cargo test -p pictura-codec --test camera_raw raw_camera_matrices::corpus` | Table cameras decode with 2000–12000 K; others refused (checked on 16 files: 13 table bodies decode; 450D, 350D and 600D refused) | `pictura-codec::cr2_corpus_colour_when_present` |
 | `cr2_levels` | Unchanged | Unchanged | `pictura-codec::masked_border_sets_the_black` |
 | `cr2_tags` | Unchanged (model "Canon EOS Synthetic", no colour data) | Colour tags empty | `pictura-codec::cr2_reports_camera_tags` |
 | `cr2_hostile` | Unchanged | Unchanged | `pictura-codec::hostile_cr2s_fail_cleanly` |

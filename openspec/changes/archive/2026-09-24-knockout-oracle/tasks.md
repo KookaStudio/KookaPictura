@@ -12,7 +12,7 @@
 
 ## 3. Render test
 
-- [x] 3.1 Add `crates/pictura-render/tests/knockout_oracle.rs`: `read_psd` the fixture, assert `Knockout::Deep`, `composite_rgba`, `pictura_testkit::compare` against the reference at the chosen tolerance, assert the green is punched through, and self-skip when `psd_tools` is absent.
+- [x] 3.1 Add `crates/pictura-render/tests/oracle/knockout_oracle.rs`: `read_psd` the fixture, assert `Knockout::Deep`, `composite_rgba`, `pictura_testkit::compare` against the reference at the chosen tolerance, assert the green is punched through, and self-skip when `psd_tools` is absent.
 - [x] 3.2 Record the tolerance and the psd-tools provenance in `crates/pictura-render/tests/README.md` (mirror the ImageMagick note).
 
 ## 4. Docs and gates

@@ -73,7 +73,7 @@ After a successful `resize_document`, `doc.composite` SHALL be replaced by `pict
 
 ### Requirement: Document resize oracle
 
-The system SHALL ship an oracle for `resize_document` in `crates/pictura-render/tests/document_oracle.rs` that (a) writes the resized document with `pictura_codec::write_psd`, re-reads it with `pictura_codec::read_psd`, and confirms the structural round-trip matches the resized document, (b) opens the written file with the independent `psd-tools` library and confirms the reported document dimensions and layer count match the resized document, and (c) asserts `doc.composite == composite_rgba(&doc)`. The oracle SHALL skip with a message when `psd-tools` is not importable and MUST NOT be marked `#[ignore]`.
+The system SHALL ship an oracle for `resize_document` in `crates/pictura-render/tests/document/document_oracle.rs` that (a) writes the resized document with `pictura_codec::write_psd`, re-reads it with `pictura_codec::read_psd`, and confirms the structural round-trip matches the resized document, (b) opens the written file with the independent `psd-tools` library and confirms the reported document dimensions and layer count match the resized document, and (c) asserts `doc.composite == composite_rgba(&doc)`. The oracle SHALL skip with a message when `psd-tools` is not importable and MUST NOT be marked `#[ignore]`.
 
 #### Scenario: The resized document round-trips structurally
 

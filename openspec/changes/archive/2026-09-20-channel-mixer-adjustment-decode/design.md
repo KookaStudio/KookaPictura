@@ -160,7 +160,7 @@ with a Base layer plus two adjustment layers:
 - `Channel Mixer Mono` (monochrome): `gray = (20, 40, 60)`, `constant = -15`,
   written as the ag-psd 44-byte shape (gray + 30 zero bytes).
 
-The oracle `crates/pictura-codec/tests/agpsd_oracle.rs` runs
+The oracle `crates/pictura-codec/tests/psd/agpsd_oracle.rs` runs
 `node -e "<script>"` with the fixture path, where the script does
 `require('ag-psd').readPsd(bytes, { skipLayerImageData: true,
 skipCompositeImageData: true })` and prints one whitespace-separated line per
@@ -179,7 +179,7 @@ non-monochrome and monochrome values.
 
 ### D7. A cheap psd-tools partial check always runs
 
-`crates/pictura-render/tests/adjustment_oracle.rs` gains a second test that
+`crates/pictura-render/tests/oracle/adjustment_oracle.rs` gains a second test that
 feeds the fixture's non-monochrome `mixr` bytes to psd-tools'
 `ChannelMixer.read` and asserts `version == 1`, `monochrome == 0`, and the first
 five shorts equal the red row plus its constant. This is honest about

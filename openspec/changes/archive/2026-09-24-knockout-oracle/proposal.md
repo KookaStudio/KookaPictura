@@ -21,7 +21,7 @@ for codec decode.
   `crates/pictura-render/tests/fixtures/`, produced by a new
   `scripts/psd_knockout_reference.py` from `psd.composite()`, in the same raw
   interleaved-RGBA8 format as the ImageMagick oracle.
-- **A render oracle test** `crates/pictura-render/tests/knockout_oracle.rs`
+- **A render oracle test** `crates/pictura-render/tests/oracle/knockout_oracle.rs`
   that reads the fixture through `read_psd`, asserts the typed `Knockout::Deep`,
   composites with `composite_rgba`, and diffs against the reference within a
   documented tolerance (self-skips when `psd_tools` is absent, like the other
@@ -47,7 +47,7 @@ for codec decode.
 - `scripts/generate-fixtures.py` + a new `scripts/psd_knockout_reference.py`.
 - `crates/pictura-codec/tests/fixtures/knockout.psd` (generated).
 - `crates/pictura-render/tests/fixtures/knockout_*.rgba` (generated) +
-  `crates/pictura-render/tests/knockout_oracle.rs`.
+  `crates/pictura-render/tests/oracle/knockout_oracle.rs`.
 - Fixtures README and the roadmap/STATE open-question notes.
 - No new dependency (psd-tools and python3 are existing oracle tools).
 - Ceiling: the reference is psd-tools, not a Photoshop pixel dump; the manual

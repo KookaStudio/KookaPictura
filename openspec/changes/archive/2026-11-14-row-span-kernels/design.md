@@ -174,14 +174,13 @@ failed assertion cannot leave a process-global switch set.
 
 ### D7. Measurement
 
-`crates/pictura-render/tests/composite_profile.rs` already measures 4000²
+`crates/pictura-render/examples/composite_profile.rs` already measures 4000²
 Normal, Multiply, feathered-mask, vector-mask, type, and mixed cases with an
 `#[ignore]`. Add an alpha-less Normal case and a plain-raster-mask case that are
 kernel-eligible: Normal mode, opacity 255, fill 255, no Blend If, no text-gamma
 curve, no native stores, on a full-canvas 8-bit layer. Record the timings with
-`cargo test -p pictura-render --release --test composite_profile -- --ignored
---nocapture` on the branch and on `origin/master`, and put the table in the PR.
-Because the ignored profile is an integration test and the shape counters are
+`cargo run -p pictura-render --release --example composite_profile` on the branch and on `origin/master`, and put the table in the PR.
+Because the ignored profile is an example and the shape counters are
 crate-private, assert the opaque and masked shapes in the unit-level matrix
 (`profile_cases_use_the_intended_shapes`) as well. The profile is evidence, not
 a pass/fail gate; the parity tests are the gate.

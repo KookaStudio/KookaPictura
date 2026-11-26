@@ -58,10 +58,10 @@ small CRAW preview track besides the full one, and the largest track wins.
 
 ## Verification
 
-Synthetic files: `tests/raw/crx_encode.rs` mirrors the decoder's line coder
+Synthetic files: `tests/camera_raw/raw/crx_encode.rs` mirrors the decoder's line coder
 to write lossless and no-reference lines with runs, applies a textbook
 forward 5/3 transform for the wavelet scenarios, and checks quantized
-scenarios against a textbook inverse. `tests/raw/cr3_builder.rs` writes the
+scenarios against a textbook inverse. `tests/camera_raw/raw/cr3_builder.rs` writes the
 container. The LibRaw comparison is a one-off development check through
 rawpy (LibRaw 0.22.1), which CI does not install: every sample's
 `raw_image` was compared with the port's plane before levels.

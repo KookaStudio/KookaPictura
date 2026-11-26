@@ -45,7 +45,7 @@
 
 ## 5. Oracle and integration checks
 
-- [x] 5.1 Add `crates/pictura-codec/tests/webp_oracle.rs`: encode a fixture with
+- [x] 5.1 Add `crates/pictura-codec/tests/save/webp_oracle.rs`: encode a fixture with
   `encode_webp`, decode it with `magick` and compare through
   `pictura-testkit::compare`; also have `magick` write a lossy WebP and decode
   it with `decode_webp`, comparing to the source. Self-skip when `magick` is

@@ -4,9 +4,9 @@ This plan covers `vendor-raw-cr2` (#399, part 1): the new capability
 `codec/vendor-raw-containers`.
 
 **Fixtures.** Synthetic CR2s are written in the test by
-`tests/raw/cr2_builder.rs`, built on the DNG test TIFF writer
-(`tests/dng/builder.rs`) and lossless JPEG encoder
-(`tests/dng/ljpeg_encode.rs`); planes are deterministic (fixed LCG seed). The
+`tests/camera_raw/raw/cr2_builder.rs`, built on the DNG test TIFF writer
+(`tests/camera_raw/dng/builder.rs`) and lossless JPEG encoder
+(`tests/camera_raw/dng/ljpeg_encode.rs`); planes are deterministic (fixed LCG seed). The
 corpus row reads user-supplied camera files, opt-in through
 `PICTURA_RAW_CORPUS`.
 
@@ -20,4 +20,4 @@ corpus row reads user-supplied camera files, opt-in through
 | `cr2_levels` | 12-bit, active 8,4 – 47,23, masked levels 100/200/300/400 by 2×2 phase | Active size 40×20; samples equal the formula with each position's black | `pictura-codec::masked_border_sets_the_black` |
 | `cr2_tags` | Make, model, orientation 6; demosaic the result | Tags reported, RGGB (GRBG/GBRG/BGGR for odd left/top/both), crop = active area, colour empty, demosaic Ok | `pictura-codec::cr2_reports_camera_tags` |
 | `cr2_hostile` | Every prefix; slices 2·24+8 ≠ 64; area right 70; frame wider than the budget | Error, no panic | `pictura-codec::hostile_cr2s_fail_cleanly` |
-| `cr2_corpus` | `PICTURA_RAW_CORPUS=<dir> cargo test -p pictura-codec --test raw_cr2 corpus` | Each `.CR2` reads, non-flat plane, green-position means within 5 % (checked on an EOS 5DS and an EOS 450D) | `pictura-codec::cr2_corpus_reads_when_present` |
+| `cr2_corpus` | `PICTURA_RAW_CORPUS=<dir> cargo test -p pictura-codec --test camera_raw raw_cr2::corpus` | Each `.CR2` reads, non-flat plane, green-position means within 5 % (checked on an EOS 5DS and an EOS 450D) | `pictura-codec::cr2_corpus_reads_when_present` |

@@ -154,7 +154,7 @@ The other tests in those files are device-free and stay as they are, including
 `oil_paint_1024_parity_and_timing`) and `composite_profile_{1024,4000}` are
 listed by name in the gpu profile's exclusion filter.
 
-### D6: The fixture scenes run from `tests/oracle.rs`
+### D6: The fixture scenes run from `tests/oracle/main.rs`
 
 The new test goes in the same binary, which already owns `scene()` and the
 fixture loaders. That avoids a module shared between test binaries, which would

@@ -32,7 +32,7 @@
 
 ## 4. M12-B — psd-tools structural oracle and composite verification
 
-- [x] 4.1 Add `pictura-codec` (and keep `pictura-testkit`) as dev-dependencies of `crates/pictura-render` and add `crates/pictura-render/tests/document_oracle.rs`
+- [x] 4.1 Add `pictura-codec` (and keep `pictura-testkit`) as dev-dependencies of `crates/pictura-render` and add `crates/pictura-render/tests/document/document_oracle.rs`
 - [x] 4.2 Build a layered fixture (pixel layers, a nested group, a decoded mask, an adjustment layer, and a document-level channel) and, for each document op, write the result with `pictura_codec::write_psd`, re-read it with `pictura_codec::read_psd`, and assert the structural round-trip (dimensions, layer rects, channel lengths, channel ids)
 - [x] 4.3 Open each written PSD with the independent `psd-tools` library and assert the reported document dimensions and layer count match the transformed document
 - [x] 4.4 Assert `doc.composite == composite_rgba(&doc)` after every document op in the oracle

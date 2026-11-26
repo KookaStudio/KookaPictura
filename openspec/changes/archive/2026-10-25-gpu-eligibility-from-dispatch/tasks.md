@@ -8,7 +8,7 @@ checks run once, in group 4. This change builds on
 
 - [x] 1.1 Write the eligibility tests in `gpu/eligibility_tests.rs` (every declining route, depth, smart-filter cases, 8-bit eligible; effect precedence keeps its existing test), `content_route_matches_the_legacy_chain` (a verbatim copy of the old if/else chain as the oracle), `validation_runs_at_most_once`, `software_vulkan_accepts_a_cpu_device`, `require_gpu_panics_without_a_device`, and `gpu_is_available_under_software_vulkan`
 - [x] 1.2 Write `app_never_enables_software_vulkan` in `pictura_app`
-- [x] 1.3 Add `fixture_scenes_match_oracle_on_active_backend` and `declined_fixture_scene_equals_oracle` (ignored) to `tests/oracle.rs`
+- [x] 1.3 Add `fixture_scenes_match_oracle_on_active_backend` and `declined_fixture_scene_equals_oracle` (ignored) to `tests/oracle/main.rs`
 
 ## 2. Content route classification (#745)
 

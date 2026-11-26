@@ -120,7 +120,7 @@ After a successful `rotate_document` or `flip_document`, the document's cached `
 ### Requirement: Document orientation oracle
 
 The system SHALL ship an oracle for `rotate_document` and `flip_document` in
-`crates/pictura-render/tests/document_oracle.rs` that (a) asserts the engine left
+`crates/pictura-render/tests/document/document_oracle.rs` that (a) asserts the engine left
 the cached composite untouched, then materializes it with
 `pictura_render::composite_rgba(doc)`, (b) writes the rotated or flipped document
 with `pictura_codec::write_psd`, re-reads it with `pictura_codec::read_psd`, and

@@ -24,7 +24,7 @@ After a successful `resize_canvas_document`, the document's cached `doc.composit
 ### Requirement: Document canvas resize oracle
 
 The system SHALL ship an oracle for `resize_canvas_document` in
-`crates/pictura-render/tests/document_oracle.rs` that (a) asserts the engine left
+`crates/pictura-render/tests/document/document_oracle.rs` that (a) asserts the engine left
 the cached composite untouched, then materializes it with
 `pictura_render::composite_rgba(doc)`, (b) writes the resized document with
 `pictura_codec::write_psd`, re-reads it with `pictura_codec::read_psd`, and

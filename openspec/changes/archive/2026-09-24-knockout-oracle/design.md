@@ -7,7 +7,7 @@ writes it under `crates/pictura-codec/tests/fixtures/`; `knko` is
 `Tag.KNOCKOUT_SETTING` mapped to a `ByteElement`, so a layer authors it with
 `layer._record.tagged_blocks.set_data(Tag.KNOCKOUT_SETTING, 2)`.
 
-`crates/pictura-render/tests/oracle.rs` is the compositor differential test:
+`crates/pictura-render/tests/oracle/main.rs` is the compositor differential test:
 committed raw interleaved-RGBA8 references (from ImageMagick via
 `scripts/im_compose.py`) read without a codec, diffed with
 `pictura_testkit::compare(actual, reference, tolerance)`.
@@ -51,7 +51,7 @@ RGBA8 keeps the test codec-free, like `im_compose.py`.
 
 ### D3. The test
 
-`crates/pictura-render/tests/knockout_oracle.rs`:
+`crates/pictura-render/tests/oracle/knockout_oracle.rs`:
 
 1. `read_psd` the committed `knockout.psd`; assert the top layer's `knockout`
    is `Knockout::Deep` (independent decode proof).

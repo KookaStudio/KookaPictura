@@ -11,7 +11,7 @@
 
 - [x] 2.1 Replace the intersect/clip helpers in `canvas_damage.rs`, `damage.rs`, `filter.rs`, `filter_proxy.rs`, `document_ops/crop.rs`, `document_ops/slices.rs`, `document_ops/layer_ops/clipboard.rs`, `document_ops/layer_ops/move_content.rs`, `document_ops/layer_ops/align.rs`, `document_ops/layer_ops/merge.rs`, `gpu/raster.rs`, and `layer_source/mod.rs` with the methods and delete the private functions; verify `cargo nextest run -p pictura-render` passes.
 - [x] 2.2 Replace the union/grow/is_empty helpers in `layer_effects/mod.rs`, `gpu/clip.rs`, `damage.rs` (including `damage::union_rect`), `document_ops/layer_ops/move_content.rs`, `document_ops/layer_ops/align.rs`, and `document_ops/layer_ops/merge.rs`; update the `layer_source::clip_to_document` caller in `fill.rs` to use `clip_to`. Keep the `Option` union combinators: `damage::union` is None-wins (`Some(a?.union(b?))`), and `gpu/clip::union`, `healing/stroke::union`, and `liquify::union` keep their `match` with `a.union(b)` in the `(Some, Some)` arm. Verify `cargo nextest run -p pictura-render` passes.
-- [x] 2.3 Run the damage, clipping, and compositing suites and confirm no golden changes; verify `cargo test -p pictura-render --test document_oracle` and the existing region/damage tests pass unchanged.
+- [x] 2.3 Run the damage, clipping, and compositing suites and confirm no golden changes; verify `cargo test -p pictura-render --test document document_oracle::` and the existing region/damage tests pass unchanged.
 
 ## 3. App helper removal
 

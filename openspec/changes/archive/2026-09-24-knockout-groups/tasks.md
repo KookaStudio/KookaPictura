@@ -15,7 +15,7 @@
 
 ## 3. Tests
 
-- [x] 3.1 `crates/pictura-render/tests/knockout_oracle.rs`: add a test for the group fixture (self-skip guard, tolerance 1, assert `PassThrough` + `Deep`, compare, assert green punched to 0).
+- [x] 3.1 `crates/pictura-render/tests/oracle/knockout_oracle.rs`: add a test for the group fixture (self-skip guard, tolerance 1, assert `PassThrough` + `Deep`, compare, assert green punched to 0).
 - [x] 3.2 Unit tests in `crates/pictura-render/src/tests/composite.rs`: a pass-through-group knockout punches green through; an isolated-group knockout leaves the output byte-identical to no knockout.
 - [x] 3.3 README notes for the new fixture/reference.
 

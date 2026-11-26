@@ -38,7 +38,7 @@ reviewable target.
   `resize`, `rotate90_cw`/`rotate90_ccw`, `rotate180`,
   `flip_horizontal`/`flip_vertical`, `Resample`, `Anchor`, and `OpsError`) and
   dev-dependencies on `pictura-codec` and `pictura-testkit` for the oracle.
-- Oracle: a `crates/pictura-render/tests/document_oracle.rs` that writes the
+- Oracle: a `crates/pictura-render/tests/document/document_oracle.rs` that writes the
   transformed document with `pictura_codec::write_psd`, re-reads it for the
   structural round-trip, opens it with the independent `psd-tools` library to
   confirm document dimensions and layer count, and asserts `doc.composite ==
@@ -73,7 +73,7 @@ reviewable target.
 - `crates/pictura-render/src/lib.rs`: re-export the four document operations.
 - `crates/pictura-render/Cargo.toml`: add `pictura-ops`; add `pictura-codec`
   and keep `pictura-testkit` as dev-dependencies for the oracle.
-- `crates/pictura-render/tests/document_oracle.rs` (new): the psd-tools
+- `crates/pictura-render/tests/document/document_oracle.rs` (new): the psd-tools
   structural round-trip and the `composite == composite_rgba` check; reuses
   `scripts/validate_output.py` when present.
 - Dependencies: one new normal dependency (`pictura-ops`) and one new

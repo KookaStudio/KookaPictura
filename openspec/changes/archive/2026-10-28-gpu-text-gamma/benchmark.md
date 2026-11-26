@@ -23,8 +23,8 @@ run before the measured runs. Each cell is the median of 5 runs.
 
 ```bash
 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=12 \
-  cargo test -p pictura-render --features software-vulkan \
-  --test gpu_text_gamma_bench -- --ignored --nocapture
+  cargo run -p pictura-render --features gpu \
+  --example gpu_text_gamma_bench
 ```
 
 ## Results

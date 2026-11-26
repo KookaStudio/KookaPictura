@@ -119,14 +119,14 @@ not just a decode unit test.
 Unlike the fixture-based siblings (`photo-filter` extended the psd-tools-authored
 `adjustment.psd`; `gradient-map` added a psd-tools-authored fixture), this change
 does not touch a golden fixture. Instead a new integration test
-`crates/pictura-render/tests/adjustment_oracle.rs` calls `encode_color_balance`,
+`crates/pictura-render/tests/oracle/adjustment_oracle.rs` calls `encode_color_balance`,
 passes the raw bytes to a `python3` script that does
 `ColorBalance.read(BytesIO(data))`, and asserts the printed
 `shadows`/`midtones`/`highlights`/`luminosity` equal the inputs. This validates
 the encoder against an independent writer rather than only against our own
 decoder, and it leaves `crates/pictura-codec/tests/fixtures/` untouched. The test
 self-skips with a message when `python3` or `psd_tools` is absent, matching
-`crates/pictura-render/tests/document_oracle.rs:290`.
+`crates/pictura-render/tests/document/document_oracle.rs:290`.
 
 ### D7. Composite test with non-neutral parameters
 

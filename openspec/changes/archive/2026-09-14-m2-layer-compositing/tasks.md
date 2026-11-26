@@ -34,5 +34,5 @@
 
 - [x] 6.1 Write `scripts/im_compose.py` with scenes, the PSD-to-ImageMagick operator mapping, and `gen`/`check`/`list`/`compose` commands
 - [x] 6.2 Generate and commit the 8×8 interleaved RGBA fixtures under `crates/pictura-render/tests/fixtures/`
-- [x] 6.3 Add `tests/oracle.rs` diffing the solid, ramp, and alpha scenes against the fixtures with per-mode tolerance
+- [x] 6.3 Add `tests/oracle/main.rs` diffing the solid, ramp, and alpha scenes against the fixtures with per-mode tolerance
 - [x] 6.4 Document the operator mapping, scenes, and unsupported modes in `crates/pictura-render/tests/README.md`

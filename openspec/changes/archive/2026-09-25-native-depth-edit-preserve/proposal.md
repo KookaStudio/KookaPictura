@@ -52,6 +52,6 @@ document's layer channels are therefore re-widened from 8 bits after any edit.
 - `orientation.rs`, `resize.rs`, `canvas.rs`, `crop.rs`: keep/remap/resample the
   retained stores.
 - Tests: transform/resize/orient/warp/canvas/crop unit checks plus an
-  end-to-end 16-bit fixture round-trip in `tests/native_depth_roundtrip.rs`.
+  end-to-end 16-bit fixture round-trip in `tests/document/native_depth_roundtrip.rs`.
 - No new dependency; `crates/pictura-codec/src/write.rs` is untouched and does
   not grow.

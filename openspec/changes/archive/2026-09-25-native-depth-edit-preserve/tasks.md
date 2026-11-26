@@ -25,7 +25,7 @@
 
 - [x] 5.1 Update `transform_tests.rs`: move keeps the store rect and drops only `raw_channels` on scale; add a pure-move save test that re-emits native samples (not the 8-bit widen).
 - [x] 5.2 Update `resize.rs`'s native-store test; add warp, orient, canvas, and crop native-store checks.
-- [x] 5.3 Add an end-to-end 16-bit fixture round-trip in `tests/native_depth_roundtrip.rs` for move, scale, and quad.
+- [x] 5.3 Add an end-to-end 16-bit fixture round-trip in `tests/document/native_depth_roundtrip.rs` for move, scale, and quad.
 
 ## 6. Docs and verification
 

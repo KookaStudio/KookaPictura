@@ -8,10 +8,10 @@
 - Branch: `perf/1017-per-layer-gpu-eligibility` working tree.
 - Profile: `cargo test` test profile (`pictura-render` at opt-level 2), three
   invocations; each invocation takes the minimum of three timed iterations.
-- Harness: `crates/pictura-render/tests/per_layer_bench.rs`, an ignored test:
+- Harness: `crates/pictura-render/examples/per_layer_bench.rs`, an ignored test:
 
 ```sh
-PICTURA_GPU_BENCH=1 cargo test -p pictura-render --test per_layer_bench -- --ignored --nocapture
+PICTURA_GPU_BENCH=1 cargo run -p pictura-render --features gpu --example per_layer_bench
 ```
 
 The fixture is a 4000×4000 RGB/8-bit document with a full-canvas pixel

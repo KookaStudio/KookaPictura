@@ -65,7 +65,7 @@ None. Every behaviour below extends an existing capability.
 
 ## Impact
 
-- `crates/pictura-render/tests/merge_oracle.rs` — the merge joins the
+- `crates/pictura-render/tests/oracle/merge_oracle.rs` — the merge joins the
   ImageMagick differential oracle and gains the hand-computed blend test; the
   committed references are reused.
 - `crates/pictura-render/src/document_ops/layer_ops/move_content.rs` — the

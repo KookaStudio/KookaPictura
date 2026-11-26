@@ -162,11 +162,11 @@ recipe under `Tag.VECTOR_MASK_SETTING1`. The inner `Clr ` **must** carry classID
 does not require it. The fixture registers as `vector_fill.psd`, is byte-stable
 across regeneration, and leaves the existing fixtures unchanged.
 
-The psd-tools oracle (`crates/pictura-codec/tests/vector_fill_oracle.rs`, new;
+The psd-tools oracle (`crates/pictura-codec/tests/psd/vector_fill_oracle.rs`, new;
 `oracle.rs` is 1398/1400 lines) asserts the shape layer's `vscg` key/version and
 `Clr ` components, that the layer kind is `shape`, that the asserted pixels match
 psd-tools' composite, and that a whole-`Document` round trip preserves the block.
-The ag-psd test (appended to `crates/pictura-codec/tests/agpsd_oracle.rs`)
+The ag-psd test (appended to `crates/pictura-codec/tests/psd/agpsd_oracle.rs`)
 asserts `layer.vectorFill` decodes to the solid colour. Both self-skip when
 `node`/`ag-psd` is absent.
 

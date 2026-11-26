@@ -1,7 +1,7 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 Every test named in `test-plan.md` (`tests/dng_demosaic.rs`)
+- [x] 1.1 Every test named in `test-plan.md` (`tests/camera_raw/dng_demosaic.rs`)
 
 ## 2. Codec
 - [x] 2.1 `dng/demosaic/bilinear.rs`

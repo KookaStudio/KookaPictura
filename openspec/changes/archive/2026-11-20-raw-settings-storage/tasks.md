@@ -1,7 +1,7 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 `pictura-codec` tests in `tests/raw_settings_xmp.rs`
+- [x] 1.1 `pictura-codec` tests in `tests/metadata/raw_settings_xmp.rs`
 - [x] 1.2 `pictura-app` Rust tests in `open_jobs/raw_open/tests.rs` and `store_tests.rs`
 - [x] 1.3 Qt cases in `tst_raw_open`
 

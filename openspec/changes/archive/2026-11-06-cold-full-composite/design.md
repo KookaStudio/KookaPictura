@@ -7,7 +7,7 @@ See proposal.md for the reported latency and the diagnostic-only scope.
 - The branch now includes the upstream cold-composite work: #1178 (cold
   layer-effect composites), #1179 (cold styled composites), and #1180 (reuse
   ready effect passes for short regions). Those changes added
-  `tests/effect_cold_latency.rs`, `tests/bevel_cold_composite_profile.rs`, and
+  `examples/effect_cold_latency.rs`, `examples/bevel_cold_composite_profile.rs`, and
   `src/tests/effect_preparation/{probe,profile}.rs`.
 - The existing profiles require a locally supplied PSD or cover one generated
   bevel scene. They do not reproduce the reported 4934x1500 nested/clipped/

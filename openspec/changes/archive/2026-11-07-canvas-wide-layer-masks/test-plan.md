@@ -9,7 +9,7 @@ The new `tst_canvas_mask_domain` suite keeps new cases out of the already large
 `tst_mask_edit.cpp`. Register it in the Qt tests CMake file and shard independent
 cases using the existing harness. Rust mask cases belong in a sibling
 `tests.rs`/test module under the mask concern if inline files approach their cap;
-codec round trips belong in a new `tests/offcanvas_mask.rs` integration suite.
+codec round trips belong in a new `tests/psd/offcanvas_mask.rs` integration suite.
 
 ## Mask creation and adapters
 

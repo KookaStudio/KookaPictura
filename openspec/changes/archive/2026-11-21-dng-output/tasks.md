@@ -2,8 +2,8 @@
 
 ## 1. Tests
 - [x] 1.1 `pictura-codec` unit tests in `dng/write/tests.rs`
-- [x] 1.2 `pictura-codec` linear-reader and decode tests in `tests/dng_linear.rs`
-- [x] 1.3 `pictura-codec` reference-tool test `tests/dng_writer_oracle.rs`
+- [x] 1.2 `pictura-codec` linear-reader and decode tests in `tests/camera_raw/dng_linear.rs`
+- [x] 1.3 `pictura-codec` reference-tool test `tests/camera_raw/dng_writer_oracle.rs`
 - [x] 1.4 `pictura-app` Rust tests in `open_jobs/raw_open/save_dng_tests.rs`
 - [x] 1.5 Qt cases in `tst_raw_open`
 

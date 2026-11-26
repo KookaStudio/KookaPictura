@@ -89,6 +89,6 @@ they are and are re-verified by their oracle suites.
   plane instead of the per-pixel cache lookup.
 - `crates/pictura-core/src/samples.rs` — a row accessor over `Samples`.
 - `crates/pictura-core/src/vector.rs` — an opaque resolved coverage sampler.
-- New `crates/pictura-render/tests/composite_profile.rs` (ignored profile) and
+- New `crates/pictura-render/examples/composite_profile.rs` (ignored profile) and
   unit tests in `crates/pictura-render/src/tests/`.
 - No new dependencies. No `docs/` change.

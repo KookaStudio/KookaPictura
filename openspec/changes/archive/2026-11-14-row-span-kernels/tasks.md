@@ -91,11 +91,11 @@ implementation task lands; it must pass at close-out.
   `cargo nextest run -p pictura-render kernel_parity_across_banded_region_and_serial`.
 - [ ] 4.4 Run the existing oracle suites and fix any byte mismatch; verify
   `cargo nextest run -p pictura-render` and
-  `cargo test -p pictura-render --test document_oracle` pass.
+  `cargo test -p pictura-render --test document document_oracle::` pass.
 
 ## 5. Profile evidence and close-out
 
-- [x] 5.1 Extend `crates/pictura-render/tests/composite_profile.rs` with an
+- [x] 5.1 Extend `crates/pictura-render/examples/composite_profile.rs` with an
   alpha-less Normal case and a plain-raster-mask Normal case. Both must be
   kernel-eligible: Normal mode, opacity 255, fill 255, no Blend If, no
   text-gamma curve, no native stores, full-canvas 8-bit layer. Add
@@ -103,12 +103,12 @@ implementation task lands; it must pass at close-out.
   asserting the opaque and masked `KERNEL_RUNS` for the same layer states,
   because the ignored integration profile cannot read the crate-private
   counters. Verify with
-  `cargo test -p pictura-render --release --test composite_profile -- --ignored --nocapture`
+  `cargo run -p pictura-render --release --example composite_profile`
   prints both timings and the unit test passes.
 - [ ] 5.2 Record release before/after 4000² timings for the profile cases
   (branch vs `origin/master`, same machine and build profile) in the PR body,
   using
-  `cargo test -p pictura-render --release --test composite_profile -- --ignored --nocapture`;
+  `cargo run -p pictura-render --release --example composite_profile`;
   verify the table is present and names the command used.
 - [x] 5.3 Run `cargo fmt --all`,
   `cargo clippy -p pictura-render --all-targets -- -D warnings`,

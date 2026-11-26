@@ -1,8 +1,8 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 Synthetic DNG writer and lossless JPEG encoder (`tests/dng/`)
-- [x] 1.2 Every test named in `test-plan.md` (`tests/dng_reader.rs`)
+- [x] 1.1 Synthetic DNG writer and lossless JPEG encoder (`tests/camera_raw/dng/`)
+- [x] 1.2 Every test named in `test-plan.md` (`tests/camera_raw/dng_reader.rs`)
 
 ## 2. Codec
 - [x] 2.1 `dng/tiff.rs`: classic and BigTIFF IFD parsing with bounds checks

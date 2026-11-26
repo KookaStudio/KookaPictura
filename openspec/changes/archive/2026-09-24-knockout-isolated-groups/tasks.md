@@ -14,7 +14,7 @@
 
 ## 3. Tests
 
-- [x] 3.1 `crates/pictura-render/tests/knockout_oracle.rs`: add the isolated-group test (self-skip, tolerance 1, assert the group is not `PassThrough` and the child `Deep`, compare, assert the layer below the group contributes).
+- [x] 3.1 `crates/pictura-render/tests/oracle/knockout_oracle.rs`: add the isolated-group test (self-skip, tolerance 1, assert the group is not `PassThrough` and the child `Deep`, compare, assert the layer below the group contributes).
 - [x] 3.2 Unit tests in `crates/pictura-render/src/tests/composite.rs`: isolated-group knockout punches the group's green through; a knockout-free isolated group is byte-identical.
 - [x] 3.3 README notes for the new fixture/reference.
 

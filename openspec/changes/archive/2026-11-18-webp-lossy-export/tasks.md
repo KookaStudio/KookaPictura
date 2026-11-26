@@ -9,7 +9,7 @@
   `pictura-codec::lossy_webp_refuses_a_bad_buffer` in
   `crates/pictura-codec/src/webp.rs`.
 - [x] 1.2 Add `pictura-codec::magick_decodes_our_lossy_webp_within_tolerance`
-  to `crates/pictura-codec/tests/webp_oracle.rs`; self-skip without `magick`.
+  to `crates/pictura-codec/tests/save/webp_oracle.rs`; self-skip without `magick`.
 - [x] 1.3 Add `tst_export_as::webpQualityControls`,
   `tst_export_as::webpLossyIsSmallerThanLossless`, and
   `tst_export_as::webpLosslessRoundTrips`; update `formatsAndControls` and

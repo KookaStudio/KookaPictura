@@ -174,7 +174,7 @@ module keeps it inside budget. `encode_selective_color` is re-exported from
 
 The decode/reject/round-trip tests live in the new module's `#[cfg(test)] mod
 tests` because `crates/pictura-render/src/tests/adjustment.rs` is at 1398/1400
-LOC; the fixture-decode check goes in `tests/adjustment_oracle.rs`, which is at
+LOC; the fixture-decode check goes in `tests/oracle/adjustment_oracle.rs`, which is at
 233 LOC.
 
 ### D6. The encoder
@@ -205,7 +205,7 @@ data stores it verbatim (confirmed empirically: reopening the probe yields
 `"selective_color.psd": selective_color` in `FIXTURES`; regeneration is
 byte-stable and additive, so no existing golden changes.
 
-The new test in `crates/pictura-codec/tests/agpsd_oracle.rs` runs
+The new test in `crates/pictura-codec/tests/psd/agpsd_oracle.rs` runs
 `node -e "<script>" <fixture>` with
 `require('ag-psd').readPsd(bytes, { skipLayerImageData: true,
 skipCompositeImageData: true })`, prints one line per `selective color`
@@ -217,7 +217,7 @@ installs `ag-psd`.
 
 ### D8. A psd-tools partial check and a pure-Rust fixture decode
 
-`crates/pictura-render/tests/adjustment_oracle.rs` gains:
+`crates/pictura-render/tests/oracle/adjustment_oracle.rs` gains:
 
 - `psd_tools_reads_fixture_selective_color_prefix`: feeds the fixture's relative
   `selc` bytes to `psd_tools.psd.adjustments.SelectiveColor.read` and asserts

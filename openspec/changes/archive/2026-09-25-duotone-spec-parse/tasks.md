@@ -13,5 +13,5 @@
 ## 3. Verification
 
 - [x] 3.1 `cargo nextest run -p pictura-codec`; `cargo nextest run --workspace`.
-- [x] 3.2 `cargo test -p pictura-codec --test depth_oracle --test color_mode_oracle` still green.
+- [x] 3.2 `cargo test -p pictura-codec --test psd` still green.
 - [x] 3.3 `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `bash scripts/check-file-size.sh`, `openspec validate duotone-spec-parse --strict`.

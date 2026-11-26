@@ -1,7 +1,7 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 Synthetic ORF writer (`tests/raw/orf_builder.rs`)
+- [x] 1.1 Synthetic ORF writer (`tests/camera_raw/raw/orf_builder.rs`)
 - [x] 1.2 Every test named in `test-plan.md`
 
 ## 2. Codec

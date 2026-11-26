@@ -24,7 +24,7 @@
   with `grep -n "fn a_rendered_source_path" crates/pictura-codec/src/vector_mask.rs`
   and the test-plan's Coverage column.
 - [x] 2.2 Add the integration checks to
-  `crates/pictura-codec/tests/vector_mask_oracle.rs`:
+  `crates/pictura-codec/tests/psd/vector_mask_oracle.rs`:
   `codec_suppresses_a_rasterized_source_path` (read the fixture; raster mask
   present, vector view absent, raw block preserved, write/read equals the
   input), `codec_preserves_vector_mask_blocks` (round-trip `vector_mask.psd`

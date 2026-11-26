@@ -3,13 +3,13 @@
 ## Context
 
 The Move tool's selection drag has two phases with different bottlenecks, both
-measured with `crates/pictura-render/tests/selection_move_perf.rs` (an ignored
+measured with `crates/pictura-render/examples/selection_move_perf.rs` (an ignored
 profiling harness that times the real engine functions plus line-for-line copies
 of the two app-private loops):
 
 ```bash
-cargo test -p pictura-render --profile dev --test selection_move_perf -- --ignored --nocapture
-cargo test -p pictura-render --release --test selection_move_perf -- --ignored --nocapture
+cargo run -p pictura-render --profile dev --example selection_move_perf
+cargo run -p pictura-render --release --example selection_move_perf
 ```
 
 The first profile is what a CMake `Debug` build links: Corrosion maps `Debug` to

@@ -3,7 +3,7 @@
 ## 1. Tests first
 
 - [x] 1.1 Add `auto_blend_refuses_video_and_3d_layers` to `crates/pictura-render/src/document_ops/layer_ops/auto_blend/tests.rs`: build a raster layer carrying a `PxSD` extra block, select it beside two rasters, and assert `can_auto_blend` is false, the plan is empty, and the document is unchanged.
-- [x] 1.2 Add `pixel_source_block_marks_video_and_3d_layers` to `crates/pictura-codec/tests/layer_content.rs`: round-trip a `PxSD` layer through PSD and PSB, then assert `Layer::is_video_or_3d()` is true and the block bytes are preserved.
+- [x] 1.2 Add `pixel_source_block_marks_video_and_3d_layers` to `crates/pictura-codec/tests/psd/layer_content.rs`: round-trip a `PxSD` layer through PSD and PSB, then assert `Layer::is_video_or_3d()` is true and the block bytes are preserved.
 
 ## 2. Detection and refusal
 

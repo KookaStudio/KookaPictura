@@ -1,7 +1,7 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 CRX encoder (`tests/raw/crx_encode.rs`) and CR3 builder (`tests/raw/cr3_builder.rs`)
+- [x] 1.1 CRX encoder (`tests/camera_raw/raw/crx_encode.rs`) and CR3 builder (`tests/camera_raw/raw/cr3_builder.rs`)
 - [x] 1.2 Every test named in `test-plan.md`
 
 ## 2. Codec

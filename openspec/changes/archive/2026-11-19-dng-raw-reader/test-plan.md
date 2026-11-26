@@ -4,8 +4,8 @@ This plan covers `dng-raw-reader` (#396): the new capability
 `codec/dng-raw-reader`.
 
 **Fixtures.** Synthetic DNGs are built in the test by a small writer
-(`tests/dng/builder.rs`) and a lossless JPEG encoder written from ITU T.81
-(`tests/dng/ljpeg_encode.rs`); the plane is a deterministic pattern (fixed
+(`tests/camera_raw/dng/builder.rs`) and a lossless JPEG encoder written from ITU T.81
+(`tests/camera_raw/dng/ljpeg_encode.rs`); the plane is a deterministic pattern (fixed
 LCG seed). The real-file row uses the user's Leica M9 samples, opt-in through
 `PICTURA_DNG_CORPUS`, with spot values from a separate Python parse.
 
@@ -21,4 +21,4 @@ LCG seed). The real-file row uses the user's Leica M9 samples, opt-in through
 | `dng_color_tags` | Colour matrices, forward matrix, neutral, illuminants, orientation 6, model | Reported as written; missing calibration absent | `pictura-codec::color_tags_are_reported` |
 | `dng_unsupported` | Compression 8/32773/34892, photometric 34892, float, CMYG, no `DNGVersion` | Matching typed error | `pictura-codec::deferred_features_are_refused` |
 | `dng_hostile` | 200000² header, offset past EOF, truncated JPEG tile, oversize JPEG frame, every prefix of a valid file | Error, no panic | `pictura-codec::hostile_dngs_fail_cleanly` |
-| `dng_m9_corpus` | `PICTURA_DNG_CORPUS=~/Downloads cargo test -p pictura-codec --test dng_reader m9` | 5216×3472, RGGB, crop 2,2 5212×3468, illuminants 17/21, spot samples match | `pictura-codec::leica_samples_decode_when_present` |
+| `dng_m9_corpus` | `PICTURA_DNG_CORPUS=~/Downloads cargo test -p pictura-codec --test camera_raw dng_reader::leica_samples_decode_when_present` | 5216×3472, RGGB, crop 2,2 5212×3468, illuminants 17/21, spot samples match | `pictura-codec::leica_samples_decode_when_present` |

@@ -73,9 +73,9 @@ extension of shipped machinery rather than a new fill model.
 - `scripts/generate-fixtures.py`,
   `crates/pictura-codec/tests/fixtures/vector_fill.psd` (new), and
   `.../tests/fixtures/README.md`: the `vector_fill()` builder and the fixture.
-- `crates/pictura-codec/tests/vector_fill_oracle.rs` (new): the psd-tools oracle
+- `crates/pictura-codec/tests/psd/vector_fill_oracle.rs` (new): the psd-tools oracle
   (`oracle.rs` is 1398/1400 lines and cannot be extended).
-- `crates/pictura-codec/tests/agpsd_oracle.rs`: a `vscg` `vectorFill` test.
+- `crates/pictura-codec/tests/psd/agpsd_oracle.rs`: a `vscg` `vectorFill` test.
 - `crates/pictura-app`, `CMakeLists.txt`, `docs/`: unchanged.
 
 ## Out of scope (deferred)

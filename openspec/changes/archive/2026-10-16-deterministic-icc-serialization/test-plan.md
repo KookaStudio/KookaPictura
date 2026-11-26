@@ -19,7 +19,7 @@ Every spec scenario maps to a runnable check. Rust tests are std `#[test]` run b
 - The residual date-flaky `to_icc()` comparisons in `pictura-codec`
   (`src/icc.rs` `assign_frames_a_1039_block_for_a_non_srgb_profile` and
   `assign_preserves_an_unparsed_resource_tail`, and
-  `tests/profile_assignment_oracle.rs` `assigned_profile_round_trips_through_saved_psd`)
+  `tests/metadata/profile_assignment_oracle.rs` `assigned_profile_round_trips_through_saved_psd`)
   are covered by task 4.1, which re-runs them unchanged.
 - The ImageMagick differential oracle
   (`pictura-color::convert_srgb_to_adobe_matches_lcms2`, task 4.2) also reads

@@ -46,8 +46,8 @@ preserved data.
 - `crates/pictura-codec`: a round-trip case in `src/tests.rs` (the key is
   already in `ADJUSTMENT_KEYS`).
 - `scripts/generate-fixtures.py` + `crates/pictura-codec/tests/fixtures/color_lookup.psd`;
-  oracles in `crates/pictura-render/tests/adjustment_oracle.rs` and
-  `crates/pictura-codec/tests/agpsd_oracle.rs`.
+  oracles in `crates/pictura-render/tests/oracle/adjustment_oracle.rs` and
+  `crates/pictura-codec/tests/psd/agpsd_oracle.rs`.
 - `crates/pictura-app`: `helpers.rs` kind, `panels/panel_group_menu.cpp`,
   `command_tree.cpp`, and a C++ self-test check (next free code 455).
 - No new dependency; no `docs/` change.

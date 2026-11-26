@@ -1,0 +1,9 @@
+mod action_file;
+mod color_settings_file;
+mod icc_embed;
+mod icc_oracle;
+mod iptc_write_oracle;
+mod metadata_oracle;
+mod preset_library;
+mod profile_assignment_oracle;
+mod raw_settings_xmp;

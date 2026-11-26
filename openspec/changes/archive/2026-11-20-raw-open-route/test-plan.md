@@ -5,7 +5,7 @@ This plan covers `raw-open-route` (#400): the new capabilities
 `codec/pictura-raw`.
 
 **Fixtures.** Codec tests build DNGs and CR2s with the existing synthetic
-builders (`tests/dng/builder.rs`, `tests/raw/cr2_builder.rs`). The app's Rust
+builders (`tests/camera_raw/dng/builder.rs`, `tests/camera_raw/raw/cr2_builder.rs`). The app's Rust
 tests and the Qt suite write a minimal uncompressed 16-bit RGGB DNG with their
 own small in-test writer (no binary fixture is committed); its `ColorMatrix1`
 is XYZ-D50-to-linear-ProPhoto at D50, so the colour stage is close to the

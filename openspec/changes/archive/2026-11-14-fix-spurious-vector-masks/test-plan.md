@@ -27,7 +27,7 @@ oracle convention; CI's oracle job runs them.
   confirm every existing fixture stays byte-identical.
 - Put the predicate unit tests in `crates/pictura-codec/src/vector_mask.rs` and
   the fixture/round-trip checks in
-  `crates/pictura-codec/tests/vector_mask_oracle.rs`.
+  `crates/pictura-codec/tests/psd/vector_mask_oracle.rs`.
 - The psd-tools fixture check asserts only the source-path facts; psd-tools does
   not model Photoshop's display rule, so it is not the behavior oracle.
 - The fixture's user density (128) also exercises the raster-mask composite;

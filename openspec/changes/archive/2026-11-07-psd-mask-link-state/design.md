@@ -95,7 +95,7 @@ unchanged. Commit the small fixtures so core read/save regressions do not
 require Python at runtime; independent re-read tests may self-skip when
 psd-tools is unavailable, following the existing oracle convention.
 
-Add `crates/pictura-codec/tests/mask_link_state.rs`. The codec already has
+Add `crates/pictura-codec/tests/psd/mask_link_state.rs`. The codec already has
 `pictura-render` as a dev dependency, so tests can assert flags and the actual
 render link predicate rather than merely round-tripping the same mistake.
 Cover both input states, coherent unrelated flag bits, native coordinate

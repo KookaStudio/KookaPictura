@@ -12,6 +12,16 @@ doctest = false
 name = "cold_compare"
 path = "src/bin/cold_compare.rs"
 
+# Both profiling examples are gated on the optional wgpu stack by a crate-level
+# `#![cfg(feature = "gpu")]`, so Cargo must skip them unless the feature is on.
+[[example]]
+name = "gpu_text_gamma_bench"
+required-features = ["gpu"]
+
+[[example]]
+name = "resident_upload_profile"
+required-features = ["gpu"]
+
 [features]
 # Cross-crate tests opt in; ordinary renderer and application builds exclude the oracle.
 test-oracle = []

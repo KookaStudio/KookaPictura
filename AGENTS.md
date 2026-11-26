@@ -40,7 +40,7 @@ sources go to `crates/pictura-app/cpp/tests/CMakeLists.txt`.**
 cargo fmt --all                                  # CI runs --check; no compiler, stays bare
 bash scripts/with-build-lock.sh -- cargo clippy --workspace --all-targets -- -D warnings
 bash scripts/with-build-lock.sh -- cargo nextest run --workspace   # one crate/test: -p <crate> [name]
-bash scripts/with-build-lock.sh -- cargo test -p pictura-render --test document_oracle       # one integration suite
+bash scripts/with-build-lock.sh -- cargo test -p pictura-render --test document document_oracle::       # one integration suite
 bash scripts/with-build-lock.sh -- cargo test -p pictura-core -- <name> --ignored --nocapture # ignored profiling/GPU
 bash scripts/test-report.sh                      # nextest + app self-test + Qt JUnit -> unified report
 bash scripts/verify-fast.sh                      # fmt, clippy, test-report, file-size, guard, openspec

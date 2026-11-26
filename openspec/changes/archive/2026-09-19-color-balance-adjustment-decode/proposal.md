@@ -60,7 +60,7 @@ key, the decode, an encoder so the app can create a layer, and the panel wiring.
 - `crates/pictura-render/src/lib.rs`: the `encode_color_balance` re-export.
 - `crates/pictura-render/src/tests/adjustment.rs`: a Color Balance round-trip,
   a malformed-payload rejection, and a composite test.
-- `crates/pictura-render/tests/adjustment_oracle.rs`: one psd-tools parity test
+- `crates/pictura-render/tests/oracle/adjustment_oracle.rs`: one psd-tools parity test
   over `encode_color_balance`'s bytes (new file).
 - `crates/pictura-app/src/cxxqt_object/helpers.rs`: a `"color-balance"` arm in
   `adjustment_layer`.

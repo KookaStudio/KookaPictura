@@ -1,8 +1,8 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 Synthetic CR2 writer (`tests/raw/cr2_builder.rs`) on the DNG test writer and lossless JPEG encoder
-- [x] 1.2 Every test named in `test-plan.md` (`tests/raw_cr2.rs`)
+- [x] 1.1 Synthetic CR2 writer (`tests/camera_raw/raw/cr2_builder.rs`) on the DNG test writer and lossless JPEG encoder
+- [x] 1.2 Every test named in `test-plan.md` (`tests/camera_raw/raw_cr2.rs`)
 
 ## 2. Codec
 - [x] 2.1 `dng/ljpeg.rs`: `frame` header read
