@@ -1,7 +1,8 @@
 # ui/selective-color-channel-availability Specification
 
 ## Purpose
-TBD - created by archiving change selective-color-composite-channel. Update Purpose after archive.
+
+Define when Selective Color can be launched as a direct adjustment or an adjustment layer, based on the active document’s channel selection and visibility.
 
 ## Requirements
 
