@@ -520,6 +520,9 @@ free	liquify_finish	liquify_finish	api/filters_bridge.h	pictura_app/src/cxxqt_ob
 free	liquify_geometry	liquify_geometry	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
 free	liquify_grid_lines	liquify_grid_lines	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
 free	liquify_hold	liquify_hold	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
+free	adjustment_auto_block	adjustment_auto_block	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
+free	adjustment_auto_source	adjustment_auto_source	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
+free	image_auto_configured	image_auto_configured	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
 free	liquify_last_mesh_id	liquify_last_mesh_id	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
 free	liquify_load_mesh	liquify_load_mesh	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
 free	liquify_mask	liquify_mask	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
