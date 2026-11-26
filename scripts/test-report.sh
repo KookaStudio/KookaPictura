@@ -215,7 +215,7 @@ fi
 
 # Old Qt JUnit files must not survive into a new run: a suite that no longer
 # produces a report would otherwise look present.
-rm -f build/qt-test-results/*.xml
+rm -f build/qt-test-results/*.xml build/ctest-junit.xml build/qt-test-timings.json
 
 # Capture the registration after configuration and before any build or test, so
 # a suite with no current report is named even when its build fails.
@@ -309,16 +309,32 @@ if [ "$ctest_allowed" -eq 1 ] && [ "$ctest_registered" -eq 1 ]; then
     qt_parallel="${CTEST_PARALLEL_LEVEL:-$PICTURA_JOBS}"
     echo "== qt tests (ctest -j ${qt_parallel}) =="
     start_stage ctest - \
-        ctest --test-dir build -R '^tst_' --output-on-failure -j "$qt_parallel"
+        ctest --test-dir build -R '^tst_' --output-on-failure -j "$qt_parallel" \
+            --output-junit build/ctest-junit.xml
     reap_stage "$STAGE_PID" ctest
     ctest_rc=$STAGE_RC
+    qt_junit=()
     for xml in build/qt-test-results/*.xml; do
         [ -f "$xml" ] || continue
         qt_args+=(--qt-junit "$xml")
+        qt_junit+=("$xml")
     done
     # A registered suite that wrote no report never started: its executable was
     # missing or it died before writing one. The reporter fails the run for it.
     qt_args+=(--ctest-json "$ctest_json")
+    if [ "${#qt_junit[@]}" -gt 0 ]; then
+        ctest_junit_args=()
+        if [ -f build/ctest-junit.xml ]; then
+            ctest_junit_args=(--ctest-junit build/ctest-junit.xml)
+        fi
+        if python3 scripts/qt_test_timings.py collect \
+            --junit "${qt_junit[@]}" "${ctest_junit_args[@]}" \
+            --out build/qt-test-timings.json; then
+            python3 scripts/qt_test_timings.py report --timings build/qt-test-timings.json
+        else
+            echo "test-report: timing collection failed (not fatal)" >&2
+        fi
+    fi
 else
     if [ "$ctest_allowed" -ne 1 ]; then
         echo "== qt tests == (skipped: build failed)"

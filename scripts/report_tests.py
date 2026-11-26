@@ -5,7 +5,8 @@ Aggregates three layers into one pytest/vitest-like report:
 
   * nextest JUnit XML      (--junit)
   * C++ self-test tokens   (--selftest)
-  * Qt Test JUnit XML      (--qt-junit)
+  * Qt Test JUnit XML      (--qt-junit), whose per-suite `time` is retained
+                             and printed beside the counts
 
 Exits non-zero when any layer failed or a provided input could not be parsed.
 Run ``python3 scripts/report_tests.py --self-check`` for the parser fixture
@@ -155,6 +156,44 @@ def parse_junit(xml_text):
 
 
 QT_SYNTHETIC_CASES = ("initTestCase", "cleanupTestCase")
+
+
+def junit_timings(xml_text):
+    """Retain the JUnit ``time`` evidence instead of discarding it.
+
+    Returns ``(suite_seconds, cases)``: ``{suite: seconds}`` and
+    ``[(suite, case, seconds)]``, in document order. A missing or malformed
+    ``time`` is 0.0, so a supplier that omits it cannot fail the report. This is
+    the evidence ``scripts/qt_test_timings.py`` turns into a shard plan.
+    """
+    root = ET.fromstring(xml_text)
+    suite_seconds = {}
+    cases = []
+    for testsuite in root.iter("testsuite"):
+        name = testsuite.get("name") or ""
+        try:
+            total = float(testsuite.get("time") or 0.0)
+        except ValueError:
+            total = 0.0
+        suite_cases = []
+        case_total = 0.0
+        for case in testsuite.findall("testcase"):
+            case_name = case.get("name") or ""
+            try:
+                seconds = float(case.get("time") or 0.0)
+            except ValueError:
+                seconds = 0.0
+            case_total += seconds
+            if case_name not in QT_SYNTHETIC_CASES:
+                suite_cases.append((case_name, seconds))
+        # A report without a suite-level time still carries case times, setup and
+        # teardown included; summing them keeps the evidence for the shard plan.
+        if name:
+            measured = total or case_total
+            if measured:
+                suite_seconds[name] = suite_seconds.get(name, 0.0) + measured
+        cases.extend((name, case_name, seconds) for case_name, seconds in suite_cases)
+    return suite_seconds, cases
 
 
 def parse_qt_junit(xml_text):
@@ -371,11 +410,16 @@ def _style(text, code, color):
 
 
 class Layer:
-    def __init__(self, title, suites=None, totals=None, entries=None, captures=None):
+    def __init__(
+        self, title, suites=None, totals=None, entries=None, captures=None, times=None
+    ):
         self.title = title
         self.suites = suites or {}
         self.totals = totals if totals is not None else sum_counts(self.suites)
         self.entries = entries or []
+        # {suite: seconds} from JUnit's time attribute: retained, not discarded,
+        # so the slowest entry is visible and a shard plan can cite it.
+        self.times = times or {}
         # [(label, Counts)] for one line per capture, since the captures run
         # different check sets and the merged total is not any one of them.
         self.captures = captures or []
@@ -459,7 +503,9 @@ def render(layers, failures, color, show_tests=True):
         for suite, name, status, detail in layer.entries:
             by_suite.setdefault(suite, []).append((name, status, detail))
         for suite, counts in layer.suites.items():
-            lines.append(f"  {suite} ({_counts_compact(counts)})")
+            seconds = layer.times.get(suite)
+            suffix = f" {seconds:.1f}s" if seconds else ""
+            lines.append(f"  {suite} ({_counts_compact(counts)}){suffix}")
             lines.extend(_test_lines(by_suite.get(suite, []), color))
         for label, counts in layer.captures:
             lines.append(f"  {label} ({_counts_compact(counts)})")
@@ -541,15 +587,19 @@ def build_layers(args, errors):
     if args.qt_junit or args.ctest_json:
         qt_suites = {}
         qt_entries = []
+        qt_times = {}
         for path in args.qt_junit or []:
             text = _read(path, errors)
             if text is None:
                 continue
             try:
                 suites, entries, qt_failures = parse_qt_junit(text)
+                suite_seconds, _cases = junit_timings(text)
             except ET.ParseError as exc:
                 errors.append(f"{path}: invalid JUnit XML: {exc}")
                 continue
+            for suite, seconds in suite_seconds.items():
+                qt_times[suite] = qt_times.get(suite, 0.0) + seconds
             for suite, counts in suites.items():
                 qt_suites.setdefault(suite, Counts()).add(counts)
             qt_entries.extend(entries)
@@ -564,7 +614,12 @@ def build_layers(args, errors):
                     failures.append((f"no report::{name}", message))
         if qt_suites:
             layers.append(
-                Layer("Qt shell tests (offscreen)", qt_suites, entries=qt_entries)
+                Layer(
+                    "Qt shell tests (offscreen)",
+                    qt_suites,
+                    entries=qt_entries,
+                    times=qt_times,
+                )
             )
 
     return layers, failures
@@ -695,6 +750,28 @@ def run_self_check():
     assert "assertion" in failures[0][1], failures
     assert entries[0][1:] == ("oracle::skipped", "skip", "(ignored)"), entries
     assert entries[1][1:] == ("oracle::bad", "fail", ""), entries
+
+    # Durations are retained, not discarded. The fixture's suite element has no
+    # time, so the suite total falls back to its case times.
+    suite_seconds, cases = junit_timings(QT_JUNIT)
+    assert suite_seconds == {"SmokeTest": 0.414}, suite_seconds
+    assert cases == [("SmokeTest", "frameOpensOffscreen", 0.0)], cases
+    timed_xml = (
+        '<testsuite name="SmokeTest" time="1.5">'
+        '<testcase name="initTestCase" classname="SmokeTest" time="0.4"/>'
+        '<testcase name="frameOpensOffscreen" classname="SmokeTest" time="1.1"/>'
+        "</testsuite>"
+    )
+    suite_seconds, cases = junit_timings(timed_xml)
+    assert suite_seconds == {"SmokeTest": 1.5}, suite_seconds
+    assert cases == [("SmokeTest", "frameOpensOffscreen", 1.1)], cases
+    timed = Layer(
+        "Qt shell tests (offscreen)",
+        {"SmokeTest": Counts(1, 0, 0)},
+        entries=[("SmokeTest", "frameOpensOffscreen", "pass", "")],
+        times=suite_seconds,
+    )
+    assert "1.5s" in render([timed], [], False), render([timed], [], False)
 
     suites, entries, failures = parse_qt_junit(QT_JUNIT)
     assert suites["SmokeTest"].total() == 1, suites

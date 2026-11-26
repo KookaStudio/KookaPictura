@@ -193,6 +193,7 @@ scripts = [
   "scripts/check-doc-claims.py",
   "scripts/check-milestone-names.py",
   "scripts/check-msvc-string-limits.py",
+  "scripts/check-qt-test-waits.py",
   "scripts/changed_files.py",
   "scripts/guard.sh",
 ]
@@ -264,6 +265,20 @@ local_full = true
 docs_only = true
 ci_guards = true
 
+
+[[check]]
+id = "qt-shards"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+python3 scripts/qt_test_timings.py --self-check &&
+  python3 scripts/qt_test_timings.py verify --plan cmake/qt-test-shards.json
+'''
+script = "scripts/qt_test_timings.py"
+local_fast = true
+local_full = true
+ci_guards = true
 
 [[check]]
 id = "sandbox-mcp"

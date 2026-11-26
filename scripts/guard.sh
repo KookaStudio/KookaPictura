@@ -19,6 +19,7 @@
 #  12. a file under docs/ claiming the repository has no code.
 #  13. an open ROADMAP.md item that names no tracking issue, or a cited path
 #      that does not exist.
+#  14. a Qt Test fixed wait of non-zero length without a reason comment.
 #
 # Runnable locally with no setup:   bash scripts/guard.sh
 #
@@ -29,11 +30,12 @@
 #   TASK_ALLOWS_DOCS=1       allow docs/ changes without the commit-message marker
 #
 # Usage: guard.sh [--changed FILE]
-#   --changed FILE  pass the changed-path list to the three file-local checks
-#                   (milestone names, colour literals, MSVC literal length), so a
-#                   local edit loop inspects only what it touched. The checks
-#                   themselves fall back to a whole-tree scan on an empty list.
-#                   Without the flag -- and in CI -- every check is whole-tree.
+#   --changed FILE  pass the changed-path list to the file-local checks
+#                   (milestone names, colour literals, MSVC literal length, Qt
+#                   fixed waits), so a local edit loop inspects only what it
+#                   touched. The checks themselves fall back to a whole-tree scan
+#                   on an empty list. Without the flag -- and in CI -- every check
+#                   is whole-tree.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -201,6 +203,15 @@ fi
 # --- 13. the roadmap's open items and cited paths resolve ----------------------
 echo "check: every open ROADMAP.md item links a tracking issue"
 if ! python3 "$(dirname "$0")/check-doc-claims.py" roadmap paths; then
+    fail=1
+fi
+
+# --- 14. Qt Test fixed waits carry a reason comment ---------------------------
+# The policy moved out of the Rust test module: a C++-only change never runs it
+# there, and this is the C++-aware path local verification and the guards CI use.
+echo "check: Qt Test fixed waits are justified or gone"
+if ! python3 "$(dirname "$0")/check-qt-test-waits.py" --self-test \
+    || ! python3 "$(dirname "$0")/check-qt-test-waits.py" ${scoped[@]+"${scoped[@]}"}; then
     fail=1
 fi
 

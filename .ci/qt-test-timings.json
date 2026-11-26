@@ -1,0 +1,19 @@
+{
+  "note": "Committed seed of the retained Qt Test timing store. CI refreshes it from the raw JUnit/CTest artifacts of every run; regenerate the shard plan with `python3 scripts/qt_test_timings.py plan --timings .ci/qt-test-timings.json --out cmake/qt-test-shards.json`.",
+  "layer_seconds": 389.0,
+  "suites": {
+    "tst_quick_mask": {
+      "seconds": 112.0,
+      "functions": {},
+      "reports": 1,
+      "evidence": "recorded local run under the 80% CPU budget (issue #1566); per-function split lands with the next CI capture"
+    },
+    "tst_document_navigate": {
+      "seconds": 21.0,
+      "functions": {},
+      "reports": 1,
+      "evidence": "recorded local run (issue #1566); per-function split lands with the next CI capture"
+    }
+  },
+  "entries": {}
+}

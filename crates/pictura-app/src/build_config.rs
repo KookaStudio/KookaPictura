@@ -1,7 +1,7 @@
 //! Pins the build-configuration invariants the CMake and Cargo setup relies on
 //! but cannot check itself: the bridge-stamp shortcut in `CMakeLists.txt`, the
 //! declarations-only bridge files, the `dev-app` profile's runtime semantics,
-//! the disabled doctests, and the justified fixed waits in the Qt Test suites.
+//! and the disabled doctests.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -412,54 +412,6 @@ fn bridge_files_hold_declarations_only() {
         violations.is_empty(),
         "bridge files hold implementation outside the bridge module:\n{}",
         violations.join("\n")
-    );
-}
-
-/// A fixed wait in a Qt Test suite either flushes queued events (`qWait(0)`)
-/// or says why no condition can replace it, in a comment that trails the call
-/// or on a comment-only line right above it.
-#[test]
-fn qt_test_waits_are_justified() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("cpp/tests");
-    let mut sources: Vec<PathBuf> = fs::read_dir(&dir)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|e| e == "cpp" || e == "h"))
-        .collect();
-    sources.sort();
-    let mut unjustified = Vec::new();
-    for path in sources {
-        let src = read(&path);
-        let lines: Vec<&str> = src.lines().collect();
-        for (index, line) in lines.iter().enumerate() {
-            let mut rest = *line;
-            while let Some(at) = rest.find("qWait(") {
-                let args = &rest[at + "qWait(".len()..];
-                let mut depth = 1usize;
-                let close = args
-                    .char_indices()
-                    .find(|&(_, c)| {
-                        match c {
-                            '(' => depth += 1,
-                            ')' => depth -= 1,
-                            _ => {}
-                        }
-                        depth == 0
-                    })
-                    .map_or(args.len(), |(j, _)| j);
-                let trailing = args[close..].contains("//");
-                let above = index > 0 && lines[index - 1].trim_start().starts_with("//");
-                if args[..close].trim() != "0" && !trailing && !above {
-                    unjustified.push(format!("{}:{}: {}", path.display(), index + 1, line.trim()));
-                }
-                rest = &args[close..];
-            }
-        }
-    }
-    assert!(
-        unjustified.is_empty(),
-        "fixed waits without a reason comment:\n{}",
-        unjustified.join("\n")
     );
 }
 
