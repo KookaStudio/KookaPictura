@@ -222,7 +222,7 @@ pub(super) fn adjustment_input_argb(view: &PictureView, path: &QString, x: i32, 
     };
     let mut prefix = doc.clone();
     let mut root = 0;
-    let mut layers = &doc.layers[..];
+    let mut layers = doc.layers.as_slice();
     for (depth, &index) in indices.iter().enumerate().take(indices.len() - 1) {
         let layer = &layers[index];
         if layer.blend != pictura_core::BlendMode::PassThrough
@@ -231,7 +231,7 @@ pub(super) fn adjustment_input_argb(view: &PictureView, path: &QString, x: i32, 
             prefix.layers = pictura_core::LayerStack::from_layers(layer.children().to_vec());
             root = depth + 1;
         }
-        layers = layer.children();
+        layers = layer.children().as_slice();
     }
     let indices = &indices[root..];
     for (depth, &index) in indices.iter().enumerate() {
