@@ -358,15 +358,20 @@ fn tone_planes(
     else {
         return Err("Invalid toning controls".to_owned());
     };
-    if controls.iter().any(|value| !value.is_finite()) || *gamma <= 0.0
+    if controls.iter().any(|value| !value.is_finite())
+        || *gamma <= 0.0
         || (!lut.is_empty() && (lut.len() != 256 || lut.iter().any(|v| !(0.0..=1.0).contains(v))))
     {
         return Err("Invalid toning controls or curve".to_owned());
     }
     let [columns, rows] = [width.div_ceil(stride), height.div_ceil(stride)];
-    let indices = || (0..height).step_by(stride as usize).flat_map(move |y| {
-        (0..width).step_by(stride as usize).map(move |x| y as usize * width as usize + x as usize)
-    });
+    let indices = || {
+        (0..height).step_by(stride as usize).flat_map(move |y| {
+            (0..width)
+                .step_by(stride as usize)
+                .map(move |x| y as usize * width as usize + x as usize)
+        })
+    };
     let rgb_at = |i: usize| std::array::from_fn(|c| f64::from(merged.planes[c][i]));
     let mut local = Vec::new();
     if *method <= 0.5 {
@@ -431,7 +436,14 @@ pub fn hdr_result_tone(
     let tone = || {
         let input = bracket.0.as_ref().map_err(Clone::clone)?;
         let merged = result.0.as_ref().map_err(Clone::clone)?;
-        tone_planes(merged, [input.width, input.height], 1, controls, tone_lut, None)
+        tone_planes(
+            merged,
+            [input.width, input.height],
+            1,
+            controls,
+            tone_lut,
+            None,
+        )
     };
     Box::new(HdrResult(tone()))
 }
@@ -578,8 +590,12 @@ mod tests {
     #[test]
     fn hdr_tone_curve_preserves_headroom() {
         let source = HdrMerge {
-            planes: [vec![0.0, 0.4, 1.0, 3.0], vec![0.0, 0.4, 1.0, 3.0],
-                     vec![0.0, 0.4, 1.0, 3.0], vec![1.0; 4]],
+            planes: [
+                vec![0.0, 0.4, 1.0, 3.0],
+                vec![0.0, 0.4, 1.0, 3.0],
+                vec![0.0, 0.4, 1.0, 3.0],
+                vec![1.0; 4],
+            ],
             response: ResponseCurve::new([1.0; 3]).unwrap(),
         };
         let mut controls = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
@@ -588,7 +604,10 @@ mod tests {
         assert_eq!(identity.planes, source.planes);
         assert_eq!((bins[0], bins[102], bins[255]), (1, 1, 2));
         let curve: [f64; 256] = std::array::from_fn(|i| 0.1 + i as f64 / 255.0 * 0.7);
-        assert!((curve_luminance(&curve, 1.0 - 1e-8) - curve_luminance(&curve, 1.0 + 1e-8)).abs() < 1e-7);
+        assert!(
+            (curve_luminance(&curve, 1.0 - 1e-8) - curve_luminance(&curve, 1.0 + 1e-8)).abs()
+                < 1e-7
+        );
         let edited = tone_planes(&source, [4, 1], 1, &controls, &curve, None).unwrap();
         assert_eq!(edited.planes[0], [0.1, 0.38, 0.8, 2.8]);
         assert_eq!(edited.planes[3], source.planes[3]);

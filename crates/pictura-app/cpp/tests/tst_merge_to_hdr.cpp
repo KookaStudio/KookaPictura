@@ -585,7 +585,12 @@ void MergeToHdrTest::loadsLegacyTonePreset()
         auto* curve = control<pictura::CurveWidget>(dialog, "hdrMergeToneCurve");
         auto* reset = control<QPushButton>(dialog, "hdrMergeCurveReset");
         auto* image = control<QLabel>(dialog, "hdrMergeImage");
-        QVERIFY(presets && curve && reset && image);
+        auto* zoom = control<QComboBox>(dialog, "hdrMergeZoom");
+        QVERIFY(presets && curve && reset && image && zoom);
+        const int actualSize = zoom->findData(100);
+        QVERIFY(actualSize >= 0);
+        // Full-screen layout can resize the Fit preview while the file picker is open.
+        zoom->setCurrentIndex(actualSize);
         const QImage baseline = image->pixmap().toImage();
         QVERIFY(QMetaObject::invokeMethod(presets, "activated", Q_ARG(int, 1)));
         QCOMPARE(curve->points().size(), 2);
