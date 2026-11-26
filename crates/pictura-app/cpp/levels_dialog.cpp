@@ -1,19 +1,35 @@
 #include "levels_dialog.h"
 #include <QtCore/QCoreApplication>
+#include <QtCore/QtMath>
 
 #include "adjustment_presets.h"
+#include "api/document_api.h"
+#include "api/document_bridge.h"
+#include "api/filters_bridge.h"
+#include "api/layers_bridge.h"
+#include "icons.h"
+#include "image_view.h"
+#include "tools.h"
 
+#include <QtGui/QContextMenuEvent>
+#include <QtGui/QKeyEvent>
 #include <QtGui/QLinearGradient>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
+#include <QtGui/QActionGroup>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
 #include <algorithm>
@@ -139,7 +155,11 @@ void TriangleSlider::paintEvent(QPaintEvent*)
 
 void TriangleSlider::mousePressEvent(QMouseEvent* event)
 {
-    dragging_ = -1;
+    if (event->button() != Qt::LeftButton) {
+        event->ignore();
+        return;
+    }
+    endDrag();
     int best = 12;
     // Ties go to the last thumb, so white can leave a black parked under it.
     for (int i = 0; i < thumbs_.size(); ++i) {
@@ -148,6 +168,9 @@ void TriangleSlider::mousePressEvent(QMouseEvent* event)
             best = distance;
             dragging_ = i;
         }
+    }
+    if (draggingInputEndpoint()) {
+        qApp->installEventFilter(this);
     }
     mouseMoveEvent(event);
 }
@@ -163,14 +186,71 @@ void TriangleSlider::mouseMoveEvent(QMouseEvent* event)
         update();
         emit valueChanged(dragging_, value);
     }
+    updateClipping(event->modifiers().testFlag(Qt::AltModifier));
 }
 
-void TriangleSlider::mouseReleaseEvent(QMouseEvent*) { dragging_ = -1; }
+void TriangleSlider::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        endDrag();
+    }
+}
+
+bool TriangleSlider::event(QEvent* event)
+{
+    if (event->type() == QEvent::UngrabMouse || event->type() == QEvent::Hide) {
+        endDrag();
+    }
+    return QWidget::event(event);
+}
+
+bool TriangleSlider::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event->type() == QEvent::WindowDeactivate && watched == window()) {
+        endDrag();
+    } else if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
+        auto* key = static_cast<QKeyEvent*>(event);
+        if (key->key() == Qt::Key_Alt && !key->isAutoRepeat()) {
+            updateClipping(event->type() == QEvent::KeyPress);
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+bool TriangleSlider::draggingInputEndpoint() const
+{
+    return thumbs_.size() == 3 && (dragging_ == 0 || dragging_ == 2);
+}
+
+void TriangleSlider::updateClipping(bool alt)
+{
+    if (draggingInputEndpoint() && (alt || clipping_)) {
+        clipping_ = alt;
+        emit clippingThumbChanged(alt ? dragging_ : -1);
+    }
+}
+
+void TriangleSlider::endDrag()
+{
+    if (draggingInputEndpoint()) {
+        qApp->removeEventFilter(this);
+        updateClipping(false);
+    }
+    dragging_ = -1;
+}
 
 LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRect& visible,
                            QWidget* parent)
     : AdjustmentDialog(view, block, visible, QStringLiteral("Levels"), parent)
 {
+    if (view) {
+        const QString mode = image_mode(*view);
+        grayscale_ = mode == QLatin1String("grayscale");
+        canvasControlsAvailable_ = (grayscale_ || mode == QLatin1String("rgb"))
+            && mask_edit_target_get(*view).isEmpty();
+        connect(view, &PictureView::pyramid_settled, this, &LevelsDialog::renderClipping);
+    }
+
     auto* outer = new QHBoxLayout(this);
     outer->setContentsMargins(12, 12, 12, 12);
     outer->setSpacing(14);
@@ -263,6 +343,7 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
         buttonColumn({QStringLiteral("Auto"), QStringLiteral("Options…")});
     button(QStringLiteral("Options…"))->setEnabled(false);
     buttons->addSpacing(10);
+    buttons->addLayout(makePointControls());
     buttons->addWidget(previewCheck());
     buttons->addStretch(1);
     outer->addLayout(buttons);
@@ -291,6 +372,8 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
             gamma_->setValue(std::log(norm) / std::log(0.5));
         }
     });
+    connect(input_, &TriangleSlider::clippingThumbChanged,
+            this, &LevelsDialog::setClippingThumb);
     connect(output_, &TriangleSlider::valueChanged, this, [this](int index, int value) {
         (index == 0 ? outBlack_ : outWhite_)->setValue(value);
     });
@@ -298,6 +381,286 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
     connect(preset_, &QComboBox::activated, this, &LevelsDialog::applyPreset);
 
     loadChannel();
+}
+
+LevelsDialog::~LevelsDialog()
+{
+    disarmPoint();
+    clearClipping();
+}
+
+void LevelsDialog::done(int result)
+{
+    disarmPoint();
+    clearClipping();
+    QDialog::done(result);
+}
+
+QHBoxLayout* LevelsDialog::makePointControls()
+{
+    const std::array<QString, 3> labels{
+        tr("Set Black Point"), tr("Set Gray Point"), tr("Set White Point")};
+    const std::array<QString, 3> captions{tr("Black"), tr("Gray"), tr("White")};
+    const std::array<QString, 3> names{QStringLiteral("levelsBlackPoint"),
+                                      QStringLiteral("levelsGrayPoint"),
+                                      QStringLiteral("levelsWhitePoint")};
+    auto* row = new QHBoxLayout;
+    auto* group = new QButtonGroup(this);
+    for (int i = BlackPoint; i <= WhitePoint; ++i) {
+        const auto kind = static_cast<PointKind>(i);
+        auto* point = new QToolButton(this);
+        point->setObjectName(names[i]);
+        point->setToolTip(labels[i]);
+        point->setAccessibleName(labels[i]);
+        point->setIcon(icon(QStringLiteral("tool.eyedropper")));
+        point->setText(captions[i]);
+        point->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        point->setCheckable(true);
+        point->setEnabled(canvasControlsAvailable_ && !(grayscale_ && kind == GrayPoint));
+        point->installEventFilter(this);
+        group->addButton(point);
+        row->addWidget(point);
+        points_[i] = point;
+
+        connect(point, &QToolButton::clicked, this, [this, kind] { armPoint(kind); });
+    }
+    return row;
+}
+
+bool LevelsDialog::eventFilter(QObject* watched, QEvent* event)
+{
+    for (int i = BlackPoint; i <= WhitePoint; ++i) {
+        if (watched != points_[i] || !points_[i]->isEnabled()) {
+            continue;
+        }
+        const auto kind = static_cast<PointKind>(i);
+        if (event->type() == QEvent::ContextMenu) {
+            showSampleMenu(kind, static_cast<QContextMenuEvent*>(event)->globalPos());
+            return true;
+        }
+        if (event->type() == QEvent::MouseButtonDblClick
+            && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+            chooseTarget(kind);
+            return true;
+        }
+    }
+    return AdjustmentDialog::eventFilter(watched, event);
+}
+
+void LevelsDialog::armPoint(PointKind kind)
+{
+    if (tools()) {
+        pointArmed_ = true;
+        tools()->setCanvasSampler(
+            [this, kind](const QPointF& pos, Qt::KeyboardModifiers) { pickPoint(kind, pos); }, false);
+    }
+}
+
+void LevelsDialog::disarmPoint()
+{
+    if (pointArmed_ && tools()) {
+        tools()->setCanvasSampler({});
+    }
+    pointArmed_ = false;
+}
+
+void LevelsDialog::chooseTarget(PointKind kind)
+{
+    QInputDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("levelsPointTarget"));
+    dialog.setWindowTitle(points_[kind]->accessibleName());
+    dialog.setLabelText(tr("Neutral target (R = G = B)"));
+    dialog.setInputMode(QInputDialog::IntInput);
+    dialog.setIntRange(kind == GrayPoint ? 1 : 0, kind == GrayPoint ? 254 : 255);
+    dialog.setIntValue(targets_[kind]);
+    if (dialog.exec() == QDialog::Accepted) {
+        targets_[kind] = dialog.intValue();
+    }
+}
+
+void LevelsDialog::showSampleMenu(PointKind kind, const QPoint& globalPos)
+{
+    auto* point = points_[kind];
+    auto* menu = point->findChild<QMenu*>(QStringLiteral("levelsSampleSize"));
+    if (!menu) {
+        menu = new QMenu(point);
+        menu->setObjectName(QStringLiteral("levelsSampleSize"));
+        auto* group = new QActionGroup(menu);
+        for (int size : {1, 3, 5, 11, 31, 51, 101}) {
+            auto* action = menu->addAction(size == 1 ? tr("Point Sample")
+                                                     : tr("%1 × %1 Average").arg(size));
+            action->setCheckable(true);
+            action->setData(size);
+            group->addAction(action);
+            connect(action, &QAction::triggered, this, [this, size] { sampleSize_ = size; });
+        }
+        menu->addSeparator();
+        connect(menu->addAction(tr("Set Target…")), &QAction::triggered,
+                this, [this, kind] { chooseTarget(kind); });
+    }
+    for (auto* action : menu->actions()) {
+        if (action->data().isValid()) {
+            action->setChecked(action->data().toInt() == sampleSize_);
+        }
+    }
+    menu->popup(globalPos);
+}
+
+void LevelsDialog::pickPoint(PointKind kind, const QPointF& pos)
+{
+    if (!pictureView()) {
+        return;
+    }
+    setPreviewSuspended(true);
+    const QRgb sample = image_adjust_sample(*pictureView(), qFloor(pos.x()), qFloor(pos.y()),
+                                            sampleSize_);
+    setPreviewSuspended(false);
+    if (qAlpha(sample) == 0) {
+        return;
+    }
+
+    const std::array<int, 4> values{qGray(sample), qRed(sample), qGreen(sample), qBlue(sample)};
+    QList<QPair<QString, double>> edits;
+    const int first = grayscale_ ? 0 : 1;
+    const int end = grayscale_ ? 1 : 4;
+    for (int channel = first; channel < end; ++channel) {
+        const QString& key = kChannelPrefixes.at(channel);
+        const int value = values[channel];
+        switch (kind) {
+        case BlackPoint:
+            if (value > 253) {
+                return;
+            }
+            edits.append({key + QStringLiteral("inputBlack"), value});
+            edits.append({key + QStringLiteral("outputBlack"), targets_[kind]});
+            break;
+        case WhitePoint:
+            if (value < 2) {
+                return;
+            }
+            edits.append({key + QStringLiteral("inputWhite"), value});
+            edits.append({key + QStringLiteral("outputWhite"), targets_[kind]});
+            break;
+        case GrayPoint:
+            if (value == 0 || value == 255) {
+                return;
+            }
+            const double gamma = std::log(value / 255.0) / std::log(targets_[kind] / 255.0);
+            edits.append({key + QStringLiteral("gamma"), std::clamp(gamma, 0.1, 9.99)});
+            break;
+        }
+    }
+    const QByteArray identity = defaultPresetBlock(QStringLiteral("levels"));
+    if (setParams(identity, edits)) {
+        markCustom();
+        loadChannel();
+    }
+}
+
+void LevelsDialog::setClippingCanvas(ImageView* canvas)
+{
+    if (canvas_) {
+        disconnect(canvas_, &ImageView::viewChanged, this, &LevelsDialog::renderClipping);
+        setClippingThumb(-1);
+    }
+    canvas_ = canvas;
+    if (canvas_) {
+        connect(canvas_, &ImageView::viewChanged, this, &LevelsDialog::renderClipping);
+    }
+}
+
+void LevelsDialog::setClippingThumb(int index)
+{
+    if (index < 0) {
+        if (clippingThumb_ >= 0) {
+            clearClipping();
+            setPreviewSuspended(false);
+        }
+        return;
+    }
+    if (!canvas_ || !canvasControlsAvailable_) {
+        return;
+    }
+    clippingThumb_ = index;
+    setPreviewSuspended(true);
+    renderClipping();
+}
+
+void LevelsDialog::clearClipping()
+{
+    if (clippingThumb_ >= 0 && canvas_) {
+        canvas_->clearFilterPreview();
+    }
+    clippingThumb_ = -1;
+    clippingSource_ = QImage();
+    clippingSourceCrop_ = QRect();
+    clippingSourceLevel_ = -1;
+}
+
+void LevelsDialog::renderClipping()
+{
+    if (clippingThumb_ < 0 || !canvas_ || !pictureView()) {
+        return;
+    }
+    const QRect visible = canvas_->visibleDocumentRect().toAlignedRect();
+    if (visible.isEmpty()) {
+        canvas_->clearFilterPreview();
+        return;
+    }
+    constexpr int maxSide = 1536;
+    const int available = document_api::levelCount(*pictureView());
+    const int span = std::max(visible.width(), visible.height());
+    int level = 0;
+    int step = 1;
+    while (span / step + 2 > maxSide && level < 30) {
+        ++level;
+        step *= 2;
+    }
+    if (span / step + 2 > maxSide) {
+        canvas_->clearFilterPreview();
+        return;
+    }
+
+    // The same power-of-two grid must locate both the source crop and overlay.
+    const QRect crop(QPoint(visible.left() / step, visible.top() / step),
+                     QPoint(visible.right() / step, visible.bottom() / step));
+    QImage source;
+    if (level < available) {
+        source = pictureView()->display_image(level, crop.x(), crop.y(), crop.width(), crop.height());
+    } else {
+        if (clippingSource_.isNull() || clippingSourceCrop_ != crop || clippingSourceLevel_ != level) {
+            clippingSource_ = image_adjust_clipping_source(*pictureView(), level, crop.x(), crop.y(),
+                                                           crop.width(), crop.height());
+            clippingSourceCrop_ = crop;
+            clippingSourceLevel_ = level;
+        }
+        source = clippingSource_;
+    }
+    QImage map = source.convertToFormat(QImage::Format_ARGB32);
+    if (map.isNull()) {
+        canvas_->clearFilterPreview();
+        return;
+    }
+    const bool shadows = clippingThumb_ == 0;
+    const int threshold = shadows ? inBlack_->value() : inWhite_->value();
+    const int channel = grayscale_ ? 0 : channel_->currentIndex();
+    const auto output = [shadows, threshold](int sample) {
+        return (shadows ? sample > threshold : sample >= threshold) ? 255 : 0;
+    };
+    for (int row = 0; row < map.height(); ++row) {
+        auto* pixels = reinterpret_cast<QRgb*>(map.scanLine(row));
+        for (int col = 0; col < map.width(); ++col) {
+            const QRgb pixel = pixels[col];
+            std::array<int, 3> rgb{qRed(pixel), qGreen(pixel), qBlue(pixel)};
+            if (channel > 0) {
+                rgb.fill(rgb.at(channel - 1));
+            }
+            pixels[col] = qRgba(output(rgb[0]), output(rgb[1]), output(rgb[2]), qAlpha(pixel));
+        }
+    }
+    canvas_->setFilterPreview(
+        map, QRect(crop.x() * step, crop.y() * step, crop.width() * step, crop.height() * step),
+        true);
 }
 
 QString LevelsDialog::prefix() const { return kChannelPrefixes.value(channel_->currentIndex()); }

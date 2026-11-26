@@ -455,10 +455,12 @@ free	image_adjust_apply_start	image_adjust_apply_start	api/filters_bridge.h	pict
 free	image_adjust_direct	image_adjust_direct	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
 free	image_adjust_preview	image_adjust_preview	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
 free	image_adjust_preview_busy	image_adjust_preview_busy	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h
+free	image_adjust_clipping_source	image_adjust_clipping_source	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
 free	image_adjust_preview_cancel	image_adjust_preview_cancel	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h
 free	image_adjust_preview_poll	image_adjust_preview_poll	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h
 free	image_adjust_preview_set_delay	image_adjust_preview_set_delay	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h
 free	image_adjust_preview_start	image_adjust_preview_start	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/jobs.cxxqt.h
+free	image_adjust_sample	image_adjust_sample	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
 free	image_adjustment_curve	image_adjustment_curve	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
 free	image_adjustment_default	image_adjustment_default	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
 free	image_adjustment_page	image_adjustment_page	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h

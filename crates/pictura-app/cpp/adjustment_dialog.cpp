@@ -225,7 +225,11 @@ bool AdjustmentDialog::setParam(const QString& key, double value)
 
 bool AdjustmentDialog::setParams(const QList<QPair<QString, double>>& edits)
 {
-    QByteArray next = block_;
+    return setParams(block_, edits);
+}
+
+bool AdjustmentDialog::setParams(QByteArray next, const QList<QPair<QString, double>>& edits)
+{
     for (const auto& [key, value] : edits) {
         next = bytes(image_adjustment_set(slice(next), key, value, cmyk_));
         if (next.isEmpty()) {
@@ -292,7 +296,7 @@ QCheckBox* AdjustmentDialog::previewCheck()
         preview_->setChecked(true);
         connect(preview_, &QCheckBox::toggled, this, [this](bool on) {
             if (on) {
-                previewTimer_->start();
+                schedulePreview();
             } else {
                 cancelPreview();
             }
@@ -459,8 +463,26 @@ void AdjustmentDialog::edited(const QByteArray& next)
     if (preset_) {
         preset_->setBlock(adjustmentPresetKind(block_), block_);
     }
-    if (previewTimer_ && (!preview_ || preview_->isChecked())) {
+    schedulePreview();
+}
+
+void AdjustmentDialog::schedulePreview()
+{
+    if (!previewSuspended_ && previewTimer_ && (!preview_ || preview_->isChecked())) {
         previewTimer_->start();
+    }
+}
+
+void AdjustmentDialog::setPreviewSuspended(bool suspended)
+{
+    if (previewSuspended_ == suspended) {
+        return;
+    }
+    previewSuspended_ = suspended;
+    if (suspended) {
+        cancelPreview();
+    } else {
+        schedulePreview();
     }
 }
 
@@ -541,9 +563,7 @@ void AdjustmentDialog::setPreviewArea(const QRect& visible)
         return;
     }
     visible_ = visible;
-    if (previewTimer_ && (!preview_ || preview_->isChecked())) {
-        previewTimer_->start();
-    }
+    schedulePreview();
 }
 
 void AdjustmentDialog::accept()
@@ -651,6 +671,9 @@ bool runAdjustmentDialog(QWidget* parent, PictureView* view, const QString& kind
     const auto dialog = makeAdjustmentDialog(kind, view, block, visible, parent);
     dialog->setCanvasSampling(tools);
     if (canvas) {
+        if (auto* levels = qobject_cast<LevelsDialog*>(dialog.get())) {
+            levels->setClippingCanvas(canvas);
+        }
         // A drag reports every step; re-preview once the view settles.
         auto* settle = new QTimer(dialog.get());
         settle->setSingleShot(true);

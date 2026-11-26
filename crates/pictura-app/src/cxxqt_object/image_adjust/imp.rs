@@ -1,11 +1,12 @@
 use super::*;
 
 use super::super::adjustment_edit::{format_points, page_rows, parse_points};
+use super::super::helpers_composite::{level_display_image, sample_planar_argb};
 use super::super::impl_filters::{apply_op_active_region, cancel_filter_preview, ActiveOp};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::{QString, QStringList};
+use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_core::{AdjustmentData, PsdRect};
 use pictura_render::Adjustment;
 
@@ -60,6 +61,67 @@ pub(super) fn image_adjustment_set(block: &[u8], key: &QString, value: f64, cmyk
     to_block(from_block(block).and_then(|d| {
         pictura_render::set_adjustment_param_in_mode(&d, &key.to_string(), value, cmyk)
     }))
+}
+
+pub(super) fn image_adjust_sample(view: &PictureView, x: i32, y: i32, size: i32) -> u32 {
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return 0;
+    };
+    let (width, height) = (doc.width as i32, doc.height as i32);
+    if x < 0 || y < 0 || x >= width || y >= height {
+        return 0;
+    }
+    let radius = (size.clamp(1, 101) - 1) / 2;
+    let rect = PsdRect {
+        top: (y - radius).max(0),
+        left: (x - radius).max(0),
+        bottom: (y + radius + 1).min(height),
+        right: (x + radius + 1).min(width),
+    };
+    let pixels = super::super::picture::picture_region(doc, rust, rect);
+    let mut weight = 0;
+    let mut sum = [0; 3];
+    for row in 0..rect.height() {
+        for col in 0..rect.width() {
+            let pixel = sample_planar_argb(&pixels, col, row);
+            let alpha = pixel >> 24;
+            weight += alpha;
+            for (total, value) in sum.iter_mut().zip(rgb(pixel)) {
+                *total += u32::from(value) * alpha;
+            }
+        }
+    }
+    if weight == 0 {
+        return 0;
+    }
+    let [r, g, b] = sum.map(|value| value / weight);
+    0xff000000 | (r << 16) | (g << 8) | b
+}
+
+pub(super) fn image_adjust_clipping_source(
+    view: &PictureView,
+    level: i32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> QImage {
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return QImage::default();
+    };
+    if !(0..=30).contains(&level) || x < 0 || y < 0 || w <= 0 || h <= 0 || w > 1536 || h > 1536 {
+        return QImage::default();
+    }
+    let (Some(right), Some(bottom)) = (x.checked_add(w), y.checked_add(h)) else {
+        return QImage::default();
+    };
+    let rect = PsdRect { top: y, left: x, bottom, right };
+    let frame = pictura_render::composite_region_level(doc, rect, level as usize, &|chunk| {
+        pictura_codec::buffer_to_srgb(doc, &chunk).into_owned()
+    });
+    level_display_image(&frame)
 }
 
 pub(super) fn image_adjustment_curve(block: &[u8], channel: i32) -> QString {
