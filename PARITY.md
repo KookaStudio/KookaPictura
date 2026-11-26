@@ -520,6 +520,8 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 - **CC-only generative and cloud (non-goal:feasibility:76):** Generative Fill/Expand, Generate Image, Neural Filters, Relight, Libraries, Cloud Documents, and UXP remain outside the local product; P-FLT-34 through P-FLT-37, P-FLT-39, and P-AUT-19 through P-AUT-22.
 - **Extended-only (non-goal:feasibility:72):** 3D layers, the 3D panel, 3D file import, and the ten 3D tools are missing; P-LAY-40, P-PAN-26, and the P-TOOL 3D rows.
 
+Canvas Size supports picas and columns and gates extension fill on the Background layer (#566). Column preference editing is tracked in #565.
+
 ## Baseline history
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
