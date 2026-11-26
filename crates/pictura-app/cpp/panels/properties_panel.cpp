@@ -7,6 +7,14 @@
 
 #include "adjustment_controls.h"
 #include "adjustment_presets.h"
+#include "tools.h"
+#include "image_view.h"
+
+#include <algorithm>
+#include <array>
+#include <climits>
+#include <cmath>
+#include <cstdint>
 #include "api/transform_api.h"
 #include "icons.h"
 #include "layers_panel_internal.h"
@@ -188,6 +196,48 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
         return view_ ? QString(adjustment_curve(*view_, path_, channel)) : QString();
     });
     connect(controls_, &AdjustmentControls::valueChanged, this, &PropertiesPanel::push);
+    connect(controls_, &AdjustmentControls::valueChanged, this, [this] { if (levelsClipping_) updateLevelsClipping(); });
+    connect(controls_, &AdjustmentControls::levelsChannelChanged, this, [this] { if (levelsClipping_) updateLevelsClipping(); });
+    connect(controls_, &AdjustmentControls::levelsPickRequested, this, [this](int point) {
+        if (!tools_ || !view_ || path_.isEmpty() || tools_->canvasSamplerActive() || tools_->canvasBrushActive()) return;
+        const QString path = path_;
+        PictureView* const view = view_;
+        levelsPicking_ = true;
+        tools_->setCanvasSampler([this, path, view, point](const QPointF& pos, Qt::KeyboardModifiers) {
+            QTimer::singleShot(0, this, [this] {
+                if (levelsPicking_ && tools_) tools_->setCanvasSampler({});
+                levelsPicking_ = false;
+            });
+            if (view_ != view || path_ != path) return;
+            const QRgb pixel = adjustment_input_argb(*view, path, int(std::floor(pos.x())), int(std::floor(pos.y())));
+            if (!qAlpha(pixel)) return;
+            const bool gray = image_mode(*view) == QLatin1String("grayscale");
+            const std::array<int, 4> values{qGray(pixel), qRed(pixel), qGreen(pixel), qBlue(pixel)};
+            const QStringList prefixes{QString(), QStringLiteral("red."), QStringLiteral("green."), QStringLiteral("blue.")};
+            const int first = gray ? 0 : 1;
+            const int end = gray ? 1 : 4;
+            for (int channel = first; channel < end; ++channel) {
+                const int value = values[channel];
+                if ((point == 0 && value > 253) || (point == 2 && value < 2)
+                    || (point == 1 && (value == 0 || value == 255))) return;
+            }
+            commit();
+            for (int channel = first; channel < end; ++channel) {
+                const int value = values[channel];
+                const QString name = point == 0 ? QStringLiteral("inputBlack")
+                    : point == 2 ? QStringLiteral("inputWhite") : QStringLiteral("gamma");
+                const double target = point == 1 ? std::clamp(std::log(value / 255.0) / std::log(0.5), 0.1, 9.99)
+                                                 : double(value);
+                if (!adjustment_set(*view, path, prefixes[channel] + name, target)) {
+                    adjustment_cancel(*view);
+                    refresh();
+                    return;
+                }
+            }
+            adjustment_commit(*view, title_);
+            refresh();
+        }, false);
+    });
     connect(controls_, &AdjustmentControls::curveChanged, this,
             [this](int channel, const QString& points) {
                 if (!view_ || path_.isEmpty()) {
@@ -629,6 +679,10 @@ bool PropertiesPanel::vectorMaskSectionVisibleForTest() const
 void PropertiesPanel::setView(PictureView* view)
 {
     if (view != view_) {
+        if (tools_ && tools_->canvas()) tools_->canvas()->clearFilterPreview();
+        if (levelsPicking_ && tools_) tools_->setCanvasSampler({});
+        levelsPicking_ = false;
+        levelsClipping_ = false;
         commit();
     }
     view_ = view;
@@ -668,6 +722,10 @@ void PropertiesPanel::refresh()
 {
     const QString path = activePath();
     if (path != path_) {
+        if (tools_ && tools_->canvas()) tools_->canvas()->clearFilterPreview();
+        if (levelsPicking_ && tools_) tools_->setCanvasSampler({});
+        levelsPicking_ = false;
+        levelsClipping_ = false;
         commit();
     }
     path_ = path;
@@ -814,6 +872,19 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
     } else {
         preset_->setBlock(QString(), QByteArray());
     }
+    if (view_ && kind_ == QLatin1String("levels")) {
+        std::array<std::array<int, 256>, 4> histograms{};
+        const auto source = adjustment_auto_source(*view_, path_);
+        for (int channel = 0; channel < 4; ++channel) {
+            const auto bins = adjustment_input_histogram(*source, channel);
+            for (std::size_t i = 0; i < bins.size() && i < 256; ++i) {
+                histograms[channel][i] = int(std::min<std::uint32_t>(bins[i], INT_MAX));
+            }
+        }
+        controls_->setLevelsHistogramSource([histograms](int channel) {
+            return histograms.at(std::clamp(channel, 0, 3));
+        });
+    }
     controls_->setPage(page, dirty_);
     if (view_ && !dirty_) {
         controls_->refreshThresholdHistogram(*view_, path_);
@@ -898,6 +969,34 @@ void PropertiesPanel::performPanelMenuAction(const QString& id)
     }
 }
 
+void PropertiesPanel::updateLevelsClipping()
+{
+    if (!tools_ || !tools_->canvas()) return;
+    auto* canvas = tools_->canvas();
+    int channel = 0, black = 0, white = 255;
+    if (!levelsClipping_ || !view_ || !controls_->levelsClippingParameters(channel, black, white)) {
+        canvas->clearFilterPreview();
+        return;
+    }
+    const QRect bounds(0, 0, int(view_->document_width()), int(view_->document_height()));
+    const QRect area = canvas->visibleDocumentRect().toAlignedRect().intersected(bounds);
+    if (area.isEmpty()) { canvas->clearFilterPreview(); return; }
+    QImage map = adjustment_input_image(*view_, path_, area.x(), area.y(), area.width(), area.height())
+                     .convertToFormat(QImage::Format_ARGB32);
+    if (map.isNull()) { canvas->clearFilterPreview(); return; }
+    for (int y = 0; y < map.height(); ++y) {
+        auto* row = reinterpret_cast<QRgb*>(map.scanLine(y));
+        for (int x = 0; x < map.width(); ++x) {
+            const QRgb pixel = row[x];
+            std::array<int, 3> rgb{qRed(pixel), qGreen(pixel), qBlue(pixel)};
+            if (channel > 0) rgb.fill(rgb.at(channel - 1));
+            for (int& sample : rgb) sample = sample <= black ? 0 : sample >= white ? 255 : 128;
+            row[x] = qRgba(rgb[0], rgb[1], rgb[2], qAlpha(pixel));
+        }
+    }
+    canvas->setFilterPreview(map, area, true);
+}
+
 void PropertiesPanel::updatePanelMenu(QMenu* menu)
 {
     if (!menu) {
@@ -906,7 +1005,17 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
     const bool hasLayer = !path_.isEmpty();
     for (QAction* action : menu->actions()) {
         const QString id = action->data().toString();
-        if (id == QLatin1String(command_ids::PanelPropertiesAutoOptions)) {
+        if (id == QLatin1String("properties.showClipping")) {
+            action->setEnabled(hasLayer && kind_ == QLatin1String("levels"));
+            action->setChecked(levelsClipping_);
+            if (!action->property("propertiesClippingConnected").toBool()) {
+                action->setProperty("propertiesClippingConnected", true);
+                connect(action, &QAction::triggered, this, [this](bool enabled) {
+                    levelsClipping_ = enabled;
+                    updateLevelsClipping();
+                });
+            }
+        } else if (id == QLatin1String(command_ids::PanelPropertiesAutoOptions)) {
             action->setEnabled(canAutoCorrect());
         } else if (id == QLatin1String("panel.properties.savePreset")) {
             action->setText(kind_ == QLatin1String("levels") ? tr("Save Levels Preset…")

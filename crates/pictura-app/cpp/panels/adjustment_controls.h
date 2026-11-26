@@ -4,6 +4,7 @@
 #include <QtCore/QStringList>
 #include <QtWidgets/QWidget>
 
+#include <array>
 #include <functional>
 #include <vector>
 
@@ -37,10 +38,14 @@ public:
     QString title() const { return title_; }
     // Where the Curves editor reads `channel`'s points (`"x,y x,y …"`).
     void setCurveSource(std::function<QString(int)> source) { curveSource_ = std::move(source); }
+    void setLevelsHistogramSource(std::function<std::array<int, 256>(int)> source) { levelsHistogramSource_ = std::move(source); }
+    bool levelsClippingParameters(int& channel, int& black, int& white) const;
     QWidget* controlForTest(const QString& key) const;
 
 signals:
     void valueChanged(const QString& key, double value);
+    void levelsPickRequested(int point);
+    void levelsChannelChanged();
     void curveChanged(int channel, const QString& points);
     // A gesture ended (a slider release, toggle, menu, or colour pick).
     void gestureEnded();
@@ -63,6 +68,7 @@ private:
     void addChoice(const QStringList& cells);
     void addColor(const QStringList& cells);
     void addCurves();
+    void addLevelsHandles();
     void showGroup(int group);
     void loadCurve();
 
@@ -76,6 +82,8 @@ private:
     HistogramView* thresholdHistogram_ = nullptr;
     QComboBox* curveChannel_ = nullptr;
     std::function<QString(int)> curveSource_;
+    std::function<std::array<int, 256>(int)> levelsHistogramSource_;
+    std::function<void()> levelsRefresh_;
 };
 
 } // namespace pictura

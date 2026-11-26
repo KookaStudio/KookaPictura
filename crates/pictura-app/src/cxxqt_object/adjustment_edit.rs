@@ -24,6 +24,8 @@ pub mod ffi {
         highlight: u32,
     }
     unsafe extern "C++" {
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qstringlist.h");
@@ -39,6 +41,9 @@ pub mod ffi {
         type AutoCorrectionSource;
 
         fn adjustment_auto_source(view: &PictureView, path: &QString) -> Box<AutoCorrectionSource>;
+        fn adjustment_input_image(view: &PictureView, path: &QString, x: i32, y: i32, width: i32, height: i32) -> QImage;
+        fn adjustment_input_argb(view: &PictureView, path: &QString, x: i32, y: i32) -> u32;
+        fn adjustment_input_histogram(source: &AutoCorrectionSource, channel: i32) -> Vec<u32>;
         fn adjustment_auto_block(
             source: &AutoCorrectionSource,
             opening: &[u8],

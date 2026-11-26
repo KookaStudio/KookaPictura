@@ -92,6 +92,19 @@ impl AutoHistogram {
         }
     }
 
+    /// The layer input histogram reduced to display bins: luminance, red, green or blue.
+    pub fn display_bins(&self, channel: usize) -> [u32; 256] {
+        let mut bins = [0u32; 256];
+        let count = self.luma.len();
+        for index in 0..count {
+            let value = if channel == 0 { self.luma[index].count }
+                else { self.channels[(channel - 1).min(2)][index] };
+            let target = index * 255 / (count - 1).max(1);
+            bins[target] = bins[target].saturating_add(value.min(u32::MAX as u64) as u32);
+        }
+        bins
+    }
+
     pub fn add_planar(&mut self, image: &PixelBuffer) {
         let n = image.width as usize * image.height as usize;
         let alpha = image.data.get(3 * n..4 * n);

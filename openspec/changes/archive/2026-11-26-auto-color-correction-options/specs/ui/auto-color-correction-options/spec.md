@@ -70,3 +70,9 @@ The fitted Levels and Curves parameters SHALL remain editable and survive PSD an
 - **WHEN** a point is selected in the Curves Properties graph
 - **THEN** the system SHALL show editable input and output values for that point
 - **AND** the values SHALL be disabled when no point is selected
+
+#### Scenario: Levels Properties controls [levels_properties_controls]
+
+- **WHEN** a Levels adjustment layer is selected
+- **THEN** Properties SHALL show the adjustment input histogram, draggable input and output handles, and black, gray and white point tools
+- **AND** Show Clipping SHALL display a clipping preview of the adjustment input

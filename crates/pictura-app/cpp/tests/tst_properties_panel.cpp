@@ -4,6 +4,7 @@
 
 #include "commands.h"
 #include "frame.h"
+#include "levels_dialog.h"
 #include "selftest_paint_fixture.h"
 #include "panels/histogram_panel.h"
 #include "panels/layers_panel.h"
@@ -16,6 +17,7 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
@@ -23,6 +25,7 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtGui/QImage>
+#include <QtGui/QAction>
 
 #include "qt_test_support.h"
 
@@ -42,6 +45,7 @@ private slots:
     void thresholdHistogramRespectsGroupBoundaries();
     void groupsCurvesAndFooter();
     void curvesPointFields();
+    void levelsHandlesAndMenu();
     void channelMixerMonochrome();
     void channelMixerCmykGroups();
     void canvasSectionReadsAndResizes();
@@ -88,6 +92,30 @@ void PropertiesPanelTest::cleanup()
 
 // No document reads No Properties; a plain layer gets the read-only summary
 // (a post-CS6 page ported from photorust, #70).
+void PropertiesPanelTest::levelsHandlesAndMenu()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("levels")));
+    auto* histogram = panel_->findChild<pictura::LevelsStrip*>(QStringLiteral("propertiesLevelsHistogram"));
+    auto* input = panel_->findChild<pictura::TriangleSlider*>(QStringLiteral("propertiesLevelsInput"));
+    auto* output = panel_->findChild<pictura::TriangleSlider*>(QStringLiteral("propertiesLevelsOutput"));
+    QVERIFY(histogram && input && output);
+    for (int point = 0; point < 3; ++point)
+        QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("propertiesLevelsPoint%1").arg(point)));
+    auto* black = qobject_cast<QSlider*>(panel_->controlForTest(QStringLiteral("inputBlack")));
+    QVERIFY(black);
+    QVERIFY(QMetaObject::invokeMethod(input, "valueChanged", Q_ARG(int, 0), Q_ARG(int, 32)));
+    QCOMPARE(black->value(), 32);
+    QMenu menu;
+    auto* clipping = menu.addAction(QStringLiteral("Show Clipping"));
+    clipping->setCheckable(true);
+    clipping->setData(QStringLiteral("properties.showClipping"));
+    panel_->updatePanelMenu(&menu);
+    QVERIFY(clipping->isEnabled());
+    clipping->trigger();
+    panel_->updatePanelMenu(&menu);
+    QVERIFY(clipping->isChecked());
+}
+
 void PropertiesPanelTest::curvesPointFields()
 {
     QVERIFY(setupAdjustment(QStringLiteral("curves")));

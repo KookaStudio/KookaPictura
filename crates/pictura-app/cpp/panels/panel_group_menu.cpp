@@ -319,7 +319,7 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Save Black & White Preset"))),
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto Options…")), QStringLiteral("autoOptions"), true),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Curves Display Options…"))),
-             chk(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Show Clipping For Black/White Points")), true),
+             chkAction(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Show Clipping For Black/White Points")), QStringLiteral("properties.showClipping"), true),
              chk(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Parameter"))),
              chk(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Targeted Adjustment Tool"))),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Apply Mask")), true),

@@ -6,6 +6,7 @@
 #include "curve_widget.h"
 #include "histogram_panel.h"
 #include "jump_slider.h"
+#include "levels_dialog.h"
 #include "theme.h"
 
 #include "api/filters_bridge.h"
@@ -21,6 +22,7 @@
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -74,6 +76,7 @@ void AdjustmentControls::setPage(const QStringList& page, bool holdValues)
     } else if (!holdValues) {
         load(page);
     }
+    if (levelsRefresh_) levelsRefresh_();
 }
 
 void AdjustmentControls::refreshThresholdHistogram(const PictureView& view, const QString& path)
@@ -108,6 +111,7 @@ void AdjustmentControls::clear()
     curve_ = nullptr;
     thresholdHistogram_ = nullptr;
     curveChannel_ = nullptr;
+    levelsRefresh_ = {};
 }
 
 void AdjustmentControls::build(const QStringList& page)
@@ -143,6 +147,9 @@ void AdjustmentControls::build(const QStringList& page)
         } else if (kind == QLatin1String("color")) {
             addColor(cells);
         }
+    }
+    if (title_ == QLatin1String("Levels")) {
+        addLevelsHandles();
     }
     showGroup(groups_ ? groups_->currentIndex() : 0);
     loading_ = false;
@@ -295,6 +302,87 @@ void AdjustmentControls::addColor(const QStringList& cells)
     rows_.push_back({key, cells.value(3).toInt(), container, button, load});
 }
 
+void AdjustmentControls::addLevelsHandles()
+{
+    auto* holder = new QWidget(this);
+    auto* layout = new QVBoxLayout(holder);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto* pointRow = new QHBoxLayout;
+    const QStringList pointNames{tr("Black point"), tr("Gray point"), tr("White point")};
+    for (int point = 0; point < 3; ++point) {
+        auto* button = new QToolButton(holder);
+        button->setObjectName(QStringLiteral("propertiesLevelsPoint%1").arg(point));
+        button->setText(pointNames[point]);
+        button->setAccessibleName(pointNames[point]);
+        pointRow->addWidget(button);
+        connect(button, &QToolButton::clicked, this, [this, point] { emit levelsPickRequested(point); });
+    }
+    layout->addLayout(pointRow);
+    auto* histogram = new LevelsStrip(false, 100, holder);
+    histogram->setObjectName(QStringLiteral("propertiesLevelsHistogram"));
+    layout->addWidget(histogram);
+    auto* input = new TriangleSlider(3, holder);
+    input->setObjectName(QStringLiteral("propertiesLevelsInput"));
+    input->setColor(0, Qt::black);
+    input->setColor(1, QColor(128, 128, 128));
+    input->setColor(2, Qt::white);
+    layout->addWidget(input);
+    layout->addWidget(new LevelsStrip(true, 16, holder));
+    auto* output = new TriangleSlider(2, holder);
+    output->setObjectName(QStringLiteral("propertiesLevelsOutput"));
+    output->setColor(0, Qt::black);
+    output->setColor(1, Qt::white);
+    layout->addWidget(output);
+    layout_->insertWidget(1, holder);
+    const auto slider = [this](const QString& key) {
+        const QStringList prefixes{QString(), QStringLiteral("red."), QStringLiteral("green."), QStringLiteral("blue.")};
+        return qobject_cast<QSlider*>(controlForTest(prefixes.value(groups_->currentIndex()) + key));
+    };
+    const auto update = [this, histogram, input, output, slider] {
+        if (!groups_) return;
+        auto* black = slider(QStringLiteral("inputBlack"));
+        auto* white = slider(QStringLiteral("inputWhite"));
+        auto* gamma = slider(QStringLiteral("gamma"));
+        auto* outBlack = slider(QStringLiteral("outputBlack"));
+        auto* outWhite = slider(QStringLiteral("outputWhite"));
+        if (!black || !white || !gamma || !outBlack || !outWhite) return;
+        const int lo = black->value();
+        const int hi = white->value();
+        input->setRange(0, 0, qMax(0, hi - 2));
+        input->setRange(1, lo + 1, qMax(lo + 1, hi - 1));
+        input->setRange(2, qMin(255, lo + 2), 255);
+        input->setValue(0, lo);
+        input->setValue(2, hi);
+        input->setValue(1, lo + qRound(std::pow(0.5, gamma->value() / 100.0) * (hi - lo)));
+        output->setValue(0, outBlack->value());
+        output->setValue(1, outWhite->value());
+        if (levelsHistogramSource_) histogram->setBins(levelsHistogramSource_(groups_->currentIndex()));
+    };
+    connect(groups_, &QComboBox::currentIndexChanged, holder, [this, update](int) { update(); emit levelsChannelChanged(); });
+    for (const Row& row : rows_) {
+        if (auto* value = qobject_cast<QSlider*>(row.control)) {
+            connect(value, &QSlider::valueChanged, holder, [update](int) { update(); });
+        }
+    }
+    connect(input, &TriangleSlider::valueChanged, holder, [slider](int index, int value) {
+        auto* black = slider(QStringLiteral("inputBlack"));
+        auto* white = slider(QStringLiteral("inputWhite"));
+        auto* gamma = slider(QStringLiteral("gamma"));
+        if (!black || !white || !gamma) return;
+        if (index == 0) black->setValue(value);
+        else if (index == 2) white->setValue(value);
+        else {
+            const double norm = std::clamp(double(value - black->value()) / qMax(1, white->value() - black->value()), 0.001, 0.999);
+            gamma->setValue(qRound(100.0 * std::log(norm) / std::log(0.5)));
+        }
+    });
+    connect(output, &TriangleSlider::valueChanged, holder, [slider](int index, int value) {
+        if (auto* field = slider(index == 0 ? QStringLiteral("outputBlack") : QStringLiteral("outputWhite"))) field->setValue(value);
+    });
+    levelsRefresh_ = update;
+    update();
+}
+
 void AdjustmentControls::addCurves()
 {
     curveChannel_ = new QComboBox();
@@ -372,6 +460,19 @@ void AdjustmentControls::showGroup(int group)
     for (const Row& row : rows_) {
         row.widget->setVisible(row.group < 0 || row.group == group);
     }
+}
+
+bool AdjustmentControls::levelsClippingParameters(int& channel, int& black, int& white) const
+{
+    if (title_ != QLatin1String("Levels") || !groups_) return false;
+    const QStringList prefixes{QString(), QStringLiteral("red."), QStringLiteral("green."), QStringLiteral("blue.")};
+    channel = groups_->currentIndex();
+    auto* low = qobject_cast<QSlider*>(controlForTest(prefixes.value(channel) + QStringLiteral("inputBlack")));
+    auto* high = qobject_cast<QSlider*>(controlForTest(prefixes.value(channel) + QStringLiteral("inputWhite")));
+    if (!low || !high) return false;
+    black = low->value();
+    white = high->value();
+    return true;
 }
 
 QWidget* AdjustmentControls::controlForTest(const QString& key) const

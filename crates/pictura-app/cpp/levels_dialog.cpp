@@ -65,7 +65,8 @@ LevelsStrip::LevelsStrip(bool ramp, int height, QWidget* parent)
     : QWidget(parent)
     , ramp_(ramp)
 {
-    setFixedSize(kStripWidth, height);
+    setMinimumWidth(80);
+    setFixedHeight(height);
 }
 
 void LevelsStrip::setBins(const std::array<int, 256>& bins)
@@ -77,7 +78,7 @@ void LevelsStrip::setBins(const std::array<int, 256>& bins)
 void LevelsStrip::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
-    const QRect face(kInset, 0, 256, height());
+    const QRect face(kInset, 0, std::max(1, width() - 2 * kInset), height());
     if (ramp_) {
         QLinearGradient ramp(face.topLeft(), face.topRight());
         ramp.setColorAt(0.0, Qt::black);
@@ -90,7 +91,8 @@ void LevelsStrip::paintEvent(QPaintEvent*)
         for (int i = 0; i < 256; ++i) {
             const int bar = int(double(bins_[i]) / peak * (face.height() - 1));
             if (bar > 0) {
-                p.drawLine(face.left() + i, face.bottom(), face.left() + i, face.bottom() - bar + 1);
+                const int x = face.left() + i * (face.width() - 1) / 255;
+                p.drawLine(x, face.bottom(), x, face.bottom() - bar + 1);
             }
         }
     }
@@ -102,7 +104,8 @@ TriangleSlider::TriangleSlider(int count, QWidget* parent)
     : QWidget(parent)
     , thumbs_(count)
 {
-    setFixedSize(kStripWidth, kThumbHeight + 2);
+    setMinimumWidth(80);
+    setFixedHeight(kThumbHeight + 2);
 }
 
 void TriangleSlider::setRange(int index, int min, int max)
@@ -129,11 +132,15 @@ void TriangleSlider::setColor(int index, const QColor& color)
 
 int TriangleSlider::value(int index) const { return thumbs_[index].value; }
 
-int TriangleSlider::xForValue(int value) const { return LevelsStrip::kInset + value; }
+int TriangleSlider::xForValue(int value) const
+{
+    return LevelsStrip::kInset + value * std::max(1, width() - 2 * LevelsStrip::kInset - 1) / 255;
+}
 
 int TriangleSlider::valueForX(int index, int x) const
 {
-    return std::clamp(x - LevelsStrip::kInset, thumbs_[index].min, thumbs_[index].max);
+    const int span = std::max(1, width() - 2 * LevelsStrip::kInset - 1);
+    return std::clamp((x - LevelsStrip::kInset) * 255 / span, thumbs_[index].min, thumbs_[index].max);
 }
 
 void TriangleSlider::paintEvent(QPaintEvent*)

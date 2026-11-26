@@ -13,3 +13,4 @@
 
 | [auto_options_brightness] | Select Brightness and Contrast, then Find Dark & Light Colors in each Properties dialog; fit a colored ramp. | The controls disable and re-enable and the fit uses a shared luminance transfer. | tst_auto_correction::algorithmAvailability, pictura-adjust::auto_fit::tests::brightness_contrast_uses_luminance_and_ignores_target_settings |
 | [curves_selected_point] | Open Curves with no point selected and select a graph point. | The fields are disabled until selection and update the selected point. | tst_properties_panel::curvesPointFields; manual: select and edit point until interaction coverage is added |
+| [levels_properties_controls] | Open Levels Properties, move handles, use point tools, and toggle clipping. | Controls edit the layer and clipping shows the layer input. | tst_properties_panel::levelsHandlesAndMenu; manual: sample points and inspect clipping preview |

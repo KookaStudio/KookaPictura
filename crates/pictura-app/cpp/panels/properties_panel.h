@@ -25,6 +25,7 @@ class QVBoxLayout;
 namespace pictura {
 
 class AdjustmentControls;
+class ToolController;
 class NumericField;
 class PictureView;
 class PresetCombo;
@@ -55,6 +56,8 @@ public:
     explicit PropertiesPanel(QWidget* parent = nullptr);
 
     void setView(PictureView* view);
+    void updateLevelsClipping();
+    void setTools(ToolController* tools) { tools_ = tools; }
     void refresh();
     void scheduleThresholdSelectionRefresh();
     // Commit a pending live edit before a footer command changes the layer.
@@ -133,6 +136,9 @@ private:
     void commit();
 
     PictureView* view_ = nullptr;
+    ToolController* tools_ = nullptr;
+    bool levelsClipping_ = false;
+    bool levelsPicking_ = false;
     QString path_;
     QString title_;
     QString kind_;
