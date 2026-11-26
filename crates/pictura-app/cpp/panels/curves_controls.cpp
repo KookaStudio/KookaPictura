@@ -1,5 +1,6 @@
 #include "curves_controls.h"
 
+#include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/filters_bridge.h"
 #include "color_models.h"
