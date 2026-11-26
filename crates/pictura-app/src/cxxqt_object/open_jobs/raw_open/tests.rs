@@ -202,6 +202,8 @@ fn raw_sniff_detects_by_signature() {
         b"\0\0\0\x18ftypcrx \0\0\0\x01crx isom",
     );
     let movie = write(&dir, "clip.cr3", b"\0\0\0\x18ftypisom\0\0\x02\0isomiso2");
+    // A Fujifilm header names a RAF, whatever the extension.
+    let fuji = write(&dir, "fuji.dat", b"FUJIFILMCCD-RAW 0201FF000000");
     // A Panasonic `.RAW` routes by its header; a Photoshop Raw `.RAW` (bare
     // interleaved pixels) does not.
     let panasonic_raw = write(&dir, "P1000001.RAW", b"IIU\0\x08\0\0\0\0\0\0\0\0\0");
@@ -214,6 +216,7 @@ fn raw_sniff_detects_by_signature() {
     assert!(sniff(&olympus));
     assert!(sniff(&panasonic));
     assert!(sniff(&canon));
+    assert!(sniff(&fuji));
     assert!(!sniff(&movie));
     assert!(!sniff(&other));
     assert!(!sniff(&tiff));

@@ -2245,6 +2245,420 @@
   ]
  },
  {
+  "make": "FUJIFILM",
+  "model": "FinePix X100",
+  "aliases": [],
+  "sample": "FinePix_X100_DSCF1676.RAF",
+  "sha256": "1f4aea4fa43dd314f8b90954d7823655d4906d3e468a9ea014652b872a68db16",
+  "blocks": 520,
+  "median_de": 1.39,
+  "p90_de": 2.49,
+  "chroma_spread": 20.5,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    1.0761,
+    -0.3459,
+    -0.1011,
+    -0.0254,
+    0.8865,
+    0.1264,
+    0.3934,
+    -0.1224,
+    0.5665
+   ],
+   [
+    1.6307,
+    -0.8497,
+    0.0975,
+    -0.1319,
+    0.964,
+    0.5062,
+    0.1954,
+    -0.1275,
+    0.9623
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "GFX 50S",
+  "aliases": [],
+  "sample": "GFX_50S_20170525_0036TEST.RAF",
+  "sha256": "bb7c832430549029ddfc61224b97cc40a5149ec363e11c566a57de65d9582ec9",
+  "blocks": 518,
+  "median_de": 0.4,
+  "p90_de": 0.89,
+  "chroma_spread": 14.7,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    1.3345,
+    -0.6069,
+    -0.1138,
+    -0.1383,
+    0.9279,
+    0.187,
+    -0.0117,
+    0.2194,
+    0.408
+   ],
+   [
+    2.0774,
+    -1.402,
+    0.1459,
+    -0.2281,
+    1.0148,
+    0.6599,
+    -0.0043,
+    0.1099,
+    0.7697
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X-A1",
+  "aliases": [],
+  "sample": "X-A1_DSCF2482.RAF",
+  "sha256": "b2ddb5fe31a3b976d12961c72a2689de8742739df3d8f757614eca65f8df2a61",
+  "blocks": 301,
+  "median_de": 2.5,
+  "p90_de": 6.49,
+  "chroma_spread": 16.0,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    0.9717,
+    -0.3327,
+    -0.087,
+    0.0844,
+    0.7582,
+    0.1485,
+    0.1801,
+    0.0303,
+    0.3991
+   ],
+   [
+    1.5533,
+    -0.8481,
+    0.1122,
+    -0.0199,
+    0.8066,
+    0.6031,
+    0.0954,
+    -0.0219,
+    0.7136
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X-A5",
+  "aliases": [],
+  "sample": "X-A5_DSCF0617.RAF",
+  "sha256": "46daaf8c2b07f40bd01f737181d048a497bb0a87615a1fde65809fdd5de86bf1",
+  "blocks": 331,
+  "median_de": 1.81,
+  "p90_de": 3.71,
+  "chroma_spread": 18.0,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    1.0427,
+    -0.387,
+    -0.1317,
+    0.2559,
+    0.6318,
+    0.115,
+    -0.1196,
+    0.2126,
+    0.4773
+   ],
+   [
+    1.8015,
+    -1.0371,
+    -0.1152,
+    0.1395,
+    0.6515,
+    0.5475,
+    -0.0472,
+    0.0946,
+    0.7689
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X-E1",
+  "aliases": [],
+  "sample": "X-E1_DSCF6490.RAF",
+  "sha256": "0fa01fa1a674bcfa40f659225b4e66c5bedf15d2f78407ca1966dc8f38cd0e9f",
+  "blocks": 386,
+  "median_de": 4.18,
+  "p90_de": 8.75,
+  "chroma_spread": 21.6,
+  "rejected": "matrix does not reproduce the camera JPEG"
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X-E2",
+  "aliases": [],
+  "sample": "X-E2_DSCF9050.RAF",
+  "sha256": "7588c70af7fd6be3abcec52546aabcd04e0aafc6541e7f7f50bdc60b60513c57",
+  "blocks": 520,
+  "median_de": 1.53,
+  "p90_de": 3.25,
+  "chroma_spread": 16.0,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    0.9902,
+    -0.3199,
+    -0.1437,
+    -0.2338,
+    1.1929,
+    0.0269,
+    0.3105,
+    -0.2669,
+    0.6381
+   ],
+   [
+    1.5689,
+    -0.812,
+    -0.1973,
+    -0.3576,
+    1.3398,
+    0.147,
+    0.1963,
+    -0.234,
+    1.1899
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X-H1",
+  "aliases": [],
+  "sample": "X-H1_fuji_xh1_uncompressed.RAF",
+  "sha256": "e45d6da859a614537588ea7d9a2f8d16141719b6545dac1f994b832787750e3c",
+  "blocks": 393,
+  "median_de": 2.57,
+  "p90_de": 6.43,
+  "chroma_spread": 17.1,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    1.2515,
+    -0.7008,
+    -0.0365,
+    0.0806,
+    0.7312,
+    0.1766,
+    -0.3357,
+    0.5975,
+    0.3128
+   ],
+   [
+    1.9497,
+    -1.5512,
+    0.4842,
+    -0.0172,
+    0.7735,
+    0.6876,
+    -0.198,
+    0.3823,
+    0.5474
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X-Pro1",
+  "aliases": [],
+  "sample": "X-Pro1_DSCF2131.RAF",
+  "sha256": "0b1046c299d9eb222a8f003bd047f2a34f507da0d1704ac32cefbc82f799d121",
+  "blocks": 339,
+  "median_de": 2.99,
+  "p90_de": 5.75,
+  "chroma_spread": 19.9,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    0.7695,
+    -0.2255,
+    -0.0448,
+    0.3127,
+    0.4813,
+    0.2036,
+    0.2183,
+    0.0972,
+    0.3273
+   ],
+   [
+    1.2335,
+    -0.6063,
+    0.238,
+    0.215,
+    0.467,
+    0.8325,
+    0.1092,
+    0.0209,
+    0.6305
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X-T1",
+  "aliases": [],
+  "sample": "X-T1_20171229_110916.RAF",
+  "sha256": "e994a1fd6e87e392432fe146a35b0b88584dc2bd50bee2c8c7e886ac2b59fcde",
+  "blocks": 416,
+  "median_de": 0.95,
+  "p90_de": 2.65,
+  "chroma_spread": 10.1,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    1.3688,
+    -0.6903,
+    -0.1416,
+    -1.0067,
+    1.7185,
+    0.2188,
+    0.2385,
+    -0.0503,
+    0.4955
+   ],
+   [
+    2.1093,
+    -1.537,
+    -0.0025,
+    -1.067,
+    1.9846,
+    0.5213,
+    0.149,
+    -0.0901,
+    1.0001
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X-T2",
+  "aliases": [],
+  "sample": "X-T2_20170114_173532_TFW04723.RAF",
+  "sha256": "aaa648429eeee8e1bea05fccfeeb2ea54ee7052e23db0ee02f049e5b23cecaef",
+  "blocks": 453,
+  "median_de": 0.85,
+  "p90_de": 1.85,
+  "chroma_spread": 10.8,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    1.1711,
+    -0.5237,
+    -0.105,
+    -0.2959,
+    1.2232,
+    0.0533,
+    0.0969,
+    0.0091,
+    0.4757
+   ],
+   [
+    1.8046,
+    -1.2018,
+    0.1008,
+    -0.4121,
+    1.377,
+    0.2105,
+    0.0687,
+    -0.0378,
+    0.8998
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X-T3",
+  "aliases": [],
+  "sample": "X-T3_AFXT2720.RAF",
+  "sha256": "24abd27b4a200f3170ea1579672944b807d0eb35bf21422a3937bb644f27f2eb",
+  "blocks": 389,
+  "median_de": 2.36,
+  "p90_de": 6.27,
+  "chroma_spread": 20.5,
+  "illuminants": [
+   21,
+   17
+  ],
+  "matrices": [
+   [
+    1.2293,
+    -0.5471,
+    -0.1223,
+    -0.2905,
+    1.191,
+    0.0781,
+    0.0613,
+    0.041,
+    0.4846
+   ],
+   [
+    1.8615,
+    -1.2336,
+    0.0397,
+    -0.4011,
+    1.3375,
+    0.2875,
+    0.0496,
+    -0.0158,
+    0.9201
+   ]
+  ]
+ },
+ {
+  "make": "FUJIFILM",
+  "model": "X100S",
+  "aliases": [],
+  "sample": "X100S_fujifilm-x100s-daylight-DSCF9505.RAF",
+  "sha256": "9cea5b0d4dd3682f8850dc34e93f0045e0e28fa69f9715576d40c5a8a59e8ae9",
+  "blocks": 440,
+  "median_de": 0.61,
+  "p90_de": 1.28,
+  "chroma_spread": 3.9,
+  "rejected": "too little colour in the scene"
+ },
+ {
   "make": "Panasonic",
   "model": "DC-G9",
   "aliases": [],

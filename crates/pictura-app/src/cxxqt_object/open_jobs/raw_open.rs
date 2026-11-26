@@ -1,4 +1,4 @@
-//! Camera raw opens (#400): File ▸ Open of a DNG, CR2, CR3, NEF, ARW, ORF or RW2 decodes
+//! Camera raw opens (#400): File ▸ Open of a DNG, CR2, CR3, NEF, ARW, ORF, RW2 or RAF decodes
 //! on a worker, leaves the decoded source on the view for the Pictura Raw dialog,
 //! then develops it at full size on a worker into a new 16-bit RGB document.
 

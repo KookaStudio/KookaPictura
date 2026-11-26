@@ -1,7 +1,8 @@
 //! The demosaic stage (#397): a DNG's CFA plane to linear camera-native RGB.
 //!
-//! Published algorithms only (bilinear; AHD from Hirakawa & Parks, 2005), so
-//! parity with Adobe Camera Raw is approximate. White balance and the colour
+//! Bilinear and AHD (Hirakawa & Parks, 2005) are published algorithms; the
+//! X-Trans method (`xtrans.rs`, #1473) is Pictura's own. Parity with Adobe
+//! Camera Raw is approximate. White balance and the colour
 //! matrix are the colour stage's job (#398); default crop and orientation are
 //! applied after this stage.
 
@@ -12,13 +13,15 @@ use super::{CfaPattern, DngImage};
 
 mod ahd;
 mod bilinear;
+mod xtrans;
 
 /// The interpolation used to fill each pixel's missing channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DemosaicMethod {
     /// Same-colour neighbour averaging; any red-green-blue pattern.
     Bilinear,
-    /// Adaptive homogeneity-directed; 2×2 Bayer, bilinear otherwise.
+    /// Edge-adaptive: adaptive homogeneity-directed on 2×2 Bayer, the
+    /// edge-directed X-Trans method on 6×6 X-Trans, bilinear otherwise.
     Ahd,
 }
 
@@ -82,6 +85,7 @@ pub fn demosaic(
     };
     let rgb = match method {
         DemosaicMethod::Ahd if ahd::applies(&mosaic) => ahd::demosaic(&mosaic),
+        DemosaicMethod::Ahd if xtrans::applies(&mosaic) => xtrans::demosaic(&mosaic),
         _ => bilinear::demosaic(&mosaic),
     };
     Ok(CameraRgb { width, height, rgb })

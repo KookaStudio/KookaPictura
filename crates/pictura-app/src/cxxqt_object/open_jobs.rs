@@ -103,7 +103,7 @@ pub mod ffi {
         fn open_eps_start(view: Pin<&mut PictureView>, path: &QString, target: &ImportTarget);
 
         // Camera raw opens (#400), `raw_open.rs`.
-        /// Whether `path` holds a camera raw container (DNG, CR2, CR3, NEF, ARW, ORF or RW2),
+        /// Whether `path` holds a camera raw container (DNG, CR2, CR3, NEF, ARW, ORF, RW2 or RAF),
         /// from its signature; the extension is not consulted.
         fn raw_sniff_path(path: &QString) -> bool;
 

@@ -224,7 +224,7 @@ void RawOpenTest::openFiltersListCameraRaw()
 {
     const QStringList& filters = openFileFilters();
     QVERIFY(filters.contains(
-        QStringLiteral("Camera Raw (*.DNG *.CR2 *.CR3 *.NEF *.ARW *.ORF *.ORI *.RW2 *.RWL *.RAW)")));
+        QStringLiteral("Camera Raw (*.DNG *.CR2 *.CR3 *.NEF *.ARW *.ORF *.ORI *.RW2 *.RWL *.RAW *.RAF)")));
     const QString all = filters.first();
     QVERIFY(all.contains(QLatin1String("*.DNG")));
     QVERIFY(all.contains(QLatin1String("*.CR2")));
@@ -236,6 +236,7 @@ void RawOpenTest::openFiltersListCameraRaw()
     QVERIFY(all.contains(QLatin1String("*.RW2")));
     QVERIFY(all.contains(QLatin1String("*.RWL")));
     QVERIFY(all.contains(QLatin1String("*.RAW")));
+    QVERIFY(all.contains(QLatin1String("*.RAF")));
 }
 
 // raw_open_dialog_ok

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Fit colour matrices for Panasonic RW2 (#1542) and Canon CR3 (#1574) bodies
-from their own camera JPEGs.
+"""Fit colour matrices for Panasonic RW2 (#1542), Canon CR3 (#1574) and
+Fujifilm RAF (#1473) bodies from their own camera JPEGs.
 
 No openly licensed spectral sensitivities exist for most of these bodies, so by
 owner decision each body's matrices are fitted from one sample raw file: the
 3 x 3 map from white-balanced camera RGB to linear sRGB that best reproduces
 the JPEG the camera rendered and embedded in the same file (an RW2's
-`JpgFromRaw`, a CR3's full-size JPEG track). That JPEG carries the camera
-maker's own colour rendering (its saturation and hue choices included), so the
-result is approximate, not a colorimetric calibration. No Adobe, dcraw or
+`JpgFromRaw`, a CR3's full-size JPEG track, a RAF's JPEG section). That JPEG
+carries the camera maker's own colour rendering (its saturation and hue
+choices included), so the result is approximate, not a colorimetric
+calibration. No Adobe, dcraw or
 LibRaw matrix is used.
 
 The matrix (rows constrained so camera white maps to sRGB white) is fitted by
@@ -28,9 +29,13 @@ neutral is interpolated in mired between Daylight and Cloudy, and Tungsten is
 ISO studio tungsten (code 24). A pair whose lights the colour stage would not
 read back (its as-shot solve, within 2 %) keeps the daylight matrix alone.
 
-Regenerate (samples from https://raw.pixls.us/data/Panasonic/ and
-https://raw.pixls.us/data/Canon/, one directory per body, and for the EOS R1,
-R3, R6 Mark III and PowerShot V1 (#1579) files from
+A RAF records two presets, under EXIF lights Standard A (code 17) and D65
+(code 21), in its raw directory's `0xF00C`; they make its pair.
+
+Regenerate (samples from https://raw.pixls.us/data/Panasonic/,
+https://raw.pixls.us/data/Canon/ and https://raw.pixls.us/data/Fujifilm/,
+one directory per body, and for the EOS R1, R3, R6 Mark III and PowerShot
+V1 (#1579) files from
 https://www.dpreview.com/sample-galleries/; the file names and SHA-256 sums
 used are in the output):
   cargo build --release -p pictura-codec --example raw_jpeg_blocks
@@ -91,13 +96,15 @@ SAME_CAMERA = {
 # EXIF LightSource codes the presets carry, best first.
 DAYLIGHT = (20, 9, 1)
 TUNGSTEN = (3, 24)
-TEMPERATURE = {1: 5500.0, 9: 5500.0, 20: 5503.0, 3: 2850.0, 24: 3200.0}
+TEMPERATURE = {1: 5500.0, 9: 5500.0, 20: 5503.0, 3: 2850.0, 24: 3200.0, 17: 2856.0, 21: 6504.0}
+# A RAF's presets: D65, then Standard A.
+RAF_DAYLIGHT, RAF_TUNGSTEN = (21,), (17,)
 
 RAW_MAGIC = b"IIU\0"
 TAG_MAKE, TAG_MODEL = 0x010F, 0x0110
 TAG_WB_INFO, TAG_WB_INFO2 = 0x0013, 0x0027
 TAG_JPG_FROM_RAW = 0x002E
-TYPE_SIZE = {1: 1, 2: 1, 3: 2, 4: 4, 7: 1}
+TYPE_SIZE = {1: 1, 2: 1, 3: 2, 4: 4, 7: 1, 13: 4}
 
 
 def mat_mul(a, b):
@@ -371,6 +378,50 @@ def cr2_meta(data: bytes):
     )
 
 
+# --- RAF container --------------------------------------------------------
+
+RAF_MAGIC = b"FUJIFILMCCD-RAW "
+TAG_RAF_RAW_IFD, TAG_RAF_WB_PRESETS = 0xF000, 0xF00C
+
+
+def jpeg_exif(jpeg: bytes) -> bytes:
+    """The TIFF of a JPEG's `Exif` APP1 segment."""
+    at = 2
+    while jpeg[at] == 0xFF and jpeg[at + 1] != 0xDA:
+        (length,) = struct.unpack_from(">H", jpeg, at + 2)
+        payload = jpeg[at + 4 : at + 2 + length]
+        if jpeg[at + 1] == 0xE1 and payload.startswith(b"Exif\0\0"):
+            return payload[6:]
+        at += 2 + length
+    raise ValueError("no Exif segment")
+
+
+def raf_meta(data: bytes):
+    """The big-endian header names the JPEG and sensor sections; the sensor
+    section is a TIFF whose entry 0xF000 points at the raw directory."""
+
+    def section(at):
+        start, size = struct.unpack_from(">II", data, at)
+        return data[start : start + size]
+
+    jpeg = section(0x54)
+    exif = jpeg_exif(jpeg)
+    ifd0 = ifd_entries(exif, "<" if exif[:2] == b"II" else ">")
+    sensor = section(0x64)
+    order = "<" if sensor[:2] == b"II" else ">"
+    (raw_at,) = struct.unpack(order + "I", ifd_entries(sensor, order)[TAG_RAF_RAW_IFD][2])
+    raw = ifd_at(sensor, order, raw_at)
+    found = {}
+    if TAG_RAF_WB_PRESETS in raw:
+        levels = raw[TAG_RAF_WB_PRESETS][2]
+        words = struct.unpack(order + f"{len(levels) // 4}I", levels)
+        for i in range(len(words) // 4):
+            g, r, b, code = words[4 * i : 4 * i + 4]
+            if g and r and b:
+                found.setdefault(code, [g / r, 1.0, g / b])
+    return ascii_tag(ifd0, TAG_MAKE), ascii_tag(ifd0, TAG_MODEL), jpeg, found
+
+
 # --- fit ------------------------------------------------------------------
 
 
@@ -519,8 +570,17 @@ def pick(found: dict, codes):
 
 def body(raw: Path, tool: str) -> dict:
     data = raw.read_bytes()
-    meta = cr3_meta if data[4:12] == CR3_MAGIC else cr2_meta if is_cr2(data) else rw2_meta
+    is_raf = data.startswith(RAF_MAGIC)
+    if is_raf:
+        meta = raf_meta
+    elif data[4:12] == CR3_MAGIC:
+        meta = cr3_meta
+    else:
+        meta = cr2_meta if is_cr2(data) else rw2_meta
     make, model, jpeg, found = meta(data)
+    daylight_codes, tungsten_codes = (
+        (RAF_DAYLIGHT, RAF_TUNGSTEN) if is_raf else (DAYLIGHT, TUNGSTEN)
+    )
     # A sample written under a regional name stands for its body.
     model = next(
         (body for body, names in SAME_CAMERA.items() if model.upper() in map(str.upper, names)),
@@ -538,7 +598,7 @@ def body(raw: Path, tool: str) -> dict:
     neutral, rows = blocks(raw, jpeg, tool)
     if neutral is None:
         return entry | {"rejected": "no as-shot white balance"}
-    daylight = pick(found, DAYLIGHT)
+    daylight = pick(found, daylight_codes)
     if daylight is None:
         return entry | {"rejected": "no daylight white-balance preset"}
     samples = usable(rows, neutral)
@@ -555,7 +615,7 @@ def body(raw: Path, tool: str) -> dict:
         return entry | {"rejected": "too little colour in the scene"}
     if median > MAX_MEDIAN_DE:
         return entry | {"rejected": "matrix does not reproduce the camera JPEG"}
-    pair = [daylight] + ([t] if (t := pick(found, TUNGSTEN)) else [])
+    pair = [daylight] + ([t] if (t := pick(found, tungsten_codes)) else [])
     matrices = [(code, color_matrix(m, n, code)) for code, n in pair]
     if len(matrices) == 2 and not reads_back(matrices):
         # The fit and the tungsten preset disagree; the daylight matrix alone
@@ -575,7 +635,7 @@ def main() -> None:
     files = sorted(
         p
         for p in root.rglob("*")
-        if p.suffix.upper() in (".RW2", ".RWL", ".RAW", ".CR3", ".CR2")
+        if p.suffix.upper() in (".RW2", ".RWL", ".RAW", ".CR3", ".CR2", ".RAF")
     )
     # Fits of samples not in this run are kept, so one maker can be refitted alone.
     names = {p.name for p in files}

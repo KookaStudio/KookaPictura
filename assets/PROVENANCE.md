@@ -190,6 +190,13 @@ The PowerShot G1 X Mark III, a CR2 body, is fitted the same way (#1583) from
 an owner-supplied CR2: the camera JPEG is IFD0's full-size strip and the
 presets come from the Exif maker note's colour data.
 
+Fujifilm RAF files embed no matrix and rawtoaces-data covers no Fujifilm
+body. By owner decision (#1473) Fujifilm rows are fitted from each body's own
+camera JPEG (the JPEG section the RAF header names) the same way, and placed
+under the two white-balance presets the raw directory records (EXIF lights
+Standard A and D65); the samples are the raw.pixls.us files
+`scripts/camera-jpeg-fits.json` names, not committed.
+
 ## Nikon NEF code tables (`crates/pictura-codec/src/dng/nef_decode.rs`)
 
 The six Huffman code tables of Nikon's compressed NEF (code counts per length
@@ -326,3 +333,18 @@ this is not a legal conclusion.
 - `reference-fixtures/` is gitignored. It holds real Photoshop-authored files
   kept only for optional local reference tests; they are never committed or
   shipped.
+
+## Fujifilm RAF container (`crates/pictura-codec/src/dng/raf.rs`)
+
+The header, the directory records, the raw directory and the three
+uncompressed codings come from observation of real camera files
+(raw.pixls.us, not committed) and ExifTool's public documentation of the RAF
+tags (#1473). The packed bit orders were found by trying candidate orders and
+keeping the smoothest image; the X-Trans phase was checked against the DNG
+Adobe's converter wrote from the same raw.pixls.us X100S file (its CFA
+pattern and samples only, compared in a test), and the Bayer phase by
+correlating with the camera JPEG. No dcraw, LibRaw or rawspeed code is used,
+and Fujifilm-compressed data is not implemented (#1620).
+
+The X-Trans demosaic (`crates/pictura-codec/src/dng/demosaic/xtrans.rs`) is
+designed here; it does not follow a published or third-party method.

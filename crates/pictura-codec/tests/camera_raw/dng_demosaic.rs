@@ -174,7 +174,7 @@ fn gradient_stays_monotonic() {
 }
 
 /// The largest channel deviation from the grey truth within 2 px of the edge.
-fn edge_error(vertical_edge: bool, colors: [u8; 4], method: DemosaicMethod) -> u16 {
+fn edge_error(vertical_edge: bool, cfa: &CfaPattern, method: DemosaicMethod) -> u16 {
     let (w, h) = (40, 40);
     let grey = |x: usize, y: usize| {
         if (if vertical_edge { x } else { y }) < 20 {
@@ -183,8 +183,7 @@ fn edge_error(vertical_edge: bool, colors: [u8; 4], method: DemosaicMethod) -> u
             60000
         }
     };
-    let cfa = pattern(&colors);
-    let img = image(w, h, mosaic(w, h, &cfa, |x, y| [grey(x, y); 3]), cfa);
+    let img = image(w, h, mosaic(w, h, cfa, |x, y| [grey(x, y); 3]), cfa.clone());
     let out = run(&img, method);
     let mut worst = 0;
     for y in 2..h - 2 {
@@ -202,24 +201,85 @@ fn edge_error(vertical_edge: bool, colors: [u8; 4], method: DemosaicMethod) -> u
     worst
 }
 
+fn reduces_false_colour(cfa: &CfaPattern) {
+    for vertical_edge in [true, false] {
+        let bilinear = edge_error(vertical_edge, cfa, DemosaicMethod::Bilinear);
+        let ahd = edge_error(vertical_edge, cfa, DemosaicMethod::Ahd);
+        assert!(
+            u32::from(ahd) * 4 < u32::from(bilinear),
+            "{:?} vertical={vertical_edge}: AHD {ahd} vs bilinear {bilinear}",
+            cfa.colors
+        );
+    }
+}
+
 #[test]
 fn ahd_reduces_false_colour_at_edges() {
-    for vertical_edge in [true, false] {
-        for colors in BAYER {
-            let bilinear = edge_error(vertical_edge, colors, DemosaicMethod::Bilinear);
-            let ahd = edge_error(vertical_edge, colors, DemosaicMethod::Ahd);
-            assert!(
-                u32::from(ahd) * 4 < u32::from(bilinear),
-                "{colors:?} vertical={vertical_edge}: AHD {ahd} vs bilinear {bilinear}"
-            );
+    for colors in BAYER {
+        reduces_false_colour(&pattern(&colors));
+    }
+}
+
+#[test]
+fn xtrans_reduces_false_colour_at_edges() {
+    reduces_false_colour(&pattern(&XTRANS));
+}
+
+#[test]
+fn xtrans_ramp_is_reproduced() {
+    let (w, h) = (48, 40);
+    let cfa = pattern(&XTRANS);
+    for horizontal in [true, false] {
+        let ramp = |x: usize, y: usize| 1000 + 1000 * if horizontal { x } else { y } as u16;
+        let img = image(
+            w,
+            h,
+            mosaic(w, h, &cfa, |x, y| [ramp(x, y); 3]),
+            cfa.clone(),
+        );
+        let out = run(&img, DemosaicMethod::Ahd);
+        for y in 0..h {
+            for x in 0..w {
+                let here = px(&out, x, y);
+                let want = ramp(x, y);
+                assert!(
+                    here.iter().all(|&v| v.abs_diff(want) <= 1),
+                    "{horizontal}: {here:?} vs {want} at {x},{y}"
+                );
+                let (nx, ny) = if horizontal { (x + 1, y) } else { (x, y + 1) };
+                if nx < w && ny < h {
+                    let next = px(&out, nx, ny);
+                    assert!(
+                        (0..3).all(|c| next[c] >= here[c]),
+                        "{horizontal}: {here:?} then {next:?} at {x},{y}"
+                    );
+                }
+            }
         }
     }
 }
 
 #[test]
+fn non_xtrans_six_by_six_keeps_bilinear() {
+    let mut colors = XTRANS;
+    colors[..24].fill(1);
+    let (w, h) = (24, 24);
+    let img = image(w, h, noise(w, h, 5), pattern(&colors));
+    assert_eq!(
+        run(&img, DemosaicMethod::Ahd),
+        run(&img, DemosaicMethod::Bilinear)
+    );
+}
+
+#[test]
 fn ahd_falls_back_to_bilinear() {
+    let three = CfaPattern {
+        width: 3,
+        height: 3,
+        colors: vec![0, 1, 2, 1, 2, 0, 2, 0, 1],
+    };
     let cases = [
-        (24, 24, pattern(&XTRANS)),
+        (24, 24, three),
         (1, 1, pattern(&BAYER[0])),
         (3, 2, pattern(&BAYER[1])),
         (7, 7, pattern(&BAYER[2])),

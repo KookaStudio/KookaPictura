@@ -507,7 +507,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       and a CR2 reports its as-shot white balance from the maker note
       (approximate parity) (#1465). `scripts/gen-camera-matrices.py`,
       `crates/pictura-codec/src/dng/camera_matrices.rs`.
-- [x] **Open camera raw files** — File ▸ Open recognises a DNG, CR2, NEF, ARW, ORF or RW2 by its
+- [x] **Open camera raw files** — File ▸ Open recognises a DNG, CR2, NEF, ARW, ORF, RW2 or RAF by its
       signature, decodes it, shows Pictura Raw first (absolute white balance,
       sidecar or embedded `crs:` settings), and opens a 16-bit RGB document
       (approximate parity) (#400).
@@ -516,7 +516,17 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] Open a raw file as a smart object (Shift+Open Image) (#1466)
 - [ ] CR2 CFA phase for the EOS 600D, so it takes its colour matrices (#1476)
 - [ ] Colour for the Sony bodies the matrix table does not seed yet (#1525)
-- [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
+- [x] **Fujifilm RAF and X-Trans demosaic** — `read_raw` names the
+      `FUJIFILMCCD-RAW ` header as RAF and reads uncompressed 16-bit, 12-bit
+      and 14-bit packed sensor planes of X-Trans and Bayer bodies, with CFA,
+      levels, crop and white balance from the RAF directories; `Ahd` takes a
+      new edge-directed X-Trans demosaic of Pictura's own design (approximate
+      parity); 10 bodies open with camera-JPEG-fitted colour; the Open dialog
+      lists RAF (#1473). `crates/pictura-codec/src/dng/raf.rs`,
+      `crates/pictura-codec/src/dng/demosaic/xtrans.rs`.
+- [ ] Fujifilm-compressed RAF sensor data (#1620)
+- [ ] Fujifilm SuperCCD and EXR RAF sensors (#1621)
+- [ ] Colour for the remaining Fujifilm RAF bodies (#1622)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Olympus-compressed ORF sensor data, most bodies since 2007 (#1535)
 - [x] **Panasonic RW2 colour** — 10 Panasonic bodies open with colour: the
