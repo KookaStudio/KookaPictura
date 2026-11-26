@@ -13,8 +13,8 @@ use pictura_core::AdjustmentData;
 
 use crate::decode_adjustment;
 
-/// The adjustment kinds CS6 lets the user save a preset for.
-pub const SAVEABLE_KINDS: [&str; 7] = [
+/// The documented CS6 preset kinds plus Pictura’s Vibrance extension.
+pub const SAVEABLE_KINDS: [&str; 8] = [
     "levels",
     "curves",
     "exposure",
@@ -22,6 +22,7 @@ pub const SAVEABLE_KINDS: [&str; 7] = [
     "black-white",
     "channel-mixer",
     "selective-color",
+    "vibrance",
 ];
 
 /// The adjustment kinds whose Properties page carries the Preset menu.
@@ -58,7 +59,7 @@ pub fn kind(data: &AdjustmentData) -> Option<crate::AdjustmentKind> {
     decode_adjustment(data)?.kind()
 }
 
-/// Whether `kind` is in the CS6 save whitelist.
+/// Whether the Properties panel offers to save presets for `kind`.
 pub fn is_saveable(kind: &str) -> bool {
     SAVEABLE_KINDS.contains(&kind)
 }
@@ -461,12 +462,13 @@ mod tests {
 
     #[test]
     fn saveable_and_menu_kinds_match_the_spec() {
-        assert_eq!(SAVEABLE_KINDS.len(), 7);
+        assert_eq!(SAVEABLE_KINDS.len(), 8);
         assert_eq!(MENU_KINDS.len(), 5);
         for kind in SAVEABLE_KINDS {
             assert!(is_saveable(kind), "{kind}");
         }
-        for kind in ["photo-filter", "vibrance", "brightness-contrast", "invert"] {
+        assert!(is_saveable("vibrance"));
+        for kind in ["photo-filter", "brightness-contrast", "invert"] {
             assert!(!is_saveable(kind), "{kind}");
         }
         for kind in MENU_KINDS {

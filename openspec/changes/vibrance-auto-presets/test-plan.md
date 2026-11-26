@@ -1,0 +1,17 @@
+# Test plan
+
+| Scenario | Steps | Expected result | Coverage |
+| --- | --- | --- | --- |
+| auto_button_present | Open Levels, Curves, Brightness/Contrast, and Vibrance over an RGB image. | Each exposes an enabled Auto button. | `tst_image_adjustments::levelsAutoStretchesTheRamp`, `tst_image_adjustments::curvesAutoStretchesTheChannel`, `tst_image_adjustments::brightnessContrastPreviewsAndApplies`, `tst_image_adjustments::exposureAndVibranceUseTheWideLayouts` |
+| vibrance_auto_muted | Open a muted teal raster at default Vibrance and Saturation, allow its opening preview, click Auto twice, and cancel. | The recommendation comes from the opening raster despite its preview, chroma rises, Saturation holds, the block stabilizes, pixels restore, and history holds. | `tst_image_adjustments::vibranceAutoUsesOpeningRaster` |
+| vibrance_auto_opening_preview | Open identical muted rasters with neutral and non-neutral opening blocks, let the non-neutral opening preview change the displayed colors, then click Auto in each. | Both obtain the same recommendation from their opening raster. | `tst_image_adjustments::vibranceAutoIgnoresOpeningPreview` |
+| vibrance_auto_replace | Open a muted colored raster, set Vibrance to +100 and Saturation to -100, and click Auto. | Vibrance is replaced by the opening recommendation (+1 to +35), Saturation remains -100, and the preview stays gray. | `tst_image_adjustments::vibranceAutoReplacesHigherValue` |
+| vibrance_auto_weights | Compare mixed-color samples with zero and fractional alpha, and with zero and fractional selection coverage. | Transparent and unselected samples contribute nothing; fractional alpha and selection coverage weight the result. | `pictura-app::vibrance_auto_excludes_transparent_and_unselected`, `pictura-app::vibrance_auto_weights_alpha_and_selection` |
+| vibrance_auto_selection | Select only the muted part of a two-color raster, invoke Auto from defaults, and accept. | The muted part gains chroma, the unselected part is intact, and there is one Vibrance history state. | `tst_image_adjustments::vibranceAutoUsesSelection` |
+| vibrance_auto_noop | Try Auto on gray and vivid sources with manually edited Vibrance. | The block and history are unchanged by Auto. | `tst_image_adjustments::vibranceAutoSkipsGrayAndVivid` |
+| preset_save_persists | Save a Levels setting and rebuild the panel. | The setting appears and applies from the rebuilt menu. | `tst_adjustment_presets::savePresetAppendsAndPersists` |
+| preset_save_rejects_reserved | Attempt to save under Default, Custom, and an empty name. | No preset is stored. | `tst_adjustment_presets::reservedNamesAreRejected` |
+| preset_save_whitelist | Check eligibility for the saveable kinds and activate Photo Filter. | Vibrance is saveable and Photo Filter cannot save. | `tst_adjustment_presets::saveIsWhitelisted` |
+| preset_load_panel | Save a Levels setting, change it, and load the saved name. | The saved block is restored. | `tst_adjustment_presets::panelLoadAppliesASavedPreset` |
+| preset_load_dialog | Choose a saved Levels preset in the direct dialog. | The controls reflect the saved value. | `tst_adjustment_presets::dialogLoadAppliesASavedPreset` |
+| vibrance_preset_round_trip | Save non-default Vibrance and Saturation, reset both, load from a fresh Properties panel, and select in the direct dialog. | The store exposes the saved name, both controls are restored on each surface, and panel Load records one history state. | `tst_adjustment_presets::vibrancePresetRestoresBothValues` |

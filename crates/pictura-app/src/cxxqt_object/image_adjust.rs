@@ -72,6 +72,9 @@ pub mod ffi {
             h: i32,
         ) -> QImage;
 
+        /// Color-based Vibrance recommendation for the active raster before preview, or zero when no boost is recommended.
+        fn image_adjustment_vibrance_auto(view: &PictureView) -> i32;
+
         /// A Curves `block`'s `channel` points as `"x,y x,y …"`, or empty.
         fn image_adjustment_curve(block: &[u8], channel: i32) -> QString;
 

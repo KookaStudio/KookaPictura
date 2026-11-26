@@ -52,6 +52,7 @@ private slots:
     void panelLoadAppliesASavedPreset();
     void dialogLoadAppliesASavedPreset();
     void selectiveColorPresetRoundTrips();
+    void vibrancePresetRestoresBothValues();
     void establishedBuiltinsAreListed();
     void photoFilterPresetKeepsDensity();
     void presetsSurviveARestart();
@@ -239,13 +240,13 @@ void AdjustmentPresetsTest::reservedNamesAreRejected()
 void AdjustmentPresetsTest::saveIsWhitelisted()
 {
     for (const char* kind : {"levels", "curves", "exposure", "hue-saturation", "black-white",
-                             "channel-mixer", "selective-color"}) {
+                             "channel-mixer", "selective-color", "vibrance"}) {
         QVERIFY2(pictura::adjustmentPresetCanSave(QString::fromLatin1(kind)), kind);
     }
-    for (const char* kind : {"photo-filter", "vibrance", "brightness-contrast"}) {
+    for (const char* kind : {"photo-filter", "brightness-contrast"}) {
         QVERIFY2(!pictura::adjustmentPresetCanSave(QString::fromLatin1(kind)), kind);
     }
-    QVERIFY(setupAdjustment(QStringLiteral("vibrance")));
+    QVERIFY(setupAdjustment(QStringLiteral("photo-filter")));
     QVERIFY(!panel_->canSavePresetForTest());
 }
 
@@ -340,6 +341,60 @@ void AdjustmentPresetsTest::selectiveColorPresetRoundTrips()
     QVERIFY(index >= 0);
     emit combo->activated(index);
     QVERIFY(pictura::adjustmentPresetMatches(dialog->block(), saved));
+    dialog->reject();
+}
+
+void AdjustmentPresetsTest::vibrancePresetRestoresBothValues()
+{
+    const QString kind = QStringLiteral("vibrance");
+    const QString name = QStringLiteral("Muted teal");
+    QVERIFY(setupAdjustment(kind));
+    QVERIFY(panel_->canSavePresetForTest());
+    auto* amount = qobject_cast<QSlider*>(panel_->controlForTest(kind));
+    auto* saturation = qobject_cast<QSlider*>(panel_->controlForTest(QStringLiteral("saturation")));
+    QVERIFY(amount && saturation);
+    amount->setValue(36);
+    saturation->setValue(-12);
+    panel_->commitForTest();
+    panel_->setPresetNameProviderForTest([name] { return name; });
+    panel_->performPanelMenuAction(QStringLiteral("savePreset"));
+    QCOMPARE(pictura::savedPresetNames(kind), QStringList{name});
+
+    amount->setValue(0);
+    saturation->setValue(0);
+    panel_->commitForTest();
+    panel_->setPresetNameProviderForTest({});
+    const int history = view_->history_count();
+
+    pictura::PropertiesPanel fresh(window_.get());
+    fresh.setView(view_);
+    fresh.refresh();
+    QVERIFY(fresh.presetComboForTest()->findText(name) >= 0);
+    fresh.setPresetPickProviderForTest([name](const QStringList& names) {
+        return names.contains(name) ? name : QString();
+    });
+    fresh.performPanelMenuAction(QStringLiteral("loadPreset"));
+    auto* freshAmount = qobject_cast<QSlider*>(fresh.controlForTest(kind));
+    auto* freshSaturation =
+        qobject_cast<QSlider*>(fresh.controlForTest(QStringLiteral("saturation")));
+    QVERIFY(freshAmount && freshSaturation);
+    QCOMPARE(freshAmount->value(), 36);
+    QCOMPARE(freshSaturation->value(), -12);
+    QCOMPARE(view_->history_count(), history + 1);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Modify Vibrance Layer"));
+
+    const auto dialog = pictura::makeAdjustmentDialog(
+        kind, nullptr, pictura::defaultPresetBlock(kind), QRect());
+    auto* combo = dialog->findChild<QComboBox*>(QStringLiteral("adjustmentPreset"));
+    auto* directAmount = qobject_cast<QSpinBox*>(dialog->controlForTest(kind));
+    auto* directSaturation =
+        qobject_cast<QSpinBox*>(dialog->controlForTest(QStringLiteral("saturation")));
+    QVERIFY(combo && directAmount && directSaturation);
+    const int index = combo->findText(name);
+    QVERIFY(index >= 0);
+    emit combo->activated(index);
+    QCOMPARE(directAmount->value(), 36);
+    QCOMPARE(directSaturation->value(), -12);
     dialog->reject();
 }
 

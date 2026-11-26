@@ -126,7 +126,8 @@ protected:
     // population discarded at each end. False (the outputs untouched) when the
     // histogram is empty or the occupied range is narrower than two levels.
     bool autoEndpoints(int channel, int& lo, int& hi) const;
-    // Apply the shared histogram Auto. The hand-laid pages override this; the
+    int vibranceAutoAmount() const { return vibranceAutoAmount_; }
+    // Apply the dialog-specific Auto. The hand-laid pages override this; the
     // generic pages have no Auto button.
     virtual void applyAuto();
     QCheckBox* previewCheck();
@@ -174,6 +175,7 @@ private:
     bool cmyk_ = false;
     bool previewing_ = false;
     bool previewSuspended_ = false;
+    int vibranceAutoAmount_ = 0;
     AdjustmentControls* controls_ = nullptr;
     PresetCombo* preset_ = nullptr;
     QCheckBox* preview_ = nullptr;
