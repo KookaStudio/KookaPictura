@@ -494,6 +494,7 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="$RUNNER_TEMP/qt-tiff/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export PICTURA_CPU_BUDGET_PERCENT=100
+          export PICTURA_CTEST_REGISTRATION_FILE="$RUNNER_TEMP/qt-ctest.json"
           set -o pipefail
           bash scripts/test-report.sh never --qt-only --configure --build \
             --cmake-arg -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -525,10 +526,6 @@ jobs:
           echo "sccache_hits=${hits:-0}" >> "$GITHUB_OUTPUT"
           echo "sccache_misses=${misses:-0}" >> "$GITHUB_OUTPUT"
           echo "sccache_hit_rate_percent=$rate" >> "$GITHUB_OUTPUT"
-
-      - name: Capture CTest registration for the cache manifest
-        if: ${{ github.ref == 'refs/heads/master' }}
-        run: ctest --test-dir build --show-only=json-v1 > "$RUNNER_TEMP/qt-ctest.json"
 
       - name: Control e2e
         run: bash scripts/verify-control.sh

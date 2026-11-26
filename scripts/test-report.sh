@@ -223,6 +223,9 @@ ctest_json="$tmp/ctest.json"
 ctest_registered=0
 if ctest --test-dir build --show-only=json-v1 >"$ctest_json" 2>/dev/null; then
     ctest_registered=1
+    if [ -n "${PICTURA_CTEST_REGISTRATION_FILE:-}" ]; then
+        cp "$ctest_json" "$PICTURA_CTEST_REGISTRATION_FILE"
+    fi
 fi
 
 build_ready=1
