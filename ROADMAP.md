@@ -304,7 +304,10 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] The Color Table, and Indexed transparency and Forced palette (#555)
 - [x] Bitmap Halftone Screen and Custom Pattern (#556)
 - [x] The HDR Conversion tone methods (#557)
-- [ ] Merge To HDR Pro (#558)
+- [x] Merge To HDR Pro: exposure brackets, translation alignment, ghost base,
+      response curves, presets, and 32/16/8-bit output (#558)
+- [ ] Merge native-depth exposure sources and persist the HDR preview white
+      point across PSD/PSB/TIFF reopen (#558)
 - [ ] The Local Adaptation Toning Curve and Corner option (follow-up to #557)
 - [ ] The Auto Color Correction Options dialog (#559)
 - [x] Levels eyedroppers and the Alt-drag clipping preview for RGB and Grayscale (#560)
@@ -744,7 +747,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       native-size layer per file on a new canvas, Auto-Align, and the embedded
       smart-object option (#1277)
 - [x] File ▸ Browse… (the Bridge replacement) and File ▸ Scripts ▸ Statistics…;
-      the remaining File-menu leaves are tracked by #558/#617/#619/#620/#630 (#504)
+      the remaining File-menu leaves are tracked by #617/#619/#620/#630 (#504)
 - [ ] The Cursors, Transparency and Gamut, Plug-ins, Type and 3D preferences
       panes (#505)
 - [ ] The sparse existing panes: General, Interface, File Handling, Performance,

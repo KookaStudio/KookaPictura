@@ -55,6 +55,15 @@ free	frame_samples_take	frame_samples_take	api/document_bridge.h	pictura_app/src
 free	guide_at	guide_at	api/document_bridge.h	pictura_app/src/cxxqt_object/guides.cxxqt.h
 free	guide_count	guide_count	api/document_bridge.h	pictura_app/src/cxxqt_object/guides.cxxqt.h
 free	guide_near	guide_near	api/document_bridge.h	pictura_app/src/cxxqt_object/guides.cxxqt.h
+free	hdr_bracket_base	hdr_bracket_base	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	hdr_bracket_error	hdr_bracket_error	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	hdr_bracket_exposures	hdr_bracket_exposures	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	hdr_bracket_merge	hdr_bracket_merge	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	hdr_bracket_open	hdr_bracket_open	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	hdr_result_curve	hdr_result_curve	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	hdr_result_error	hdr_result_error	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	hdr_result_install	hdr_result_install	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	hdr_result_preview	hdr_result_preview	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	history_snapshot_count	history_snapshot_count	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	history_snapshot_label	history_snapshot_label	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	image_depth_available	image_depth_available	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h

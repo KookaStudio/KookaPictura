@@ -5,6 +5,8 @@ Pictura commit: 47d505216
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
+Coverage includes the #558 working-tree changes based on f730cfd2.
+
 This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The current assessment includes the #577 worktree changes relative to the listed commit. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
 ## Headline
@@ -45,7 +47,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Adjustments & filters | 32/55 (58.2%) | 32/55 (58.2%) | 32/64 (50.0%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
 | Color & bit depth | 16/29 (55.2%) | 16/29 (55.2%) | 16/29 (55.2%) |
-| Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
+| Automation & extensibility | 3/19 (15.8%) | 3/19 (15.8%) | 3/23 (13.0%) |
 | Shell, panels & preferences | 28/60 (46.7%) | 28/63 (44.4%) | 28/62 (45.2%) |
 
 ## Feature rows
@@ -429,6 +431,7 @@ Source list: File > Automate, Scripts, Actions, and plug-in capabilities.
 | P-AUT-20 | Cloud Documents | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
 | P-AUT-21 | Share for Review | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
 | P-AUT-22 | UXP plug-ins | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe ecosystem | non-goal:feasibility:76 |
+| P-AUT-23 | Merge To HDR Pro | Y | Y | Y | Partial | in-scope | crates/pictura-core/src/hdr_merge.rs; crates/pictura-app/cpp/merge_to_hdr_dialog.cpp | none | Approximate CPU merge and 32/16/8-bit output; native-depth inputs, persisted white point, and Adobe settings interchange remain | #558 |
 
 ### Shell, panels & preferences
 
@@ -479,7 +482,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-SHELL-02 | Menu customization and enablement matrix | Y | Y | Y | Missing | in-scope | — | none | Edit > Menus, Show All Menu Items, and the enablement matrix remain | UI-5 |
 | P-SHELL-03 | Type menu | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/menu_type.cpp | none | Work path, convert to shape, find/replace, and the option rows ship; Google Fonts (#1442) and Check Spelling (#1443) stay open | #502 |
 | P-SHELL-04 | View menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_view.cpp | none | Show/Extras, grid, pixel grid, layer edges, target path, lock/clear slices, 200%, and print size ship; Gamut Warning, Pixel Aspect Ratio, and Snap To (#305) remain | #503 |
-| P-SHELL-05 | File menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_commands.cpp | none | Open As, File > Browse, and Statistics ship; the remaining Automate and Scripts leaves stay with #558, #617, #619, #620, and #630 | #504 |
+| P-SHELL-05 | File menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_commands.cpp | none | Open As, File > Browse, and Statistics ship; the remaining Automate and Scripts leaves stay with #617, #619, #620, and #630 | #504 |
 | P-SHELL-06 | Status bar readouts and options | Y | Y | Y | Missing | in-scope | — | none | Status bar readouts and options popup remain | UI-1 |
 | P-SHELL-07 | Active layer name in the title bar | Y | Y | Y | Missing | in-scope | — | none | Not shown | UI-2 |
 | P-SHELL-08 | Window Arrange: Float, Tile, Cascade, Match, New Window | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #500 |

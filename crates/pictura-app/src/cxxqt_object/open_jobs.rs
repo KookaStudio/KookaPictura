@@ -12,6 +12,7 @@
 //! the self-test, and the existing tests keep their behaviour.
 
 pub(super) mod compatibility;
+mod hdr_merge;
 mod imp;
 mod raw_open;
 
@@ -22,6 +23,7 @@ pub use compatibility::{
     compatibility_preview_available, compatibility_reason, native_save_warning,
     save_compatibility_copy,
 };
+pub use hdr_merge::*;
 pub use imp::*;
 pub(super) use raw_open::PendingRaw;
 pub use raw_open::{
@@ -54,6 +56,28 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        type HdrBracket;
+        type HdrResult;
+
+        fn hdr_bracket_open(paths: &QStringList) -> Box<HdrBracket>;
+        fn hdr_bracket_error(bracket: &HdrBracket) -> QString;
+        fn hdr_bracket_exposures(bracket: &HdrBracket) -> Vec<f64>;
+        fn hdr_bracket_base(exposures: &[f64]) -> i32;
+        fn hdr_bracket_merge(
+            bracket: &HdrBracket,
+            ev100: &[f64],
+            align: bool,
+            ghost_base: i32,
+            curve: &[f64],
+        ) -> Box<HdrResult>;
+        fn hdr_result_error(result: &HdrResult) -> QString;
+        fn hdr_result_curve(result: &HdrResult) -> Vec<f64>;
+        fn hdr_result_preview(bracket: &HdrBracket, result: &HdrResult, ev: f64) -> QImage;
+        fn hdr_result_install(
+            view: Pin<&mut PictureView>,
+            bracket: &HdrBracket,
+            result: Box<HdrResult>,
+        ) -> bool;
         fn output_path_protected(path: &QString) -> bool;
         fn compatibility_reason(view: &PictureView) -> QString;
         fn compatibility_preview_available(view: &PictureView) -> bool;

@@ -24,6 +24,7 @@
 #include "frame_update.h"
 #include "gpu_probe.h"
 #include "load_layers_dialog.h"
+#include "merge_to_hdr_dialog.h"
 #include "memory_refusal.h"
 #include "statistics_dialog.h"
 
@@ -533,6 +534,8 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
         }
         return openDocumentAtPathOutcome(path, false) == OpenOutcome::Opened;
     });
+    registry.setHandler(command_ids::FileAutomateMergeToHdrPro,
+                        [this]() { showMergeToHdrDialog(*this); });
     registry.setHandler(command_ids::FileAutomateBatch, [this]() { batch().showDialog(); });
     registry.setEnabledProvider(command_ids::FileAutomateBatch, [this]() {
         ActionsPanel* panel = actionsPanel();

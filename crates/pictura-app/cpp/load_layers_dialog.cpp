@@ -17,14 +17,35 @@
 
 namespace pictura {
 
+namespace {
+
+const QStringList& hdrSuffixes()
+{
+    static const QStringList suffixes = {
+        QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("jpe"),
+        QStringLiteral("png"), QStringLiteral("tif"), QStringLiteral("tiff"),
+        QStringLiteral("webp"), QStringLiteral("bmp"), QStringLiteral("gif"),
+    };
+    return suffixes;
+}
+
+} // namespace
+
+bool isHdrBracketFile(const QString& path)
+{
+    return hdrSuffixes().contains(QFileInfo(path).suffix(), Qt::CaseInsensitive);
+}
+
 LoadLayersDialog::LoadLayersDialog(const QStringList& openPaths, const QString& startFolder,
-                                   QWidget* parent)
+                                   QWidget* parent, Purpose purpose)
     : QDialog(parent)
+    , title_(purpose == Purpose::HdrBracket ? tr("Merge To HDR Pro") : tr("Load Layers"))
+    , purpose_(purpose)
     , openPaths_(openPaths)
     , startFolder_(startFolder)
 {
     setObjectName(QStringLiteral("loadLayersDialog"));
-    setWindowTitle(tr("Load Layers"));
+    setWindowTitle(title_);
     auto* layout = new QVBoxLayout(this);
 
     auto* actions = new QHBoxLayout;
@@ -41,7 +62,9 @@ LoadLayersDialog::LoadLayersDialog(const QStringList& openPaths, const QString& 
     auto* group = new QGroupBox(tr("Source Files"), this);
     group->setObjectName(QStringLiteral("loadLayersSourceGroup"));
     auto* groupLayout = new QVBoxLayout(group);
-    auto* hint = new QLabel(tr("Choose two or more files to load into an image stack."), group);
+    auto* hint = new QLabel(purpose_ == Purpose::HdrBracket
+        ? tr("Choose three or more exposures of the same scene.")
+        : tr("Choose two or more files to load into an image stack."), group);
     hint->setWordWrap(true);
     groupLayout->addWidget(hint);
 
@@ -81,6 +104,7 @@ LoadLayersDialog::LoadLayersDialog(const QStringList& openPaths, const QString& 
     smartObject_ = new QCheckBox(tr("Create Smart Object after Loading Layers"), group);
     smartObject_->setObjectName(QStringLiteral("loadLayersSmartObject"));
     groupLayout->addWidget(smartObject_);
+    smartObject_->setVisible(purpose_ == Purpose::Stack);
 
     layout->addWidget(group);
 
@@ -117,7 +141,8 @@ bool LoadLayersDialog::createSmartObject() const
 void LoadLayersDialog::addFiles(const QStringList& paths)
 {
     for (const QString& path : paths) {
-        if (path.isEmpty() || !QFileInfo(path).isFile()) {
+        if (path.isEmpty() || !QFileInfo(path).isFile()
+            || (purpose_ == Purpose::HdrBracket && !isHdrBracketFile(path))) {
             continue;
         }
         bool exists = false;
@@ -140,7 +165,9 @@ void LoadLayersDialog::setFolder(const QString& folder)
     files_->clear();
     const QDir dir(folder);
     QStringList filters;
-    for (const QString& suffix : stackSourceSuffixes()) {
+    const QStringList suffixes = purpose_ == Purpose::HdrBracket
+        ? hdrSuffixes() : stackSourceSuffixes();
+    for (const QString& suffix : suffixes) {
         filters.append(QStringLiteral("*.") + suffix);
         filters.append(QStringLiteral("*.") + suffix.toUpper());
     }
@@ -164,8 +191,18 @@ void LoadLayersDialog::browse()
         }
         return;
     }
-    const QStringList chosen = getOpenFileNames(
-        this, tr("Load Files into Stack"), startFolder_, stackSourceFilters());
+    QStringList filters = stackSourceFilters();
+    if (purpose_ == Purpose::HdrBracket) {
+        QStringList glob;
+        for (const QString& suffix : hdrSuffixes()) {
+            glob.append(QStringLiteral("*.") + suffix);
+            glob.append(QStringLiteral("*.") + suffix.toUpper());
+        }
+        filters = {tr("Exposure images (%1)").arg(glob.join(QLatin1Char(' ')))};
+    }
+    const QStringList chosen = getOpenFileNames(this,
+        purpose_ == Purpose::HdrBracket ? title_ : tr("Load Files into Stack"),
+        startFolder_, filters);
     if (!chosen.isEmpty()) {
         startFolder_ = QFileInfo(chosen.first()).absolutePath();
         addFiles(chosen);
@@ -201,7 +238,7 @@ void LoadLayersDialog::refreshMode()
 void LoadLayersDialog::refreshButtons()
 {
     const bool folder = use_->currentData().toString() == QLatin1String("folder");
-    ok_->setEnabled(files_->count() > 0);
+    ok_->setEnabled(files_->count() >= (purpose_ == Purpose::HdrBracket ? 3 : 1));
     remove_->setEnabled(!folder && !files_->selectedItems().isEmpty());
     addOpen_->setEnabled(!folder && !openPaths_.isEmpty());
 }

@@ -28,6 +28,7 @@ pub mod edition;
 mod global_light;
 mod guides;
 pub mod hdr;
+pub mod hdr_merge;
 pub mod homography;
 pub mod job;
 pub mod layer_bounds;

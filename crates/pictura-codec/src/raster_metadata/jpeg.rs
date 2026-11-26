@@ -98,6 +98,7 @@ fn push_segment(out: &mut Vec<u8>, marker: u8, payload: &[u8]) -> Result<(), Psd
 
 pub(super) struct JpegResources<'a> {
     pub(super) photoshop: Option<Vec<u8>>,
+    pub(super) exif: Option<&'a [u8]>,
     pub(super) xmp: Option<&'a [u8]>,
 }
 
@@ -105,6 +106,7 @@ pub(super) struct JpegResources<'a> {
 pub(super) fn resources(bytes: &[u8]) -> Option<JpegResources<'_>> {
     let mut block: Option<Vec<u8>> = None;
     let mut xmp = None;
+    let mut exif = None;
     let mut at = 2;
     while at + 4 <= bytes.len() && bytes[at] == 0xFF {
         let marker = bytes[at + 1];
@@ -121,15 +123,21 @@ pub(super) fn resources(bytes: &[u8]) -> Option<JpegResources<'_>> {
             if let Some(irb) = payload.strip_prefix(PHOTOSHOP_SIGNATURE) {
                 block.get_or_insert_with(Vec::new).extend_from_slice(irb);
             }
-        } else if marker == 0xE1 && xmp.is_none() {
-            xmp = payload
-                .strip_prefix(XMP_SIGNATURE)
-                .filter(|packet| super::valid_xmp(packet));
+        } else if marker == 0xE1 {
+            if exif.is_none() {
+                exif = payload.strip_prefix(b"Exif\0\0");
+            }
+            if xmp.is_none() {
+                xmp = payload
+                    .strip_prefix(XMP_SIGNATURE)
+                    .filter(|packet| super::valid_xmp(packet));
+            }
         }
         at += 2 + length.max(2);
     }
     Some(JpegResources {
         photoshop: block,
+        exif,
         xmp,
     })
 }

@@ -1,0 +1,86 @@
+## ADDED Requirements
+
+### Requirement: Resolve an exposure bracket
+
+File > Automate > Merge To HDR Pro SHALL accept browsed files, a folder, and clean saved open documents without modifying any input. The picker SHALL require at least three distinct readable, equal-sized sources. Inputs above 8 bits per channel SHALL be refused visibly before decoding. Complete JPEG and TIFF exposure metadata SHALL populate EV100 values; missing rows SHALL require explicit finite EV100 values and SHALL NOT default to zero. Invalid or unrepresentable exposure ratios SHALL be rejected.
+
+#### Scenario: Reject two sources
+
+- **WHEN** only two sources are selected in the picker
+- **THEN** the picker SHALL prevent proceeding and explain that at least three sources are required
+
+#### Scenario: Reject a high-depth source
+
+- **WHEN** a source has more than 8 bits per channel
+- **THEN** the command SHALL explain the precision limit and publish no document
+
+#### Scenario: Complete the missing exposure values
+
+- **WHEN** three matching sources include rows without complete exposure metadata
+- **THEN** those EV100 fields SHALL be empty and proceeding SHALL require an explicit finite value for each missing row
+- **AND** cancelling SHALL leave all input files and documents untouched
+
+#### Scenario: Add clean saved open documents
+
+- **WHEN** open documents are offered as sources
+- **THEN** only clean saved documents SHALL be eligible and inclusion SHALL NOT save or change them
+
+### Requirement: Build a floating-point radiance image
+
+The merge SHALL combine encoded samples in an exposure-normalized linear domain, normalized to the median bracket exposure. It SHALL estimate a monotonic per-channel inverse response as the sRGB inverse transfer followed by a fitted positive exponent, use exponent 1 when evidence is insufficient, and support reusing a validated saved Pictura response curve. Optional translation alignment SHALL compensate supported displacement and SHALL fail visibly when registration cannot be established. Optional ghost removal SHALL use a selectable and visibly indicated base exposure where usable samples disagree. Out-of-frame and fully transparent samples SHALL be excluded; saturation and alpha fallback SHALL be deterministic as specified in the design.
+
+#### Scenario: Recover scene radiance
+
+- **WHEN** a synthetic three-exposure bracket represents known linear scene radiances including a highlight clipped in brighter exposures
+- **THEN** reconstructed radiances SHALL match the analytical median-exposure-normalized values within a stated numerical tolerance and preserve the highlight above nominal white
+
+#### Scenario: Reuse a response curve
+
+- **WHEN** the same bracket is merged again using its saved Pictura response curve
+- **THEN** the same floating-point radiance image SHALL result
+- **AND** malformed or unsupported curves SHALL be rejected without publishing a document
+
+#### Scenario: Recover a translated exposure
+
+- **WHEN** a textured source is shifted within the supported translation search and alignment is requested
+- **THEN** the merge SHALL use registered samples and exclude out-of-frame samples
+
+#### Scenario: Reject failed alignment
+
+- **WHEN** registration lacks sufficient texture or confidence, or displacement exceeds the supported search
+- **THEN** the merge SHALL report failure and publish no document
+
+#### Scenario: Resolve conflicting moving pixels
+
+- **WHEN** the user selects a base and well-exposed samples disagree because an object moved with ghost removal enabled
+- **THEN** the base SHALL be visibly indicated and its usable sample SHALL supply the affected pixel
+
+#### Scenario: Fall back for saturated and transparent samples
+
+- **WHEN** all usable samples at a pixel have zero fusion weight or no source has nonzero alpha
+- **THEN** the deterministic saturation and alpha fallback in the design SHALL produce the pixel
+
+### Requirement: Preview and publish a merged document
+
+The command SHALL show the selected sources and a preview with adjustable brightness before opening a new document. Preview brightness SHALL NOT change merged pixels. The command SHALL offer 32-, 16-, and 8-bit output and separate Pictura preset and response-curve save and load actions. 32-bit output SHALL preserve merged floating-point data; 16- and 8-bit output SHALL use existing HDR conversion choices. The job SHALL check and reserve its decoded photo and working memory against the existing budget before allocation. Overflow, budget failure, cancellation, or any other failure SHALL release temporary resources, leave all input files and existing documents untouched, and publish no document. Publication SHALL be atomic after acceptance and successful conversion. Persisting preview white point on PSD/PSB/TIFF reopen remains a #558 parity gap.
+
+#### Scenario: Adjust preview brightness
+
+- **WHEN** preview brightness is adjusted
+- **THEN** the display SHALL change while merged floating-point samples remain byte-identical
+
+#### Scenario: Publish or cancel the merge
+
+- **WHEN** the preview is accepted at 32 bits per channel
+- **THEN** exactly one untitled 32-bit document SHALL open with the merged samples
+- **AND** cancellation at source selection, preview, or conversion SHALL open no document and leave inputs untouched
+
+#### Scenario: Convert the merged output
+
+- **WHEN** the user selects 8- or 16-bit output and confirms HDR conversion
+- **THEN** exactly one new document SHALL open at the selected depth with the converted pixels
+
+#### Scenario: Reject an over-budget job
+
+- **WHEN** checked memory estimation overflows or the photo and working memory reservation is refused
+- **THEN** the command SHALL report failure, release its resources, and leave inputs and document count unchanged
