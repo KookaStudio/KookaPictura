@@ -320,7 +320,7 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto Options…")), QStringLiteral("autoOptions"), true),
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Curves Display Options…")), QStringLiteral("properties.curvesDisplay")),
              chkAction(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Show Clipping For Black/White Points")), QStringLiteral("properties.showClipping"), true),
-             chk(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Parameter"))),
+             chkAction(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Parameter")), QStringLiteral("properties.autoParameter")),
              chkAction(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Targeted Adjustment Tool")), QStringLiteral("properties.autoTarget")),
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Delete Current Preset")), QStringLiteral("properties.deletePreset")),
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Reset Adjustment")), QStringLiteral("properties.reset")),

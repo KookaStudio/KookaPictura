@@ -82,3 +82,14 @@ The fitted Levels and Curves parameters SHALL remain editable and survive PSD an
 - **WHEN** a Curves adjustment layer is selected
 - **THEN** Properties SHALL provide input histogram, endpoint controls, selected point values, on-image adjustment and point samplers using the adjustment input
 - **AND** its menu SHALL expose display options, automatic targeting, clipping preview, preset management and reset
+
+#### Scenario: Automatically focus an adjustment parameter [auto_select_parameter]
+
+- **WHEN** Auto-Select Parameter is enabled and a Levels or Curves Properties page opens
+- **THEN** the system SHALL focus and select an editable parameter value
+
+#### Scenario: Freehand Curves integration [curves_pencil_integration]
+
+- **WHEN** the shared dense-curve editing and storage API is available
+- **THEN** Curves Properties SHALL offer pencil drawing and smoothing through that API
+- **AND** the stored curve SHALL use the shared dense-curve representation

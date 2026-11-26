@@ -41,6 +41,7 @@ public:
     void setLevelsHistogramSource(std::function<std::array<int, 256>(int)> source);
     CurveWidget* curveWidget() const { return curve_; }
     int curveChannel() const;
+    void focusFirstParameter();
     void toggleCurvesDisplay();
     bool levelsClippingParameters(int& channel, int& black, int& white) const;
     QWidget* controlForTest(const QString& key) const;

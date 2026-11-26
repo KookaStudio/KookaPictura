@@ -65,6 +65,7 @@ public:
     // kept strictly between its neighbours'; endpoints keep their input.
     void moveSelected(int input, int output);
     bool selectTone(int input);
+    void selectFirstPoint();
     int outputAt(int input) const;
     void setEndpoint(bool white, int input);
 

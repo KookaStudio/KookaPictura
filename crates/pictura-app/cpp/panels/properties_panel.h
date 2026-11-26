@@ -142,6 +142,8 @@ private:
     bool levelsPicking_ = false;
     bool curvesPicking_ = false;
     bool autoSelectCurves_ = false;
+    bool autoSelectParameter_ = false;
+    bool focusNextAdjustment_ = false;
     QString path_;
     QString title_;
     QString kind_;

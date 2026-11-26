@@ -17,6 +17,7 @@
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
@@ -25,6 +26,8 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 namespace pictura {
 
@@ -50,6 +53,63 @@ QWidget* labelled(const QString& label, QWidget* control)
     control->setParent(container);
     row->addWidget(control, 1);
     return container;
+}
+
+template<typename Curve, typename = void>
+struct SupportsDenseCurves : std::false_type {};
+
+template<typename Curve>
+struct SupportsDenseCurves<Curve, std::void_t<
+    decltype(std::declval<Curve&>().enableCurvesControls()),
+    decltype(std::declval<Curve&>().setPencilEnabled(true)),
+    decltype(std::declval<Curve&>().smoothPencil()),
+    decltype(std::declval<Curve&>().hasDenseCurve())>> : std::true_type {};
+
+template<typename Curve>
+void addPencilControls(Curve* curve, QWidget* parent, QVBoxLayout* layout,
+                       const std::function<void()>& finishGesture)
+{
+    if constexpr (SupportsDenseCurves<Curve>::value) {
+        curve->enableCurvesControls();
+        auto* row = new QWidget(parent);
+        auto* buttons = new QHBoxLayout(row);
+        buttons->setContentsMargins(0, 0, 0, 0);
+        auto* pencil = new QToolButton(row);
+        pencil->setObjectName(QStringLiteral("curvesPencil"));
+        pencil->setText(QObject::tr("Pencil"));
+        pencil->setCheckable(true);
+        auto* smooth = new QToolButton(row);
+        smooth->setObjectName(QStringLiteral("curvesSmooth"));
+        smooth->setText(QObject::tr("Smooth"));
+        smooth->setEnabled(curve->hasDenseCurve());
+        buttons->addWidget(pencil);
+        buttons->addWidget(smooth);
+        QObject::connect(pencil, &QToolButton::toggled, row, [curve, smooth, finishGesture](bool enabled) {
+            if (curve->setPencilEnabled(enabled)) finishGesture();
+            smooth->setEnabled(curve->hasDenseCurve());
+        });
+        QObject::connect(smooth, &QToolButton::clicked, row, [curve, finishGesture] {
+            curve->smoothPencil();
+            finishGesture();
+        });
+        QObject::connect(curve, &Curve::curveChanged, row, [curve, smooth] {
+            smooth->setEnabled(curve->hasDenseCurve());
+        });
+        layout->insertWidget(layout->count() - 1, row);
+    }
+}
+
+template<typename Curve>
+void syncPencilControls(Curve* curve, QWidget* parent)
+{
+    if constexpr (SupportsDenseCurves<Curve>::value) {
+        auto* pencil = parent->findChild<QToolButton*>(QStringLiteral("curvesPencil"));
+        auto* smooth = parent->findChild<QToolButton*>(QStringLiteral("curvesSmooth"));
+        if (!pencil || !smooth) return;
+        const QSignalBlocker block(pencil);
+        pencil->setChecked(curve->hasDenseCurve());
+        smooth->setEnabled(curve->hasDenseCurve());
+    }
 }
 
 } // namespace
@@ -411,6 +471,7 @@ void AdjustmentControls::addCurves()
         connect(button, &QToolButton::clicked, this, [this, action] { emit curvesCanvasRequested(action); });
     }
     insert(tools);
+    addPencilControls(curve_, this, layout_, [this] { emit gestureEnded(); });
     insert(curve_);
     auto* endpoints = new QWidget(this);
     auto* endpointLayout = new QHBoxLayout(endpoints);
@@ -513,6 +574,27 @@ void AdjustmentControls::setLevelsHistogramSource(std::function<std::array<int, 
     }
 }
 
+void AdjustmentControls::focusFirstParameter()
+{
+    if (curve_) {
+        curve_->selectFirstPoint();
+        if (auto* field = findChild<QSpinBox*>(QStringLiteral("adjustmentCurveOutput"))) {
+            field->setFocus(Qt::OtherFocusReason);
+            field->selectAll();
+            return;
+        }
+    }
+    for (const Row& row : rows_) {
+        if (!row.widget->isHidden()) {
+            if (auto* field = row.widget->findChild<QDoubleSpinBox*>()) {
+                field->setFocus(Qt::OtherFocusReason);
+                field->selectAll();
+                return;
+            }
+        }
+    }
+}
+
 int AdjustmentControls::curveChannel() const
 {
     return curveChannel_ ? curveChannel_->currentIndex() : 0;
@@ -529,6 +611,7 @@ void AdjustmentControls::loadCurve()
         return;
     }
     curve_->setPointsText(curveSource_(curveChannel_->currentIndex()));
+    syncPencilControls(curve_, this);
 }
 
 void AdjustmentControls::showGroup(int group)

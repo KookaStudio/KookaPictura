@@ -683,6 +683,7 @@ bool PropertiesPanel::vectorMaskSectionVisibleForTest() const
 void PropertiesPanel::setView(PictureView* view)
 {
     if (view != view_) {
+        focusNextAdjustment_ = true;
         if (tools_ && tools_->canvas()) tools_->canvas()->clearFilterPreview();
         if (levelsPicking_ && tools_) tools_->setCanvasSampler({});
         if (curvesPicking_ && tools_) tools_->setCanvasBrush({});
@@ -727,7 +728,8 @@ QString PropertiesPanel::activePath() const
 void PropertiesPanel::refresh()
 {
     const QString path = activePath();
-    if (path != path_) {
+    const bool pageChanged = path != path_;
+    if (pageChanged) {
         if (tools_ && tools_->canvas()) tools_->canvas()->clearFilterPreview();
         if (levelsPicking_ && tools_) tools_->setCanvasSampler({});
         if (curvesPicking_ && tools_) tools_->setCanvasBrush({});
@@ -765,6 +767,13 @@ void PropertiesPanel::refresh()
     visible_->setIcon(icon(row.visible ? QStringLiteral("layers.eyeOn")
                                        : QStringLiteral("layers.eyeOff")));
     showAdjustment(page);
+    if ((pageChanged || focusNextAdjustment_) && autoSelectParameter_) {
+        const QString selectedPath = path_;
+        QTimer::singleShot(0, this, [this, selectedPath] {
+            if (autoSelectParameter_ && path_ == selectedPath) controls_->focusFirstParameter();
+        });
+    }
+    focusNextAdjustment_ = false;
 }
 
 void PropertiesPanel::showNothing()
@@ -1068,7 +1077,17 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
     const bool hasLayer = !path_.isEmpty();
     for (QAction* action : menu->actions()) {
         const QString id = action->data().toString();
-        if (id == QLatin1String("properties.curvesDisplay")) {
+        if (id == QLatin1String("properties.autoParameter")) {
+            action->setEnabled(hasLayer && !kind_.isEmpty());
+            action->setChecked(autoSelectParameter_);
+            if (!action->property("propertiesConnected").toBool()) {
+                action->setProperty("propertiesConnected", true);
+                connect(action, &QAction::triggered, this, [this](bool enabled) {
+                    autoSelectParameter_ = enabled;
+                    if (enabled) controls_->focusFirstParameter();
+                });
+            }
+        } else if (id == QLatin1String("properties.curvesDisplay")) {
             action->setEnabled(hasLayer && kind_ == QLatin1String("curves"));
             if (!action->property("propertiesConnected").toBool()) {
                 action->setProperty("propertiesConnected", true);

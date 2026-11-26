@@ -283,6 +283,11 @@ void CurveWidget::moveSelected(int input, int output)
     emit curveChanged();
 }
 
+void CurveWidget::selectFirstPoint()
+{
+    if (!points_.isEmpty()) select(0);
+}
+
 int CurveWidget::outputAt(int input) const
 {
     return qRound(curve_[qBound(0, input, 255)] * 255.0f);

@@ -18,6 +18,8 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QFormLayout>
+#include <QtWidgets/QDoubleSpinBox>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QSlider>
@@ -30,6 +32,34 @@
 #include <QtGui/QAction>
 
 #include "qt_test_support.h"
+
+#include <type_traits>
+#include <utility>
+
+template<typename Curve, typename = void>
+struct HasDenseCurveApi : std::false_type {};
+
+template<typename Curve>
+struct HasDenseCurveApi<Curve, std::void_t<decltype(std::declval<Curve&>().hasDenseCurve())>> : std::true_type {};
+
+template<typename Curve>
+void checkPencilIntegration(Curve* curve, QWidget* panel)
+{
+    if constexpr (HasDenseCurveApi<Curve>::value) {
+        auto* pencil = panel->findChild<QToolButton*>(QStringLiteral("curvesPencil"));
+        auto* smooth = panel->findChild<QToolButton*>(QStringLiteral("curvesSmooth"));
+        QVERIFY(pencil && smooth);
+        pencil->click();
+        QTest::mousePress(curve, Qt::LeftButton, Qt::NoModifier, curve->rect().center());
+        QTest::mouseRelease(curve, Qt::LeftButton, Qt::NoModifier, curve->rect().center());
+        QVERIFY(curve->hasDenseCurve());
+        QVERIFY(smooth->isEnabled());
+        smooth->click();
+    } else {
+        QVERIFY(!panel->findChild<QToolButton*>(QStringLiteral("curvesPencil")));
+    }
+}
+
 
 class PropertiesPanelTest : public QObject {
     Q_OBJECT
@@ -48,6 +78,8 @@ private slots:
     void groupsCurvesAndFooter();
     void curvesPointFields();
     void curvesControlsAndMenu();
+    void autoSelectParameter();
+    void curvesPencilIntegration();
     void levelsHandlesAndMenu();
     void channelMixerMonochrome();
     void channelMixerCmykGroups();
@@ -95,6 +127,36 @@ void PropertiesPanelTest::cleanup()
 
 // No document reads No Properties; a plain layer gets the read-only summary
 // (a post-CS6 page ported from photorust, #70).
+void PropertiesPanelTest::autoSelectParameter()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("levels")));
+    window_->show();
+    QMenu menu;
+    auto* action = menu.addAction(QStringLiteral("Auto-Select Parameter"));
+    action->setCheckable(true);
+    action->setData(QStringLiteral("properties.autoParameter"));
+    panel_->updatePanelMenu(&menu);
+    QVERIFY(action->isEnabled());
+    action->trigger();
+    auto* black = panel_->controlForTest(QStringLiteral("inputBlack"));
+    QVERIFY(black);
+    auto* field = black->parentWidget()->findChild<QDoubleSpinBox*>();
+    QVERIFY(field);
+    QTRY_VERIFY(field->hasFocus() || field->findChild<QLineEdit*>()->hasFocus());
+    QVERIFY(setupAdjustment(QStringLiteral("curves")));
+    auto* output = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveOutput"));
+    QVERIFY(output);
+    QTRY_VERIFY(output->hasFocus() || output->findChild<QLineEdit*>()->hasFocus());
+}
+
+void PropertiesPanelTest::curvesPencilIntegration()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("curves")));
+    auto* graph = panel_->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve"));
+    QVERIFY(graph);
+    checkPencilIntegration(graph, panel_);
+}
+
 void PropertiesPanelTest::levelsHandlesAndMenu()
 {
     QVERIFY(setupAdjustment(QStringLiteral("levels")));
