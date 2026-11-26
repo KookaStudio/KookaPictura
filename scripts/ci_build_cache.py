@@ -302,7 +302,7 @@ def make_manifest(root, build, fingerprint, cache_key, source_commit, ctest_json
             raise StaleTree(f"required executable is not executable: {name}")
 
     cargo_build = build / "cargo" / "build"
-    cargo_outputs = sorted(cargo_build.glob("pictura_app-*/output"))
+    cargo_outputs = sorted(cargo_build.glob("pictura[-_]app-*/output"))
     if not cargo_build.is_dir():
         raise StaleTree("Corrosion Cargo build directory is missing")
     if not cargo_outputs:
