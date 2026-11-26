@@ -271,33 +271,17 @@ def _assert(condition: bool, message: str, detail: object = "") -> None:
         raise AssertionError(f"{message}: {detail}")
 
 
-def selftests_run_concurrently() -> None:
+def single_selftest_capture() -> None:
     box = Sandbox()
     try:
-        result = box.run(
-            "--qt-only",
-            FAKE_SELFTEST_SECONDS="0.4",
-            FAKE_CTEST_SECONDS="0",
-        )
+        result = box.run("--qt-only", FAKE_SELFTEST_SECONDS="0.4")
         _assert(result.returncode == 0, "staged run failed", result.stderr)
-        starts = box.index("selftest-bare-start")
-        document = box.index("selftest-document-start")
-        bare_end = box.index("selftest-bare-end")
-        document_end = box.index("selftest-document-end")
-        _assert(
-            max(starts, document) < min(bare_end, document_end),
-            "the two self-tests did not overlap",
-            box.names(),
-        )
-        _assert(
-            (box.root / "build/qt-test-results/tst_one.xml").is_file(),
-            "no qt report",
-        )
-        _assert(
-            "selftest-bare.log" in result.stdout and "selftest-psd.log" in result.stdout,
-            "the two captures were not reported separately",
-            result.stdout,
-        )
+        names = box.names()
+        _assert(names.count("selftest-document-start") == 1, "expected one self-test", names)
+        _assert("selftest-bare-start" not in names, "bare self-test ran", names)
+        _assert((box.root / "build/qt-test-results/tst_one.xml").is_file(), "no qt report")
+        _assert("selftest-psd.log" in result.stdout and "selftest-bare.log" not in result.stdout,
+                "expected one capture", result.stdout)
     finally:
         box.close()
 
@@ -314,19 +298,12 @@ def overlap_is_opt_in() -> None:
         )
         _assert(result.returncode == 0, "overlapped run failed", result.stderr)
         _assert(
-            box.index("selftest-bare-start") < box.index("tail-end"),
-            "bare self-test did not start before the tail ended",
-            box.names(),
-        )
-        _assert(
             box.index("selftest-document-start") < box.index("tail-end"),
             "document self-test did not start before the tail ended",
             box.names(),
         )
         _assert(
-            box.index("ctest-start") > max(box.index("tail-end"),
-                                           box.index("selftest-bare-end"),
-                                           box.index("selftest-document-end")),
+            box.index("ctest-start") > max(box.index("tail-end"), box.index("selftest-document-end")),
             "CTest started before the tail and self-tests finished",
             box.names(),
         )
@@ -338,9 +315,9 @@ def overlap_is_opt_in() -> None:
         result = box.run("--configure", "--build", FAKE_SELFTEST_SECONDS="0.1")
         _assert(result.returncode == 0, "sequential run failed", result.stderr)
         _assert(
-            max(box.index("selftest-bare-end"), box.index("selftest-document-end"))
+            box.index("selftest-document-end")
             < box.index("tail-start"),
-            "the tail started before both self-tests ended",
+            "the tail started before the self-test ended",
             box.names(),
         )
     finally:
@@ -368,11 +345,6 @@ def pictura_links_before_selftests() -> None:
     try:
         result = box.run("--configure", "--build")
         _assert(result.returncode == 0, "staged run failed", result.stderr)
-        _assert(
-            box.index("pictura-end") < box.index("selftest-bare-start"),
-            "pictura did not link before the bare self-test",
-            box.names(),
-        )
         _assert(
             box.index("pictura-end") < box.index("selftest-document-start"),
             "pictura did not link before the document self-test",
@@ -402,7 +374,7 @@ def ctest_waits_for_build() -> None:
         _assert(box.index("ctest-start") > last_build, "CTest started early", box.names())
         _assert(
             box.index("ctest-start")
-            > max(box.index("selftest-bare-end"), box.index("selftest-document-end")),
+            > box.index("selftest-document-end"),
             "CTest started before a self-test finished",
             box.names(),
         )
@@ -410,17 +382,11 @@ def ctest_waits_for_build() -> None:
         box.close()
 
 
-def failure_identity_and_separate_captures() -> None:
+def failure_identity_and_single_capture() -> None:
     box = Sandbox()
     try:
-        result = box.run(
-            "--qt-only",
-            FAKE_SELFTEST_BARE_FAIL="7",
-            FAKE_SELFTEST_DOCUMENT_FAIL="9",
-        )
-        _assert(result.returncode == 7, "bare status did not win", result.returncode)
-        _assert("core::bare (exit 7)" in result.stdout, "bare capture was not reported",
-                result.stdout)
+        result = box.run("--qt-only", FAKE_SELFTEST_DOCUMENT_FAIL="9")
+        _assert(result.returncode == 9, "self-test status did not win", result.returncode)
         _assert("core::document (exit 9)" in result.stdout,
                 "document capture was not reported", result.stdout)
     finally:
@@ -434,7 +400,7 @@ def build_failure_stops_later_stages() -> None:
         _assert(result.returncode == 9, "the pictura build status did not win",
                 result.returncode)
         names = box.names()
-        _assert("selftest-bare-start" not in names, "self-test ran after a failed build", names)
+        _assert("selftest-document-start" not in names, "self-test ran after a failed build", names)
         _assert("ctest-start" not in names, "CTest ran after a failed build", names)
         _assert("no report" in result.stdout, "a missing report was not named", result.stdout)
     finally:
@@ -445,7 +411,7 @@ def build_failure_stops_later_stages() -> None:
         result = box.run("--configure", "--build", FAKE_FAIL="tail")
         _assert(result.returncode == 9, "the tail status did not win", result.returncode)
         names = box.names()
-        _assert("selftest-bare-end" in names, "self-tests did not run before the tail", names)
+        _assert("selftest-document-end" in names, "self-test did not run before the tail", names)
         _assert("ctest-start" not in names, "CTest ran after a failed tail build", names)
         _assert("no report" in result.stdout, "a missing report was not named", result.stdout)
     finally:
@@ -475,7 +441,7 @@ def signal_cleanup_reaps_children() -> None:
     try:
         for _ in range(200):
             names = box.names()
-            if "selftest-bare-start" in names and "selftest-document-start" in names:
+            if "selftest-document-start" in names:
                 break
             time.sleep(0.05)
         else:
@@ -484,13 +450,12 @@ def signal_cleanup_reaps_children() -> None:
             match = re.search(r"^selftest-\w+-start pid=(\d+)", line)
             if match:
                 pids.append(int(match.group(1)))
-        _assert(len(pids) == 2, "did not capture two self-test pids", pids)
+        _assert(len(pids) == 1, "did not capture the self-test pid", pids)
         process.send_signal(signal.SIGTERM)
         status = process.wait(timeout=20)
         _assert(status == 143, "SIGTERM did not exit 143", status)
         _assert(
-            "selftest-bare-end" not in box.names()
-            and "selftest-document-end" not in box.names(),
+            "selftest-document-end" not in box.names(),
             "a self-test completed after the signal",
             box.names(),
         )
@@ -560,7 +525,7 @@ def nextest_is_separate() -> None:
             "nextest did not finish before configure",
             box.names(),
         )
-        for later in ("pictura-start", "selftest-bare-start", "ctest-start"):
+        for later in ("pictura-start", "selftest-document-start", "ctest-start"):
             _assert(
                 box.index("nextest-end") < box.index(later),
                 f"nextest overlapped {later}",
@@ -587,7 +552,6 @@ def stage_timings_are_recorded() -> None:
             "configure",
             "pictura_build",
             "qt_build_tail",
-            "selftest_bare",
             "selftest_document",
             "ctest",
             "report",
@@ -721,7 +685,7 @@ CHECKS = {
     for name, value in globals().items()
     if name
     in {
-        "selftests_run_concurrently",
+        "single_selftest_capture",
         "overlap_is_opt_in",
         "ci_adapter_uses_shared_executor",
         "local_adapter_uses_shared_executor",
@@ -729,7 +693,7 @@ CHECKS = {
         "pictura_links_before_selftests",
         "ctest_waits_for_build",
         "one_ninja_writer",
-        "failure_identity_and_separate_captures",
+        "failure_identity_and_single_capture",
         "build_failure_stops_later_stages",
         "signal_cleanup_reaps_children",
         "stale_junit_cleanup",

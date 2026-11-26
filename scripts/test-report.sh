@@ -4,7 +4,7 @@
 #
 # This is the single Qt execution path: CI and local verification both use it.
 # It owns optional configuration, the staged `pictura`-first build, the Qt Test
-# build tail, both self-test captures, stale-result cleanup, CTest selection,
+# build tail, the self-test capture, stale-result cleanup, CTest selection,
 # missing-report validation, reporter invocation, and stage timings. At most one
 # `cmake --build` runs against the build tree at a time.
 #
@@ -15,11 +15,11 @@
 #   --build                 build `pictura`, then the remaining targets
 #   --cmake-arg ARG         extra configure argument (repeatable)
 #
-# PICTURA_QT_SELFTEST_OVERLAP=1 lets the self-tests overlap the Qt Test build
+# PICTURA_QT_SELFTEST_OVERLAP=1 lets the self-test overlap the Qt Test build
 # tail. It defaults off until #1570 measures it on four vCPUs.
 #
 # Stage order: nextest (unless --qt-only), configure, stale cleanup, CTest
-# registration, `pictura` build, both self-tests, Qt Test build tail, CTest,
+# registration, `pictura` build, the self-test, Qt Test build tail, CTest,
 # report. Exits with the first non-zero stage status in that order; the reporter
 # always runs first so test names and missing reports are never lost.
 
@@ -179,7 +179,6 @@ junit="target/nextest/default/junit.xml"
 nextest_rc=0
 configure_rc=0
 pictura_rc=0
-selftest_bare_rc=0
 selftest_document_rc=0
 tail_rc=0
 ctest_rc=0
@@ -244,20 +243,14 @@ fi
 [ "$pictura_rc" -eq 0 ] || build_ready=0
 
 selftest_args=()
-bare_pid=""
 document_pid=""
 if [ "$build_ready" -eq 1 ] && [ -x ./build/pictura ]; then
     echo "== app self-test =="
-    start_stage selftest_bare "$tmp/selftest-bare.log" \
-        ./build/pictura --headless --self-test
-    bare_pid=$STAGE_PID
-    # The two invocations are independent and isolate their own state home, so
-    # they overlap each other.
     start_stage selftest_document "$tmp/selftest-psd.log" \
         ./build/pictura --headless --self-test \
         crates/pictura-codec/tests/fixtures/two_layers.psd
     document_pid=$STAGE_PID
-    selftest_args=(--selftest "$tmp/selftest-bare.log" --selftest "$tmp/selftest-psd.log")
+    selftest_args=(--selftest "$tmp/selftest-psd.log")
 elif [ "$build_ready" -ne 1 ]; then
     echo "== app self-test == (skipped: build failed)"
 elif [ "$build" -eq 1 ]; then
@@ -267,9 +260,6 @@ else
 fi
 
 wait_selftests() {
-    reap_stage "$bare_pid" selftest_bare
-    selftest_bare_rc=$STAGE_RC
-    bare_pid=""
     reap_stage "$document_pid" selftest_document
     selftest_document_rc=$STAGE_RC
     document_pid=""
@@ -279,7 +269,7 @@ ctest_allowed=$build_ready
 tail_pid=""
 if [ "$build" -eq 1 ] && [ "$ctest_allowed" -eq 1 ] &&
     [ "${PICTURA_QT_SELFTEST_OVERLAP:-0}" = "1" ]; then
-    echo "== qt build tail == (overlapped with the self-tests)"
+    echo "== qt build tail == (overlapped with the self-test)"
     # The overlapped tail is the only background build writer; the `pictura`
     # build has already been reaped, so there is never a second writer.
     start_stage qt_build_tail - \
@@ -366,7 +356,7 @@ print_timing report "$started"
 
 status=0
 for rc in "$nextest_rc" "$configure_rc" "$pictura_rc" \
-    "$selftest_bare_rc" "$selftest_document_rc" "$tail_rc" \
+    "$selftest_document_rc" "$tail_rc" \
     "$ctest_rc" "$report_rc"; do
     if [ "$rc" -ne 0 ]; then
         status=$rc

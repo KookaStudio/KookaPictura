@@ -319,17 +319,22 @@ def validate_selftest_stream(text, label):
 def merge_selftest_streams(texts):
     """Merge self-test streams, deduping checks by (suite, name).
 
-    A check present in several runs is counted once. The last stream's status
-    wins only among PASS and SKIP: a FAIL in any capture stays a failure, so a
-    later passing run cannot erase an earlier red one. Layer totals are
+    A single complete stream keeps its SUMMARY as the layer total. A check
+    present in several runs is counted once. The last stream's status wins only
+    among PASS and SKIP: a FAIL in any capture stays a failure, so a later
+    passing run cannot erase an earlier red one. Multi-stream layer totals are
     recomputed from the merged unique checks. Returns ({suite: Counts}, totals,
     [(label, message)], entries) where ``entries`` is
     ``[(suite, name, status, detail)]`` in stream order.
     """
+    texts = list(texts)
+    single_summary = None
     order = []
     merged = {}
     for text in texts:
-        stream_order, checks, _summary = parse_selftest_stream(text)
+        stream_order, checks, summary = parse_selftest_stream(text)
+        if len(texts) == 1:
+            single_summary = summary
         for key in stream_order:
             if key not in merged:
                 order.append(key)
@@ -363,6 +368,8 @@ def merge_selftest_streams(texts):
             failures.append((label, record["message"]))
 
     totals = sum_counts(suites)
+    if single_summary is not None:
+        totals = single_summary
     return suites, totals, failures, entries
 
 
@@ -563,11 +570,6 @@ def build_layers(args, errors):
             captures.append(summary)
         if texts:
             suites, totals, selftest_failures, entries = merge_selftest_streams(texts)
-            # One capture's own SUMMARY is authoritative: a check that passes and
-            # then fails is two tokens but one check, so the deduped count would
-            # under-report the passes the run itself counted.
-            if len(texts) == 1 and captures[0] is not None:
-                totals = captures[0]
             if suites or totals.total():
                 layers.append(
                     Layer(
@@ -820,6 +822,56 @@ def run_self_check():
     suites, totals, _, _ = merge_selftest_streams([SELFTEST_BARE])
     assert (totals.passed, totals.failed, totals.skipped) == (2, 0, 0), totals
 
+    shared_tokens = "".join(
+        f"pictura self-test: PASS core {name} ok\n"
+        for name in ("shared", "common")
+    )
+    document_tokens = "".join(
+        f"pictura self-test: PASS core document_{index:02d} ok\n"
+        for index in range(36)
+    )
+    legacy_bare = (
+        shared_tokens
+        + "pictura self-test: PASS core fresh_white ok\n"
+        + "pictura self-test: SUMMARY passed=3 failed=0 skipped=0\n"
+    )
+    legacy_document = (
+        shared_tokens
+        + document_tokens
+        + "pictura self-test: SUMMARY passed=38 failed=0 skipped=0\n"
+    )
+    combined = (
+        shared_tokens
+        + "pictura self-test: PASS core fresh_white ok\n"
+        + document_tokens
+        + "pictura self-test: SUMMARY passed=39 failed=0 skipped=0\n"
+    )
+    single_suites, single_totals, single_failures, single_entries = parse_selftest(combined)
+    legacy_suites, legacy_totals, legacy_failures, legacy_entries = merge_selftest_streams(
+        [legacy_bare, legacy_document]
+    )
+    assert single_entries == legacy_entries, (single_entries, legacy_entries)
+    assert {
+        name: (counts.passed, counts.failed, counts.skipped)
+        for name, counts in single_suites.items()
+    } == {
+        name: (counts.passed, counts.failed, counts.skipped)
+        for name, counts in legacy_suites.items()
+    }
+    assert (
+        single_totals.passed,
+        single_totals.failed,
+        single_totals.skipped,
+    ) == (
+        legacy_totals.passed,
+        legacy_totals.failed,
+        legacy_totals.skipped,
+    )
+    assert (single_totals.passed, single_totals.failed, single_totals.skipped) == (39, 0, 0)
+    assert len(single_entries) == 39, single_entries
+    assert sum(entry[1] == "fresh_white" for entry in single_entries) == 1
+    assert not single_failures and not legacy_failures
+
     # Truncation: a capture that never reached its SUMMARY, end to end through
     # build_layers (which records it in errors) and exit_code.
     truncated = "pictura self-test: PASS core only_ran ok\n"
@@ -922,6 +974,10 @@ def run_self_check():
         "pictura self-test: FAIL core two_phase 9 late\n"
         "pictura self-test: SUMMARY passed=1 failed=1 skipped=0\n"
     )
+    suites, totals, merge_failures, entries = merge_selftest_streams([pass_then_fail])
+    assert (totals.passed, totals.failed, totals.skipped) == (1, 1, 0), totals
+    assert entries == [("core", "two_phase", "fail", "")], entries
+    assert merge_failures == [("core::two_phase (exit 9)", "late")], merge_failures
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "single.log")
         with open(path, "w", encoding="utf-8") as handle:
