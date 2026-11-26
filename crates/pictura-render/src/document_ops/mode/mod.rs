@@ -7,9 +7,9 @@
 //! `source_palette` / `source_depth` stores the PSD writer already re-emits, so
 //! a converted document saves in its new mode instead of only being relabelled.
 //!
-//! ponytail: Duotone (no ink model to author), the Color
-//! Table, Bitmap Halftone Screen / Custom Pattern, and Grayscale-from-Bitmap's
-//! size ratio are not converted; CMYK/Lab are profile-free (no ICC working
+//! ponytail: Duotone (no ink model to author), the Color Table, and
+//! Grayscale-from-Bitmap's size ratio are not converted. CMYK/Lab are
+//! profile-free (no ICC working
 //! space); a conversion into CMYK/Lab of a 16-bit document, or out of one,
 //! passes through the 8-bit working planes.
 
@@ -18,7 +18,10 @@ mod multichannel;
 mod planes;
 mod stream;
 
-pub use flat::{convert_to_bitmap, convert_to_indexed, indexed_exact_available, BitmapMethod};
+pub use flat::{
+    convert_to_bitmap, convert_to_indexed, indexed_exact_available, BitmapMethod, HalftoneScreen,
+    HalftoneShape,
+};
 
 use std::borrow::Cow;
 

@@ -266,7 +266,7 @@ fn bitmap_conversion_clears_display_info() {
 fn bitmap_dithers_keep_the_mean_tone() {
     let gray = vec![64u8; 64 * 64];
     for method in [BitmapMethod::Pattern, BitmapMethod::Diffusion] {
-        let whites = flat::bitmap_whites(&gray, 64, method);
+        let whites = flat::bitmap_whites(&gray, 64, method, 72.0);
         let share = whites.iter().filter(|&&w| w).count() as f64 / whites.len() as f64;
         assert!(
             (share - 0.25).abs() < 0.03,
@@ -1033,5 +1033,292 @@ fn multichannel_geometry_keeps_plates_layerless_and_savable() {
         assert!(!crate::rotate_document_in(&mut source, 17.0, (1.0, 1.0)));
         assert_eq!(source, before);
         assert!(crate::perspective_crop_refusal(&source).is_some());
+    }
+}
+
+fn bitmap_gray_doc(width: u32, height: u32, gray: &[u8]) -> Document {
+    let pixels: Vec<_> = gray.iter().map(|&value| [value; 3]).collect();
+    let mut doc = rgb_doc(width, height, &pixels);
+    convert_mode(&mut doc, ColorMode::Grayscale).unwrap();
+    doc
+}
+
+#[test]
+fn bitmap_halftone_rotates_and_repeats_at_document_resolution() {
+    let mut gray = bitmap_gray_doc(16, 16, &[128; 256]);
+    pictura_codec::set_document_resolution(
+        &mut gray,
+        pictura_codec::Resolution {
+            ppi: 72.0,
+            per_cm: false,
+        },
+    );
+    let mut horizontal = gray.clone();
+    convert_to_bitmap(
+        &mut horizontal,
+        BitmapMethod::HalftoneScreen(HalftoneScreen {
+            frequency: 9.0,
+            per_cm: false,
+            angle: 0.0,
+            shape: HalftoneShape::Line,
+        }),
+    )
+    .unwrap();
+    let mut vertical = gray;
+    convert_to_bitmap(
+        &mut vertical,
+        BitmapMethod::HalftoneScreen(HalftoneScreen {
+            frequency: 9.0,
+            per_cm: false,
+            angle: 90.0,
+            shape: HalftoneShape::Line,
+        }),
+    )
+    .unwrap();
+
+    let stripe = [255, 255, 0, 0, 0, 0, 255, 255];
+    let (rows, _) = horizontal.composite.data[..256].as_chunks::<16>();
+    for (y, row) in rows.iter().enumerate() {
+        assert_eq!(row, &[stripe[y % 8]; 16]);
+    }
+    for row in vertical.composite.data[..256].as_chunks::<16>().0 {
+        assert_eq!(&row[..8], &stripe);
+        assert_eq!(&row[8..], &stripe);
+    }
+    assert_eq!(document_bit_depth(&vertical), BitDepth::One);
+    assert!(vertical.layers.is_empty());
+    assert_eq!(roundtrip(&vertical).composite.data, vertical.composite.data);
+}
+
+#[test]
+fn bitmap_custom_pattern_tiles_from_canvas_origin() {
+    let pattern = pictura_codec::PatternPixels {
+        pattern_id: "test tile".into(),
+        width: 2,
+        height: 3,
+        rgba: vec![
+            32, 32, 32, 255, 224, 224, 224, 255, 224, 224, 224, 255, 32, 32, 32, 255, 32, 32, 32,
+            255, 32, 32, 32, 255,
+        ],
+    };
+    let mut doc = bitmap_gray_doc(5, 7, &[128; 35]);
+    convert_to_bitmap(&mut doc, BitmapMethod::CustomPattern(Some(&pattern))).unwrap();
+    let tile = [[255, 0], [0, 255], [255, 255]];
+    for (y, row) in doc.composite.data[..35]
+        .as_chunks::<5>()
+        .0
+        .iter()
+        .enumerate()
+    {
+        for (x, &white) in row.iter().enumerate() {
+            assert_eq!(white, tile[y % 3][x % 2]);
+        }
+    }
+}
+
+#[test]
+fn bitmap_invalid_screen_or_pattern_does_not_flatten() {
+    let pattern = pictura_codec::PatternPixels {
+        pattern_id: "truncated".into(),
+        width: 2,
+        height: 3,
+        rgba: vec![0; 2],
+    };
+    let mut doc = bitmap_gray_doc(4, 2, &[128; 8]);
+    let mut hidden = doc.layers[0].clone();
+    hidden.visible = false;
+    hidden.background = false;
+    doc.layers.push(hidden).unwrap();
+    let original = doc.composite.data.clone();
+    for method in [
+        BitmapMethod::HalftoneScreen(HalftoneScreen {
+            frequency: f64::INFINITY,
+            per_cm: false,
+            angle: 0.0,
+            shape: HalftoneShape::Round,
+        }),
+        BitmapMethod::CustomPattern(Some(&pattern)),
+        BitmapMethod::CustomPattern(None),
+    ] {
+        assert!(convert_to_bitmap(&mut doc, method).is_err());
+        assert_eq!(document_color_mode(&doc), ColorMode::Grayscale);
+        assert_eq!(doc.layers.len(), 2);
+        assert_eq!(doc.composite.data, original);
+    }
+}
+
+#[test]
+fn bitmap_screen_units_shapes_rotation_and_endpoints() {
+    let mut gray = [175; 32 * 32];
+    gray[0] = 0;
+    gray[1] = 255;
+    let source = bitmap_gray_doc(32, 32, &gray);
+    let render = |options| {
+        let mut doc = source.clone();
+        convert_to_bitmap(&mut doc, BitmapMethod::HalftoneScreen(options)).unwrap();
+        doc.composite.data.clone()
+    };
+    let opts = HalftoneScreen {
+        frequency: 10.125 * 2.54,
+        per_cm: false,
+        angle: 23.0,
+        shape: HalftoneShape::Round,
+    };
+    let mut outputs = Vec::new();
+    for shape in [
+        HalftoneShape::Round,
+        HalftoneShape::Diamond,
+        HalftoneShape::Ellipse,
+        HalftoneShape::Line,
+        HalftoneShape::Square,
+        HalftoneShape::Cross,
+    ] {
+        let options = HalftoneScreen { shape, ..opts };
+        let output = render(options);
+        assert_eq!(&output[..2], &[0, 255]);
+        assert!(output[2..1024].contains(&0));
+        assert!(output[2..1024].contains(&255));
+        assert!(!outputs.contains(&output), "{shape:?}");
+        assert_eq!(
+            render(HalftoneScreen {
+                frequency: 10.125,
+                per_cm: true,
+                ..options
+            }),
+            output
+        );
+        assert_ne!(
+            render(HalftoneScreen {
+                angle: 0.0,
+                ..options
+            }),
+            output
+        );
+        outputs.push(output);
+    }
+}
+
+#[test]
+fn bitmap_screen_boundaries_and_nonfinite_are_checked() {
+    let source = bitmap_gray_doc(2, 2, &[128; 4]);
+    for (frequency, per_cm, angle, valid) in [
+        (1.0, false, -180.0, true),
+        (999.999, false, 180.0, true),
+        (0.4, true, -180.0, true),
+        (400.0, true, 180.0, true),
+        (0.999, false, 0.0, false),
+        (1000.0, false, 0.0, false),
+        (0.399, true, 0.0, false),
+        (400.01, true, 0.0, false),
+        (9.0, false, -180.01, false),
+        (9.0, false, 180.01, false),
+        (9.0, false, f64::NAN, false),
+        (f64::INFINITY, true, 0.0, false),
+    ] {
+        let mut doc = source.clone();
+        assert_eq!(
+            convert_to_bitmap(
+                &mut doc,
+                BitmapMethod::HalftoneScreen(HalftoneScreen {
+                    frequency,
+                    per_cm,
+                    angle,
+                    shape: HalftoneShape::Round,
+                })
+            )
+            .is_ok(),
+            valid
+        );
+        if !valid {
+            assert_eq!(document_color_mode(&doc), ColorMode::Grayscale);
+            assert_eq!(doc.composite.data, source.composite.data);
+        }
+    }
+}
+
+#[test]
+fn bitmap_pattern_endpoints_and_missing_or_invalid_tile() {
+    let mut doc = bitmap_gray_doc(4, 1, &[0, 255, 128, 128]);
+    let tile = pictura_codec::PatternPixels {
+        pattern_id: "extremes".into(),
+        width: 2,
+        height: 1,
+        rgba: vec![0, 0, 0, 255, 0, 0, 0, 0],
+    };
+    let mut invalid = tile.clone();
+    invalid.height = 0;
+    for pattern in [None, Some(&invalid)] {
+        assert!(convert_to_bitmap(&mut doc, BitmapMethod::CustomPattern(pattern)).is_err());
+        assert_eq!(document_color_mode(&doc), ColorMode::Grayscale);
+        assert_eq!(&doc.composite.data[..4], &[0, 255, 128, 128]);
+    }
+    convert_to_bitmap(&mut doc, BitmapMethod::CustomPattern(Some(&tile))).unwrap();
+    assert_eq!(&doc.composite.data[..4], &[0, 255, 255, 0]);
+}
+
+#[test]
+fn bitmap_screen_shapes_match_independent_area_ranks() {
+    // Count each score directly instead of sorting or using the threshold table.
+    fn score(shape: HalftoneShape, x: usize, y: usize) -> usize {
+        match shape {
+            HalftoneShape::Round => x * x + y * y,
+            HalftoneShape::Diamond => x + y,
+            HalftoneShape::Ellipse => x * x + 3 * y * y,
+            HalftoneShape::Line => y,
+            HalftoneShape::Square => x.max(y),
+            HalftoneShape::Cross => x.max(y) + 3 * x.min(y),
+        }
+    }
+    let shapes = [
+        HalftoneShape::Round,
+        HalftoneShape::Diamond,
+        HalftoneShape::Ellipse,
+        HalftoneShape::Line,
+        HalftoneShape::Square,
+        HalftoneShape::Cross,
+    ];
+    let points = [(0usize, 0usize), (1, 2), (3, 5), (7, 1), (11, 9), (15, 15)];
+    for shape in shapes {
+        for (angle, sin, cos) in [
+            (0.0, 0.0_f64, 1.0_f64),
+            (23.0, 0.39073112848927377, 0.9205048534524404),
+        ] {
+            for gray in [48u8, 96, 160, 208] {
+                let result = flat::bitmap_whites(
+                    &vec![gray; 16 * 16],
+                    16,
+                    BitmapMethod::HalftoneScreen(HalftoneScreen {
+                        frequency: 9.0,
+                        per_cm: false,
+                        angle,
+                        shape,
+                    }),
+                    72.0,
+                );
+                for (x, y) in points {
+                    let px = x as f64 + 0.5;
+                    let py = y as f64 + 0.5;
+                    let u = (((px * cos + py * sin) / 8.0).rem_euclid(1.0) * 128.0) as usize;
+                    let v = (((py * cos - px * sin) / 8.0).rem_euclid(1.0) * 128.0) as usize;
+                    let distance = |i: usize| (2 * i + 1).abs_diff(128);
+                    let target = score(shape, distance(u), distance(v));
+                    let mut lower = 0usize;
+                    let mut equal = 0usize;
+                    for cy in 0..128 {
+                        for cx in 0..128 {
+                            let other = score(shape, distance(cx), distance(cy));
+                            lower += usize::from(other < target);
+                            equal += usize::from(other == target);
+                        }
+                    }
+                    let threshold = 255 - ((2 * lower + equal) * 128 / (128 * 128)) as u8;
+                    assert_eq!(
+                        result[y * 16 + x],
+                        gray > threshold,
+                        "{shape:?} angle {angle} at ({x},{y}) gray {gray}"
+                    );
+                }
+            }
+        }
     }
 }

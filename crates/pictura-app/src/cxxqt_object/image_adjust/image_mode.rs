@@ -18,6 +18,9 @@ pub mod ffi {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
 
+        include!("cxx-qt-lib/qbytearray.h");
+        type QByteArray = cxx_qt_lib::QByteArray;
+
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
         type PictureView = super::PictureView;
@@ -97,5 +100,22 @@ pub mod ffi {
         /// Threshold, 1 Pattern Dither, 2 Diffusion Dither. Flattens to a flat
         /// image; one "Convert Mode" state; false when refused.
         fn convert_to_bitmap(view: Pin<&mut PictureView>, method: i32) -> bool;
+
+        /// A physical halftone screen at the unchanged document resolution.
+        fn convert_to_bitmap_halftone(
+            view: Pin<&mut PictureView>,
+            frequency: f64,
+            per_cm: bool,
+            angle: f64,
+            shape: i32,
+        ) -> bool;
+
+        /// Screen through an embedded or built-in pattern, or through the
+        /// recorded native snapshot of an imported preset.
+        fn convert_to_bitmap_pattern(
+            view: Pin<&mut PictureView>,
+            pattern_id: &QString,
+            native: &QByteArray,
+        ) -> bool;
     }
 }

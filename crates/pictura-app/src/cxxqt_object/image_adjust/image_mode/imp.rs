@@ -8,10 +8,10 @@ use crate::cxxqt_object::save_format::SaveGifOptions;
 use crate::cxxqt_object::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QString;
-use pictura_codec::{ColorReduction, Dither, PaletteOptions};
+use cxx_qt_lib::{QByteArray, QString};
+use pictura_codec::{ColorReduction, Dither, PaletteOptions, PatternPixels};
 use pictura_core::{BitDepth, ColorMode, Document};
-use pictura_render::BitmapMethod;
+use pictura_render::{BitmapMethod, HalftoneScreen, HalftoneShape};
 
 pub(super) const HISTORY_LABEL: &str = "Convert Mode";
 
@@ -70,7 +70,7 @@ pub(crate) fn palette_options(
     }
 }
 
-pub(super) fn bitmap_method(method: i32) -> BitmapMethod {
+pub(super) fn bitmap_method(method: i32) -> BitmapMethod<'static> {
     match method {
         1 => BitmapMethod::Pattern,
         2 => BitmapMethod::Diffusion,
@@ -365,6 +365,72 @@ pub(super) fn convert_to_bitmap(view: Pin<&mut PictureView>, method: i32) -> boo
     let method = bitmap_method(method);
     commit(view, move |doc| {
         pictura_render::convert_to_bitmap(doc, method)
+    })
+}
+
+pub(super) fn convert_to_bitmap_halftone(
+    view: Pin<&mut PictureView>,
+    frequency: f64,
+    per_cm: bool,
+    angle: f64,
+    shape: i32,
+) -> bool {
+    let shapes = [
+        HalftoneShape::Round,
+        HalftoneShape::Diamond,
+        HalftoneShape::Ellipse,
+        HalftoneShape::Line,
+        HalftoneShape::Square,
+        HalftoneShape::Cross,
+    ];
+    let Some(&shape) = usize::try_from(shape).ok().and_then(|i| shapes.get(i)) else {
+        return false;
+    };
+    let options = HalftoneScreen {
+        frequency,
+        per_cm,
+        angle,
+        shape,
+    };
+    commit(view, move |doc| {
+        pictura_render::convert_to_bitmap(doc, BitmapMethod::HalftoneScreen(options))
+    })
+}
+
+fn bitmap_pattern(doc: &Document, id: &str, native: &[u8]) -> Option<PatternPixels> {
+    if id.is_empty() {
+        return None;
+    }
+    if native.is_empty() {
+        return pictura_codec::decode_patterns(doc)
+            .into_iter()
+            .find(|pattern| pattern.pattern_id == id)
+            .or_else(|| pictura_render::builtin_pattern_by_id(id));
+    }
+
+    use pictura_codec::preset_library::{decode, document_pattern_id, Format, Kind, Payload};
+
+    let mut entries = decode(Kind::Patterns, Format::Native, native)
+        .ok()?
+        .library
+        .entries
+        .into_iter();
+    let Payload::Pattern(pattern) = entries.next()?.payload else {
+        return None;
+    };
+    (entries.next().is_none() && document_pattern_id(&pattern) == id).then_some(pattern)
+}
+
+pub(super) fn convert_to_bitmap_pattern(
+    view: Pin<&mut PictureView>,
+    pattern_id: &QString,
+    native: &QByteArray,
+) -> bool {
+    let id = pattern_id.to_string();
+    let native = native.as_slice().to_vec();
+    commit(view, move |doc| {
+        let pattern = bitmap_pattern(doc, &id, &native);
+        pictura_render::convert_to_bitmap(doc, BitmapMethod::CustomPattern(pattern.as_ref()))
     })
 }
 

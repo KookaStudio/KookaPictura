@@ -1,10 +1,14 @@
 // Image > Mode: color-mode and bit-depth conversions, ported from photorust.
 
-#include <QtTest/QtTest>
 #include <QtCore/QTimer>
+#include <QtTest/QtTest>
 #include <QtWidgets/QAbstractButton>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QComboBox>
+#include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QMessageBox>
+
+#include <functional>
 
 #include "bitmap_mode_dialog.h"
 #include "commands.h"
@@ -34,11 +38,15 @@ private slots:
     void bitmapNeedsGrayscaleAndSavesAsBitmap();
     void depthConversionsSaveTheirDepth();
     void indexedDialogEnablesOnlyMeaningfulOptions();
-    void bitmapDialogOffersThreeMethods();
+    void bitmapDialogShowsMethodOptions();
+    void recordedBitmapMethodsReplayTheirOptions();
+    void modalBitmapReplayPrefillsEditsAndCancels();
+    void silentBitmapReplayRefusesMissingPattern();
 
 private:
     // A new white RGB document filled with `color`; returns its view.
     pictura::PictureView* newFilled(const QColor& color);
+    pictura::PictureView* newBitmapSource();
     // Save `view` to a temporary PSD, reopen it in a fresh view, and report the
     // reopened document's mode and depth.
     QPair<QString, int> reopened(pictura::PictureView* view);
@@ -361,15 +369,225 @@ void ImageModeTest::indexedDialogEnablesOnlyMeaningfulOptions()
     QVERIFY(!exact.findChild<QComboBox*>(QStringLiteral("indexedDither"))->isEnabled());
 }
 
-void ImageModeTest::bitmapDialogOffersThreeMethods()
+namespace {
+
+void answerBitmapDialog(QTimer& timer, const std::function<bool(pictura::BitmapModeDialog&)>& answer)
 {
-    pictura::BitmapModeDialog dialog;
+    QObject::connect(&timer, &QTimer::timeout, &timer, [&timer, answer] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (!widget->isVisible()) {
+                continue;
+            }
+            if (auto* dialog = qobject_cast<pictura::BitmapModeDialog*>(widget)) {
+                timer.stop();
+                if (answer(*dialog)) {
+                    dialog->accept();
+                } else {
+                    dialog->reject();
+                }
+                return;
+            }
+            if (auto* warning = qobject_cast<QMessageBox*>(widget);
+                warning && warning->text() == QStringLiteral("Flatten layers?")) {
+                if (auto* ok = warning->button(QMessageBox::Ok)) {
+                    ok->click();
+                    return;
+                }
+            }
+        }
+    });
+    timer.start(2);
+}
+
+QVector<quint32> bitmapPixels(const pictura::PictureView& view)
+{
+    QVector<quint32> pixels;
+    for (int y = 0; y < 12; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            pixels.append(view.composite_argb(x, y));
+        }
+    }
+    return pixels;
+}
+
+} // namespace
+
+pictura::PictureView* ImageModeTest::newBitmapSource()
+{
+    auto* view = newFilled(QColor(128, 128, 128));
+    if (!view || !pictura::convert_image_mode(*view, QStringLiteral("grayscale"))) {
+        return nullptr;
+    }
+    window_->registry()->refresh();
+    return view;
+}
+
+void ImageModeTest::bitmapDialogShowsMethodOptions()
+{
+    auto* view = newBitmapSource();
+    QVERIFY(view);
+    pictura::BitmapModeDialog dialog(*view);
     auto* method = dialog.findChild<QComboBox*>(QStringLiteral("bitmapMethod"));
-    QVERIFY(method);
-    QCOMPARE(method->count(), 3);
+    auto* screen = dialog.findChild<QWidget*>(QStringLiteral("bitmapScreenOptions"));
+    auto* pattern = dialog.findChild<QWidget*>(QStringLiteral("bitmapPatternOptions"));
+    auto* unit = dialog.findChild<QComboBox*>(QStringLiteral("bitmapFrequencyUnit"));
+    auto* frequency = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapFrequency"));
+    auto* shape = dialog.findChild<QComboBox*>(QStringLiteral("bitmapShape"));
+    QVERIFY(method && screen && pattern && unit && frequency && shape);
+    QCOMPARE(method->count(), 5);
     QCOMPARE(dialog.method(), 0);
-    method->setCurrentIndex(2);
+    QVERIFY(screen->isHidden());
+    QVERIFY(pattern->isHidden());
+
+    method->setCurrentIndex(method->findData(3));
+    QVERIFY(!screen->isHidden());
+    QVERIFY(pattern->isHidden());
+    QCOMPARE(shape->count(), 6);
+    QCOMPARE(frequency->minimum(), 1.0);
+    QCOMPARE(frequency->maximum(), 999.999);
+    unit->setCurrentIndex(1);
+    QCOMPARE(frequency->minimum(), 0.4);
+    QCOMPARE(frequency->maximum(), 400.0);
+
+    method->setCurrentIndex(method->findData(4));
+    QVERIFY(screen->isHidden());
+    QVERIFY(!pattern->isHidden());
+    method->setCurrentIndex(method->findData(2));
     QCOMPARE(dialog.method(), 2);
+    QVERIFY(screen->isHidden());
+    QVERIFY(pattern->isHidden());
+    closeActive();
+}
+
+void ImageModeTest::recordedBitmapMethodsReplayTheirOptions()
+{
+    const QString id = QString::fromLatin1(pictura::command_ids::ImageModeBitmap);
+    auto* registry = window_->registry();
+    for (int selected : {3, 4}) {
+        auto* view = newBitmapSource();
+        QVERIFY(view);
+        const int originalHistory = view->history_count();
+        pictura::CommandParams recorded;
+        registry->setRecordingSink([&](const QString& commandId, const auto& params) {
+            if (commandId == id) {
+                recorded = params;
+            }
+        });
+        QTimer timer;
+        answerBitmapDialog(timer, [selected](pictura::BitmapModeDialog& dialog) {
+            auto* method = dialog.findChild<QComboBox*>(QStringLiteral("bitmapMethod"));
+            method->setCurrentIndex(method->findData(selected));
+            if (selected == 3) {
+                dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapFrequency"))->setValue(9.0);
+                dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapAngle"))->setValue(23.0);
+                dialog.findChild<QComboBox*>(QStringLiteral("bitmapShape"))->setCurrentIndex(3);
+            } else {
+                auto* pattern = dialog.findChild<QComboBox*>(QStringLiteral("bitmapPattern"));
+                pattern->setCurrentIndex(pattern->findData(QStringLiteral("Pictura Checkerboard")));
+            }
+            return true;
+        });
+        const bool dispatched = registry->dispatch(id);
+        registry->setRecordingSink({});
+        QVERIFY(dispatched);
+        QCOMPARE(recorded.values.value(QStringLiteral("method")).toInt(), selected);
+        QCOMPARE(view->history_count(), originalHistory + 1);
+        QCOMPARE(pictura::image_depth_bits(*view), 1);
+        const auto expected = bitmapPixels(*view);
+        QVERIFY(expected.contains(qRgb(0, 0, 0)));
+        QVERIFY(expected.contains(qRgb(255, 255, 255)));
+        closeActive();
+
+        view = newBitmapSource();
+        QVERIFY(view);
+        const int replayHistory = view->history_count();
+        QVERIFY(registry->executeRecorded(id, recorded));
+        QCOMPARE(bitmapPixels(*view), expected);
+        QCOMPARE(view->history_count(), replayHistory + 1);
+        QCOMPARE(view->history_label(replayHistory), QStringLiteral("Convert Mode"));
+        closeActive();
+    }
+}
+
+void ImageModeTest::modalBitmapReplayPrefillsEditsAndCancels()
+{
+    const QString id = QString::fromLatin1(pictura::command_ids::ImageModeBitmap);
+    auto* registry = window_->registry();
+    for (int selected : {3, 4}) {
+        auto* view = newBitmapSource();
+        QVERIFY(view);
+        const int history = view->history_count();
+        pictura::CommandParams params;
+        params.values = {
+            {QStringLiteral("method"), selected},
+            {QStringLiteral("frequency"), 11.0},
+            {QStringLiteral("perCm"), true},
+            {QStringLiteral("angle"), -22.0},
+            {QStringLiteral("shape"), 4},
+            {QStringLiteral("patternId"), QStringLiteral("Pictura Checkerboard")},
+        };
+        bool prefilled = false;
+        QTimer accepted;
+        answerBitmapDialog(accepted, [&](pictura::BitmapModeDialog& dialog) {
+            if (dialog.method() != selected) {
+                return false;
+            }
+            if (selected == 3) {
+                auto* frequency = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapFrequency"));
+                const auto* unit = dialog.findChild<QComboBox*>(QStringLiteral("bitmapFrequencyUnit"));
+                const auto* angle = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapAngle"));
+                const auto* shape = dialog.findChild<QComboBox*>(QStringLiteral("bitmapShape"));
+                prefilled = frequency->value() == 11.0 && unit->currentIndex() == 1
+                            && angle->value() == -22.0 && shape->currentIndex() == 4;
+                frequency->setValue(4.0);
+            } else {
+                auto* pattern = dialog.findChild<QComboBox*>(QStringLiteral("bitmapPattern"));
+                prefilled = pattern->currentData().toString() == QStringLiteral("Pictura Checkerboard");
+                pattern->setCurrentIndex(pattern->findData(QStringLiteral("Pictura Diagonal")));
+            }
+            return true;
+        });
+        QVERIFY(registry->executeRecorded(id, &params, pictura::CommandMode::Modal));
+        QVERIFY(prefilled);
+        QCOMPARE(view->history_count(), history + 1);
+        QCOMPARE(pictura::image_depth_bits(*view), 1);
+        if (selected == 3) {
+            QCOMPARE(params.values.value(QStringLiteral("frequency")).toDouble(), 4.0);
+        } else {
+            QCOMPARE(params.values.value(QStringLiteral("patternId")).toString(),
+                     QStringLiteral("Pictura Diagonal"));
+        }
+        closeActive();
+
+        view = newBitmapSource();
+        QVERIFY(view);
+        const int cancelHistory = view->history_count();
+        const auto before = params.values;
+        QTimer rejected;
+        answerBitmapDialog(rejected, [](auto&) { return false; });
+        QVERIFY(!registry->executeRecorded(id, &params, pictura::CommandMode::Modal));
+        QCOMPARE(params.values, before);
+        QCOMPARE(view->history_count(), cancelHistory);
+        QCOMPARE(pictura::image_mode(*view), QStringLiteral("grayscale"));
+        closeActive();
+    }
+}
+
+void ImageModeTest::silentBitmapReplayRefusesMissingPattern()
+{
+    auto* view = newBitmapSource();
+    QVERIFY(view);
+    const int history = view->history_count();
+    const auto before = bitmapPixels(*view);
+    pictura::CommandParams params;
+    params.values.insert(QStringLiteral("method"), 4);
+    params.values.insert(QStringLiteral("patternId"), QStringLiteral("missing-test-pattern"));
+    QVERIFY(!window_->registry()->executeRecorded(
+        QString::fromLatin1(pictura::command_ids::ImageModeBitmap), params));
+    QCOMPARE(pictura::image_mode(*view), QStringLiteral("grayscale"));
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(bitmapPixels(*view), before);
+    closeActive();
 }
 
 PICTURA_QT_TEST_MAIN(ImageModeTest)
