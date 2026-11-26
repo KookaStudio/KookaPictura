@@ -257,7 +257,7 @@ fn merge_down_matches_live_imagemagick() {
             .arg(&out)
             .status()
             .expect("run scripts/im_compose.py compose");
-        assert!(status.success(), "im_compose.py compose failed");
+        assert!(status.status.success(), "im_compose.py compose failed");
 
         let reference = std::fs::read(&out).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
