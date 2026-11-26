@@ -105,6 +105,7 @@ private slots:
     void dialogDirectionRotatesAndUndoes();
     void dialogRefusesEmptyAndZero();
     void rulerPrefillsCorrection();
+    void rulerClearsOnlyAfterSuccessfulRotation();
     void interactiveRotationUsesSavedInterpolation();
     void rotationPlaybackUsesRecordedInterpolation();
 
@@ -178,6 +179,7 @@ void ImageRotateTest::rotationRefusalsNameMemory()
     QVERIFY(view);
     const int doc = frame.activeDocumentIndex();
     const int history = view->history_count();
+    pictura::set_ruler(*view, 2.0, 2.0, 16.0, 5.0, false);
     pictura::set_available_memory_for_test(260LL * 1024 * 1024);
     pictura::set_scratch_available_for_test(0);
 
@@ -211,6 +213,7 @@ void ImageRotateTest::rotationRefusalsNameMemory()
         QCOMPARE(view->document_width(), 40);
         QCOMPARE(view->document_height(), 20);
         QCOMPARE(view->history_count(), history);
+        QCOMPARE(pictura::ruler_line(*view).size(), std::size_t(4));
     }
     frame.closeDocument(doc, false);
 }
@@ -307,6 +310,49 @@ void ImageRotateTest::rulerPrefillsCorrection()
     }, dispatch));
     QCOMPARE(angle, 0.0);
     QVERIFY(cw);
+}
+
+void ImageRotateTest::rulerClearsOnlyAfterSuccessfulRotation()
+{
+    pictura::selftest_fixture::DocumentFixture other(
+        *window_, contrastImage(), QStringLiteral("pictura_rotate_other_ruler"));
+    QVERIFY(other.ok());
+    pictura::set_ruler(*other.view, 1.0, 2.0, 5.0, 4.0, false);
+
+    pictura::selftest_fixture::DocumentFixture f(
+        *window_, contrastImage(), QStringLiteral("pictura_rotate_ruler_cleanup"));
+    QVERIFY(f.ok());
+    const auto restoreTool = qScopeGuard([this, tool = window_->activeTool()] {
+        window_->setActiveTool(tool);
+    });
+    window_->setActiveTool(pictura::ToolId::Ruler);
+    f.canvas->mousePressed(QPointF(1, 1), Qt::LeftButton, Qt::NoModifier);
+    f.canvas->mouseMoved(QPointF(11, 3));
+    f.canvas->mouseReleased(QPointF(11, 3));
+    QVERIFY(f.canvas->hasRulerLineForTest());
+    QCOMPARE(pictura::ruler_line(*f.view).size(), std::size_t(4));
+
+    const int history = f.view->history_count();
+    const auto dispatch = [&] { window_->registry()->dispatch(kRotate); };
+    QVERIFY(withRotationDialog(*window_, [](QDialog& dialog) { dialog.reject(); }, dispatch));
+    QVERIFY(f.canvas->hasRulerLineForTest());
+    QCOMPARE(pictura::ruler_line(*f.view).size(), std::size_t(4));
+    QVERIFY(withRotationDialog(*window_, [](QDialog& dialog) { enterAngle(dialog, 0.0); }, dispatch));
+    QVERIFY(f.canvas->hasRulerLineForTest());
+    QCOMPARE(pictura::ruler_line(*f.view).size(), std::size_t(4));
+    QCOMPARE(f.view->history_count(), history);
+
+    QVERIFY(withRotationDialog(*window_, [](QDialog& dialog) { dialog.accept(); }, dispatch));
+    QCOMPARE(f.view->history_count(), history + 1);
+    QVERIFY(!f.canvas->hasRulerLineForTest());
+    QVERIFY(pictura::ruler_line(*f.view).empty());
+
+    const auto otherLine = pictura::ruler_line(*other.view);
+    QCOMPARE(otherLine.size(), std::size_t(4));
+    QCOMPARE(otherLine[0], 1.0);
+    QCOMPARE(otherLine[1], 2.0);
+    QCOMPARE(otherLine[2], 5.0);
+    QCOMPARE(otherLine[3], 4.0);
 }
 
 void ImageRotateTest::storeInterpolation(const QString& interpolation)

@@ -20,6 +20,13 @@ The system SHALL expose `Image > Image Rotation > Arbitrary` with a two-decimal 
 - **THEN** the direction and angle show the correction to the nearer axis, to 0.01°, independently of endpoint order
 - **AND** clearing the line restores the 0° CW default
 
+#### Scenario: Interactive rotation clears the ruler after success [lio_ruler_rotation_cleanup]
+
+- **WHEN** the user starts an interactive Arbitrary rotation with a measured line
+- **THEN** a successful rotation SHALL clear the rotated document's ruler measurement and overlay
+- **AND** cancelling, entering zero, or a failed operation SHALL preserve the measurement and overlay
+- **AND** other documents' ruler measurements SHALL remain unchanged
+
 ## ADDED Requirements
 
 ### Requirement: Arbitrary image-rotation interpolation

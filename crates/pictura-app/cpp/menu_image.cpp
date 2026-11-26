@@ -407,6 +407,10 @@ void MenuRegistrar::wireImageMenu()
         }
         if (runDocumentCommand(dialogParent(), *view, tr("Rotate Canvas"),
                                [&] { rotate_document_arbitrary_with(*view, degrees, interpolation); })) {
+            if (!replay && view && ruler_line(*view).size() == 4) {
+                clear_ruler(*view);
+                refresh();
+            }
             CommandParams command;
             command.values.insert(QStringLiteral("angle"), degrees);
             command.values.insert(QStringLiteral("interpolation"), interpolation);
