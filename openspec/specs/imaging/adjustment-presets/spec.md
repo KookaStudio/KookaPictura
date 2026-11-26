@@ -46,12 +46,12 @@ preset, and MUST show the matching preset's name when the parameters match one.
 
 ### Requirement: Save Preset
 
-The Properties panel menu SHALL offer `Save Preset…` for the CS6 save
-whitelist: Levels, Curves, Exposure, Hue/Saturation, Black & White, Channel
-Mixer, and Selective Color. Saving SHALL prompt for a name, append the current
-adjustment block to the kind's saved presets, and reject an empty name or the
-reserved names `Default` and `Custom`. The item MUST be disabled for every other
-kind.
+The Properties panel menu SHALL offer `Save Preset…` for Levels, Curves,
+Exposure, Hue/Saturation, Black & White, Channel Mixer, Selective Color, and
+Vibrance. Vibrance is a Pictura extension to the CS6 preset list. Saving SHALL
+prompt for a name, append the current adjustment block to the kind's saved
+presets, and reject an empty name or the reserved names `Default` and
+`Custom`. The item MUST be disabled for every other kind.
 
 #### Scenario: Saving appends and persists [preset_save_persists]
 
@@ -68,13 +68,14 @@ kind.
 
 #### Scenario: Save is whitelisted [preset_save_whitelist]
 
-- **WHEN** the active adjustment is Vibrance or Photo Filter
+- **WHEN** the active adjustment is Photo Filter
 - **THEN** `Save Preset…` is disabled, while Levels, Curves, Exposure,
-  Hue/Saturation, Black & White, Channel Mixer, and Selective Color enable it
+  Hue/Saturation, Black & White, Channel Mixer, Selective Color, and
+  Vibrance enable it
 
 ### Requirement: Load Preset
 
-The Properties panel menu SHALL offer `Load Preset…` for the same whitelist
+The Properties panel menu SHALL offer `Load Preset…` for the same saveable
 kinds, listing the saved presets for the active kind and applying the chosen
 one as a preset application. Each supported Image > Adjustments dialog SHALL
 list the same saved presets in its Preset menu and apply them to its scratch
@@ -95,6 +96,12 @@ block.
 - **WHEN** a user saves a Selective Color adjustment with a non-default method and per-family values through the Properties panel
 - **THEN** choosing that preset through the Properties menu restores those settings
 - **AND** choosing the same preset in the Selective Color dialog applies those settings to its scratch block
+
+#### Scenario: Both Vibrance values are reusable [vibrance_preset_round_trip]
+
+- **WHEN** a named Vibrance preset is saved from Properties
+- **THEN** both values can be restored in one history state from a fresh
+  Properties panel and are available in the direct dialog's Preset menu
 
 ### Requirement: Built-in presets
 

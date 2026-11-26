@@ -313,7 +313,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] The Shadows/Highlights local-surround operator and its eight controls
       (#562)
 - [x] The Threshold histogram under the slider (#563)
-- [ ] Vibrance Auto and presets (#564)
+- [x] Vibrance Auto and presets (#564)
 - [x] Smoother, Sharper and Automatic image-size kernels, Scale Styles, Auto
       resolution, picas and columns, and float resample (#565)
 - [x] Picas and columns in Canvas Size, and extension-fill availability gating
