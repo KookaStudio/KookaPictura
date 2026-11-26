@@ -21,6 +21,26 @@ document every entry SHALL be disabled.
 - **WHEN** an Indexed document with a current editable palette is active
 - **THEN** Color Table is enabled and opens the document palette
 
+### Requirement: Conversions prompt as CS6 does
+
+Converting a color document to Grayscale SHALL first ask to discard color
+information (Discard / Cancel). Converting a layered document to Grayscale,
+CMYK, or Lab SHALL offer Flatten / Don't Flatten / Cancel. Converting a layered
+document to Indexed Color or Bitmap SHALL ask to flatten layers (OK / Cancel),
+since the conversion flattens. Indexed Color SHALL open a dialog with Palette
+(Exact when eligible, Web, Local Perceptual/Selective/Adaptive), Colors,
+Forced, Transparency, Dither (None, Diffusion, Pattern, Noise), Amount, and Preview. Preview SHALL show the conversion without recording history, and
+Cancel SHALL restore the document exactly. Bitmap SHALL open a dialog offering
+50% Threshold, Pattern Dither, and Diffusion Dither. Leaving a 32-bit document
+SHALL open the HDR Conversion dialog. Cancelling any prompt or dialog SHALL
+change nothing.
+
+#### Scenario: Indexed preview then cancel
+
+- **WHEN** the Indexed Color dialog previews a layered document and is
+  cancelled
+- **THEN** the layers and mode are restored and no history state was added
+
 ## ADDED Requirements
 
 ### Requirement: Indexed conversion offers Forced and Transparency

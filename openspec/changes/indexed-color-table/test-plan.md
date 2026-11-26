@@ -4,6 +4,7 @@
 | --- | --- | --- | --- |
 | An RGB document | Open an 8-bit RGB document and inspect the Mode menu. | Current mode and depth are checked. Conversion availability is unchanged and Color Table is disabled. | `tst_image_mode::menuChecksTheModeAndDimsUnavailableTargets` |
 | An indexed document | Convert a test image, refresh the menu, and open Color Table. | The action is enabled and its dialog contains current palette entries. | `tst_image_mode::indexedColorTableCancelKeepsDocument` |
+| Indexed preview then cancel | Preview a layered document in the Indexed Color dialog and cancel. | The original layers, mode and history are restored. | `tst_image_mode::indexedPreviewsCancelsAndFlattens` |
 | Convert using forced colors and transparency | Convert opaque and clear pixels with forced black and white. Write and reopen a PSD. | Both opaque forced colors exist, the clear pixel uses the designated index, and the reopened image retains alpha. | `pictura-render::forced_indexed_transparency_round_trips` |
 | Convert without transparency | Convert the same pixels with Transparency cleared. | The clear pixel becomes white and the table has no transparent index. | `pictura-render::indexed_conversion_without_transparency_uses_white` |
 | Change and undo a palette | Change a palette RGB value and assign an index to transparency. Accept and undo. | Retained indices stay the same. Working RGB and alpha update, then the original table and appearance return. | `pictura-render::color_table_replacement_preserves_indices`, `tst_image_mode::colorTableCommitCanBeUndone` |
