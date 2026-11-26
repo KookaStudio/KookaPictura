@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 214 | 77 | 54 | 4 | 349 | 61.3% | 8 |
-| CS6 Standard, in scope | 214 | 77 | 48 | 2 | 341 | 62.8% | 8 |
-| CS6 Extended | 215 | 77 | 70 | 4 | 366 | 58.7% | 23 |
-| CS6 Extended, in scope | 215 | 77 | 49 | 2 | 343 | 62.7% | 23 |
-| CC 28.0 | 216 | 79 | 75 | 4 | 374 | 57.8% | 20 |
-| CC 28.0, in scope | 216 | 79 | 57 | 2 | 354 | 61.0% | 20 |
+| CS6 Standard | 214 | 79 | 52 | 4 | 349 | 61.3% | 8 |
+| CS6 Standard, in scope | 214 | 79 | 46 | 2 | 341 | 62.8% | 8 |
+| CS6 Extended | 215 | 79 | 68 | 4 | 366 | 58.7% | 23 |
+| CS6 Extended, in scope | 215 | 79 | 47 | 2 | 343 | 62.7% | 23 |
+| CC 28.0 | 216 | 81 | 73 | 4 | 374 | 57.8% | 20 |
+| CC 28.0, in scope | 216 | 81 | 55 | 2 | 354 | 61.0% | 20 |
 
 ## Baselines
 
@@ -381,7 +381,7 @@ Source list: Image > Mode, Color Settings, picker, and swatch capabilities.
 | P-CLR-08 | Multichannel colour mode | Y | Y | Y | Partial | in-scope | crates/pictura-render/src/document_ops/mode/multichannel.rs; crates/pictura-codec/src/multichannel.rs | none | 8/16-bit conversion and PSD/PSB plates; spot preview approximate; arbitrary rotation and perspective crop unavailable | #554 |
 | P-CLR-09 | 8-bit per channel | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | — | — |
 | P-CLR-10 | 16-bit per channel | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | — | — |
-| P-CLR-11 | 32-bit per channel | Y | Y | Y | Partial | in-scope | crates/pictura-core/src | none | 32-bit preview options and the Info readout remain | #570 |
+| P-CLR-11 | 32-bit per channel | Y | Y | Y | Partial | in-scope | crates/pictura-core/src; crates/pictura-app/cpp/frame_hdr.cpp | none | HDR preview and Info readout ship; native float Brush painting and full HDR TIFF round trips remain | #570 |
 | P-CLR-12 | Image mode conversion | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-CLR-13 | Colour Table, Indexed transparency, and Forced palette | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/color_table_dialog.cpp; crates/pictura-render/src/document_ops/mode/indexed.rs | automated:tst_image_mode::colorTableActRoundTrip | Entry and range edits, ACT files, forced colours, and a transparent palette index | #555 |
 | P-CLR-14 | Bitmap Halftone Screen and Custom Pattern | Y | Y | Y | Complete | in-scope | crates/pictura-render/src/document_ops/mode/flat.rs; crates/pictura-app/cpp/bitmap_mode_dialog.cpp | none | Screen geometry is a behavioral approximation | — |
@@ -391,14 +391,14 @@ Source list: Image > Mode, Color Settings, picker, and swatch capabilities.
 | P-CLR-18 | Colour picker and gamut alerts | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #600 |
 | P-CLR-19 | Colour Libraries (PANTONE) | Y | Y | Y | Missing | in-scope | — | none | Disabled in the picker | #600 |
 | P-CLR-20 | HUD colour picker | Y | Y | Y | Missing | in-scope | — | none | No HUD picker | #601 |
-| P-CLR-21 | HDR colour picker | Y | Y | Y | Missing | in-scope | — | none | Picker is 8-bit only | #602 |
+| P-CLR-21 | HDR colour picker | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/hdr_color_picker.cpp | none | Float picker and swatch conversion ship; native float Brush painting remains | #602 |
 | P-CLR-22 | 16/32-bit picker fields | Y | Y | Y | Missing | in-scope | — | none | No depth-aware fields | #604 |
 | P-CLR-23 | ACO and ASE swatch libraries | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src | none | Preset Manager imports and exports; the Swatches panel libraries, rename, and display modes remain | #605 |
 | P-CLR-24 | Gradient Editor | Y | Y | Y | Complete | in-scope | crates/pictura-paint/src | none | — | #598 |
 | P-CLR-25 | Define Pattern and .pat library | Y | Y | Y | Missing | in-scope | — | none | No Define Pattern or pattern library | #599 |
 | P-CLR-26 | Pattern Overlay Snap To Origin and Texture sub-options | Y | Y | Y | Partial | in-scope | crates/pictura-render/src | none | Snap To Origin and Texture remain | #606 |
 | P-CLR-27 | ICC colour management | Y | Y | Y | Complete | in-scope | crates/pictura-color/src | none | — | — |
-| P-CLR-28 | 32-bit preview options | Y | Y | Y | Missing | in-scope | — | none | View menu stub | #570 |
+| P-CLR-28 | 32-bit preview options | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_hdr.cpp | none | Preview controls and Pictura PSD/PSB persistence ship; Adobe resource interoperability remains unverified | #570 |
 | P-CLR-29 | Proof Setup and Gamut Warning | Y | Y | Y | Missing | in-scope | — | none | View menu stubs | #503 |
 
 ### Automation & extensibility
@@ -478,7 +478,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-SHELL-01 | Application frame | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/frame.cpp | none | — | — |
 | P-SHELL-02 | Menu customization and enablement matrix | Y | Y | Y | Missing | in-scope | — | none | Edit > Menus, Show All Menu Items, and the enablement matrix remain | UI-5 |
 | P-SHELL-03 | Type menu | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/menu_type.cpp | none | Work path, convert to shape, find/replace, and the option rows ship; Google Fonts (#1442) and Check Spelling (#1443) stay open | #502 |
-| P-SHELL-04 | View menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_view.cpp | none | Show/Extras, grid, pixel grid, layer edges, target path, lock/clear slices, 200%, and print size ship; Gamut Warning, Pixel Aspect Ratio, Snap To (#305), and 32-bit Preview (#570) remain | #503 |
+| P-SHELL-04 | View menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_view.cpp | none | Show/Extras, grid, pixel grid, layer edges, target path, lock/clear slices, 200%, and print size ship; Gamut Warning, Pixel Aspect Ratio, and Snap To (#305) remain | #503 |
 | P-SHELL-05 | File menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_commands.cpp | none | Open As, File > Browse, and Statistics ship; the remaining Automate and Scripts leaves stay with #558, #617, #619, #620, and #630 | #504 |
 | P-SHELL-06 | Status bar readouts and options | Y | Y | Y | Missing | in-scope | — | none | Status bar readouts and options popup remain | UI-1 |
 | P-SHELL-07 | Active layer name in the title bar | Y | Y | Y | Missing | in-scope | — | none | Not shown | UI-2 |
