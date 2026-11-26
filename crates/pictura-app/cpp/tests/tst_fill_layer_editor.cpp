@@ -478,5 +478,5 @@ void FillLayerEditorTest::backgroundDoubleClickConverts()
     QVERIFY(true);
 }
 
-QTEST_MAIN(FillLayerEditorTest)
+PICTURA_QT_TEST_MAIN(FillLayerEditorTest)
 #include "tst_fill_layer_editor.moc"

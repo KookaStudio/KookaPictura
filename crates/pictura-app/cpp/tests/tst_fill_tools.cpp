@@ -837,5 +837,5 @@ void FillToolsTest::refusedForMemoryShowsStatus()
     f.view->deselect();
 }
 
-QTEST_MAIN(FillToolsTest)
+PICTURA_QT_TEST_MAIN(FillToolsTest)
 #include "tst_fill_tools.moc"

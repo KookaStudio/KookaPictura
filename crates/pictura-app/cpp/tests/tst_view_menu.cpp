@@ -1094,5 +1094,5 @@ void ViewMenuTest::zoomPresets()
 
 } // namespace
 
-QTEST_MAIN(ViewMenuTest)
+PICTURA_QT_TEST_MAIN(ViewMenuTest)
 #include "tst_view_menu.moc"

@@ -67,5 +67,7 @@ void AcrSettingsTest::preservesUnknownKeys()
     QVERIFY(out.contains(QStringLiteral("Crv =0,0,128,140,255,255")));
 }
 
-QTEST_MAIN(AcrSettingsTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(AcrSettingsTest)
 #include "tst_acr_settings.moc"

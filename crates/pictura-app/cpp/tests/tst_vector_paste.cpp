@@ -199,5 +199,5 @@ void VectorPasteTest::cancelledOrInvalidPaste()
     QCOMPARE(view.layer_count(), layers);
 }
 
-QTEST_MAIN(VectorPasteTest)
+PICTURA_QT_TEST_MAIN(VectorPasteTest)
 #include "tst_vector_paste.moc"

@@ -175,5 +175,5 @@ void CropSessionTest::cancelReturnsToInitMode()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(CropSessionTest)
+PICTURA_QT_TEST_MAIN(CropSessionTest)
 #include "tst_crop_session.moc"

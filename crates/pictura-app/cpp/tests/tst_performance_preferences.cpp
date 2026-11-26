@@ -366,5 +366,5 @@ void PerformancePreferencesTest::efficiencyMenuStartsAtHundred()
     QVERIFY(chooseReadout(QStringLiteral("sizes")));
 }
 
-QTEST_MAIN(PerformancePreferencesTest)
+PICTURA_QT_TEST_MAIN(PerformancePreferencesTest)
 #include "tst_performance_preferences.moc"

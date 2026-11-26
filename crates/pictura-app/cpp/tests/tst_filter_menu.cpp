@@ -1096,5 +1096,5 @@ void FilterMenuTest::eachKindOpensTheDialogItsDescriptorNames()
     QVERIFY(opened);
 }
 
-QTEST_MAIN(FilterMenuTest)
+PICTURA_QT_TEST_MAIN(FilterMenuTest)
 #include "tst_filter_menu.moc"

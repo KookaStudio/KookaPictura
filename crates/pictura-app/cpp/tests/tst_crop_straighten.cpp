@@ -309,5 +309,5 @@ void CropStraightenTest::classicSecondLineIsAbsolute()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(CropStraightenTest)
+PICTURA_QT_TEST_MAIN(CropStraightenTest)
 #include "tst_crop_straighten.moc"

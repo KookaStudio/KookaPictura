@@ -786,5 +786,5 @@ void RetouchToolsTest::thirtyTwoBitFallsBackToMove()
     QCOMPARE(window_->activeTool(), pictura::ToolId::Move);
 }
 
-QTEST_MAIN(RetouchToolsTest)
+PICTURA_QT_TEST_MAIN(RetouchToolsTest)
 #include "tst_retouch_tools.moc"

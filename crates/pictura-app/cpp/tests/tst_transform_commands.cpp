@@ -565,5 +565,5 @@ void TransformCommandsTest::againIsUnavailableBeforeATransform()
     QVERIFY(!action(pictura::command_ids::EditTransformAgain)->isEnabled());
 }
 
-QTEST_MAIN(TransformCommandsTest)
+PICTURA_QT_TEST_MAIN(TransformCommandsTest)
 #include "tst_transform_commands.moc"

@@ -574,5 +574,5 @@ void SmartObjectActionsTest::stackModeRefusalRecordsNothing()
     QCOMPARE(pictura::layer_smart_object_stack_mode(*view, plain), 0);
 }
 
-QTEST_MAIN(SmartObjectActionsTest)
+PICTURA_QT_TEST_MAIN(SmartObjectActionsTest)
 #include "tst_smart_object_actions.moc"

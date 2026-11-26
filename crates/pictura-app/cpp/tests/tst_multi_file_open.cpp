@@ -193,5 +193,5 @@ void MultiFileOpenTest::failedFileDoesNotStopTheRest()
     QCOMPARE(documentPaths(*window), expected);
 }
 
-QTEST_MAIN(MultiFileOpenTest)
+PICTURA_QT_TEST_MAIN(MultiFileOpenTest)
 #include "tst_multi_file_open.moc"

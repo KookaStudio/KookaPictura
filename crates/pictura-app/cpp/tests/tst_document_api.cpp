@@ -116,5 +116,5 @@ void DocumentApiTest::undoRedoThroughTheAdapter()
     QCOMPARE(history_api::snapshotCount(view), 0);
 }
 
-QTEST_MAIN(DocumentApiTest)
+PICTURA_QT_TEST_MAIN(DocumentApiTest)
 #include "tst_document_api.moc"

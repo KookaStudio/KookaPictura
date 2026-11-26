@@ -653,5 +653,5 @@ void LayersSmartFiltersTest::filterRowStillDrags()
     QCOMPARE(panel->dragPathsForSyntheticForTest(path), QStringList{path});
 }
 
-QTEST_MAIN(LayersSmartFiltersTest)
+PICTURA_QT_TEST_MAIN(LayersSmartFiltersTest)
 #include "tst_layers_smart_filters.moc"

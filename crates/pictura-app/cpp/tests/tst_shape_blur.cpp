@@ -155,6 +155,6 @@ void ShapeBlurTest::lastFilterReusesTheShape()
     QVERIFY(view->image() != once);
 }
 
-QTEST_MAIN(ShapeBlurTest)
+PICTURA_QT_TEST_MAIN(ShapeBlurTest)
 
 #include "tst_shape_blur.moc"

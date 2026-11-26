@@ -141,5 +141,7 @@ void SharedWidgetsTest::jumpSliderJumpsToClickAndTracks()
     QTest::mouseRelease(&slider, Qt::LeftButton, Qt::NoModifier, QPoint(15, 12));
 }
 
-QTEST_MAIN(SharedWidgetsTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(SharedWidgetsTest)
 #include "tst_shared_widgets.moc"

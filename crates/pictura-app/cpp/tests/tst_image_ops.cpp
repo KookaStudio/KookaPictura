@@ -786,5 +786,5 @@ void ImageOpsTest::imageSizeNamesFullScratchDisks()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(ImageOpsTest)
+PICTURA_QT_TEST_MAIN(ImageOpsTest)
 #include "tst_image_ops.moc"

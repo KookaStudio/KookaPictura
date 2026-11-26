@@ -354,5 +354,5 @@ void TypeColorPreviewTest::characterPanelColorEditsReopenedSession()
     QCOMPARE(layerColor(f, path), QColor(0, 255, 0));
 }
 
-QTEST_MAIN(TypeColorPreviewTest)
+PICTURA_QT_TEST_MAIN(TypeColorPreviewTest)
 #include "tst_type_color_preview.moc"

@@ -656,5 +656,5 @@ void AcrDialogTest::pickerRestoresAverage()
     dialog.hide();
 }
 
-QTEST_MAIN(AcrDialogTest)
+PICTURA_QT_TEST_MAIN(AcrDialogTest)
 #include "tst_acr_dialog.moc"

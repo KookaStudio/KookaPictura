@@ -79,5 +79,5 @@ void HistorySnapshotsTest::snapshotEditRestoreRoundTrip()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(HistorySnapshotsTest)
+PICTURA_QT_TEST_MAIN(HistorySnapshotsTest)
 #include "tst_history_snapshots.moc"

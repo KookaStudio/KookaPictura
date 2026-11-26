@@ -168,9 +168,12 @@ void ThemeApplyTest::chromeFontsSurvive()
     QCOMPARE(window->statusBar()->font().pixelSize(), basePx - 2);
 }
 
+namespace picturaQtTest_ThemeApplyTest {
 int main(int argc, char* argv[])
 {
     return pictura::test::shardedMain<ThemeApplyTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(ThemeApplyTest)
 }
 
 #include "tst_theme_apply.moc"

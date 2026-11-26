@@ -568,5 +568,5 @@ void VanishingPointTest::lastFilterRefusesOffEightBit()
     QVERIFY(window_->closeActiveDocument(false));
 }
 
-QTEST_MAIN(VanishingPointTest)
+PICTURA_QT_TEST_MAIN(VanishingPointTest)
 #include "tst_vanishing_point.moc"

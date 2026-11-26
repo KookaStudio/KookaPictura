@@ -458,5 +458,5 @@ void AdjustmentsPanelTest::surfaceFollowsTheme()
     QCOMPARE(painted.rgba(), expected.rgba());
 }
 
-QTEST_MAIN(AdjustmentsPanelTest)
+PICTURA_QT_TEST_MAIN(AdjustmentsPanelTest)
 #include "tst_adjustments_panel.moc"

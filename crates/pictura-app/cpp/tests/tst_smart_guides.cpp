@@ -355,5 +355,5 @@ void SmartGuidesTest::tiePrefersLayer()
     QVERIFY2(hasLine(result.lines, true, 490.0), "the reference's left edge");
 }
 
-QTEST_MAIN(SmartGuidesTest)
+PICTURA_QT_TEST_MAIN(SmartGuidesTest)
 #include "tst_smart_guides.moc"

@@ -553,6 +553,6 @@ void ToolbarShapeTest::floatingDragBesideAppWindowStaysFloating()
     QCOMPARE(window->sideOf(tools), PanelSide::Left);
 }
 
-QTEST_MAIN(ToolbarShapeTest)
+PICTURA_QT_TEST_MAIN(ToolbarShapeTest)
 
 #include "tst_toolbar_shape.moc"

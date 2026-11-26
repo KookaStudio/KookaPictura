@@ -774,5 +774,5 @@ void LiquifyDialogTest::aNonRectangularSelectionProcessesItsBoundingBox()
     view->deselect();
 }
 
-QTEST_MAIN(LiquifyDialogTest)
+PICTURA_QT_TEST_MAIN(LiquifyDialogTest)
 #include "tst_liquify_dialog.moc"

@@ -586,5 +586,5 @@ void PropertiesPanelTest::footerDeleteUsesTheGate()
     panel_->refresh();
     QVERIFY2(remove->isEnabled(), "unlocking re-enables the footer Delete");
 }
-QTEST_MAIN(PropertiesPanelTest)
+PICTURA_QT_TEST_MAIN(PropertiesPanelTest)
 #include "tst_properties_panel.moc"

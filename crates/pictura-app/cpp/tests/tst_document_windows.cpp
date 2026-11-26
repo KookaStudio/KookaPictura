@@ -1016,9 +1016,12 @@ void DocumentWindowsTest::consolidateAllToHere()
     QCOMPARE(window_->activeDocumentIndex(), 2);
 }
 
+namespace picturaQtTest_DocumentWindowsTest {
 int main(int argc, char* argv[])
 {
     return pictura::test::shardedMain<DocumentWindowsTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(DocumentWindowsTest)
 }
 
 #include "tst_document_windows.moc"

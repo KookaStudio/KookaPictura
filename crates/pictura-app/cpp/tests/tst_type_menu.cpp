@@ -714,5 +714,5 @@ void TypeMenuTest::removedRows()
     QVERIFY(window_->registry()->action(QStringLiteral("type.extrude.to.3d")) == nullptr);
 }
 
-QTEST_MAIN(TypeMenuTest)
+PICTURA_QT_TEST_MAIN(TypeMenuTest)
 #include "tst_type_menu.moc"

@@ -635,5 +635,5 @@ void GpuBackendTest::safeModeKeepsStoredGpuPreference()
     QVERIFY(pictura::loadPreferences().gpuCompute);
 }
 
-QTEST_MAIN(GpuBackendTest)
+PICTURA_QT_TEST_MAIN(GpuBackendTest)
 #include "tst_gpu_backend.moc"

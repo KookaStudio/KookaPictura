@@ -341,5 +341,5 @@ void ControlPolicyTest::separateConfigRootIsHardDenied()
     }
 }
 
-QTEST_MAIN(ControlPolicyTest)
+PICTURA_QT_TEST_MAIN(ControlPolicyTest)
 #include "tst_control_policy.moc"

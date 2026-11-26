@@ -1246,8 +1246,11 @@ void ImportPdfTest::epsEntryPointUsesLoadingTab()
     QVERIFY2(sawLoadingTab, "the EPS render runs in a loading tab");
 }
 
+namespace picturaQtTest_ImportPdfTest {
 int main(int argc, char *argv[])
 {
     return pictura::test::shardedMain<ImportPdfTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(ImportPdfTest)
 }
 #include "tst_import_pdf.moc"

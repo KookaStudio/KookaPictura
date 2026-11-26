@@ -373,6 +373,6 @@ void ExportBatchTest::closedDocumentStopsBatch()
     QCOMPARE(files(dir.path()), QStringList {QStringLiteral("xA.psd")});
 }
 
-QTEST_MAIN(ExportBatchTest)
+PICTURA_QT_TEST_MAIN(ExportBatchTest)
 
 #include "tst_export_batch.moc"

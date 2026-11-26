@@ -784,5 +784,5 @@ void LensCorrectionTest::smartObjectRefusesOffTheGate()
     QVERIFY(window_->closeActiveDocument(false));
 }
 
-QTEST_MAIN(LensCorrectionTest)
+PICTURA_QT_TEST_MAIN(LensCorrectionTest)
 #include "tst_lens_correction.moc"

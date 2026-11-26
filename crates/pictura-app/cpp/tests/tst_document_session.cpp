@@ -547,5 +547,5 @@ void DocumentSessionTest::switchingToolsCommitsCommitOnDeactivate()
     QVERIFY2(f.committedOnce(base, "Brush"), "the switch commits the stroke");
 }
 
-QTEST_MAIN(DocumentSessionTest)
+PICTURA_QT_TEST_MAIN(DocumentSessionTest)
 #include "tst_document_session.moc"

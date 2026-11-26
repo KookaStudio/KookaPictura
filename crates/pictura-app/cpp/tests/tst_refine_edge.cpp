@@ -622,5 +622,5 @@ void RefineEdgeTest::optionsBarButtonOpensIt()
     QVERIFY2(opened, "clicking Select and Mask opens the Refine Edge dialog");
 }
 
-QTEST_MAIN(RefineEdgeTest)
+PICTURA_QT_TEST_MAIN(RefineEdgeTest)
 #include "tst_refine_edge.moc"

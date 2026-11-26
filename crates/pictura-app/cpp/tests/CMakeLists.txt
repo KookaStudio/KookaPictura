@@ -1,5 +1,24 @@
 # Qt Test suites for the C++ shell. Explicit list, no globbing (repo convention).
-set(PICTURA_QT_TESTS
+set(PICTURA_QT_TEST_DRIVERS
+    shell
+    document
+    io
+    selection
+    paint
+    transform
+    layers
+    type
+    ui
+    filters
+    imaging
+    control
+    preferences
+    raw
+)
+set(PICTURA_QT_TEST_INCLUDED_SOURCES
+    tst_actions_panel_cases.cpp
+)
+set(PICTURA_QT_TEST_DRIVER_shell
     tst_smoke
     tst_structured_logging
     tst_history_log
@@ -7,50 +26,104 @@ set(PICTURA_QT_TESTS
     tst_file_menu
     tst_gpu_backend
     tst_offthread_jobs
-    tst_open_save
+    tst_panel_host
+    tst_menu_registrar
+    tst_command_tree
+    tst_edition_gating
+    tst_toolbar_shape
+    tst_command_bus
+    tst_merge_commands
+    tst_system_info
+    tst_debug_toolset
+    tst_tool_hint_bar
+    tst_icon_assets
+    tst_selftest_report
+    tst_dialog_chrome
+    tst_keyboard_shortcuts
+    tst_search_bar
+    tst_native_menu_bar
+    tst_untrusted_input
+    tst_theme_apply
+    tst_test_support
+    tst_app_updater
+    tst_notification_status_bar
+)
+set(PICTURA_QT_TEST_DRIVER_document
     tst_document_version_policy
     tst_multi_file_open
-    tst_place_fit
-    tst_place_sequence
     tst_document_api
     tst_document_registry
-    tst_panel_host
-    tst_import_save_coordinator
-    tst_menu_registrar
     tst_document_session
-    tst_selection_api
-    tst_paint_api
-    tst_transform_api
-    tst_fonts
-    tst_design_system
-    tst_design_system_dialog
-    tst_ui_scale
-    tst_ui_localization
+    tst_session_ports
     tst_edit_clipboard
     tst_history_snapshots
     tst_edit_refresh
+    tst_image_ops
+    tst_image_rotate
+    tst_canvas_pan
+    tst_initial_view
+    tst_new_document
+    tst_image_mode
+    tst_hdr_conversion
+    tst_align_distribute
+    tst_measurement_scale
+    tst_memory_governor
+    tst_busy_job
+    tst_document_jobs
+    tst_edit_shortcuts
+    tst_workspaces
+    tst_floating_workspaces
+    tst_floating_workspaces_restart
+    tst_zoom_tool
+    tst_large_document
+    tst_tool_commit
+    tst_recovery
+    tst_session_store
+    tst_settings_backup
+    tst_rulers_guides
+    tst_view_menu
+    tst_panels_parity
+    tst_variables
+    tst_screen_modes
+    tst_loading_tab
+    tst_document_windows
+    tst_document_float
+    tst_document_arrange
+    tst_document_navigate
+    tst_canvas_context_menus
+)
+set(PICTURA_QT_TEST_DRIVER_io
+    tst_open_save
+    tst_place_fit
+    tst_place_sequence
+    tst_import_save_coordinator
+    tst_save_for_web
+    tst_export_as
+    tst_export_batch
+    tst_export_layers
+    tst_file_export_tools
+    tst_load_files_into_stack
+    tst_statistics
+    tst_webp
+    tst_save_options
+    tst_psd_compatibility
+    tst_save_format_options
+    tst_save_format_catalog
+    tst_batch_dialog
+    tst_batch_run
+    tst_save_format_dialogs
+    tst_save_gif_copy
+    tst_print
+    tst_save_pdf
+    tst_import_pdf
+    tst_image_import
+)
+set(PICTURA_QT_TEST_DRIVER_selection
+    tst_selection_api
     tst_mask_edit
     tst_quick_mask
     tst_quick_mask_regressions
     tst_canvas_mask_domain
-    tst_layers_mask_commands
-    tst_mask_link_state
-    tst_last_layer
-    tst_client_registration
-    tst_control_approval
-    tst_control_editing
-    tst_control_limits
-    tst_control_live
-    tst_control_metrics
-    tst_control_metrics_off
-    tst_control_modal_guard
-    tst_control_policy
-    tst_control_serial
-    tst_preferences_agent
-    tst_preferences_store
-    tst_preferences_reset
-    tst_image_ops
-    tst_image_rotate
     tst_crop_straighten
     tst_crop_shield
     tst_crop_settings
@@ -60,13 +133,55 @@ set(PICTURA_QT_TESTS
     tst_crop_options
     tst_crop_preview
     tst_crop_cursor
-    tst_session_ports
     tst_perspective_crop
-    tst_canvas_pan
-    tst_initial_view
-    tst_new_document
-    tst_image_mode
-    tst_hdr_conversion
+    tst_color_range
+    tst_refine_edge
+    tst_replace_color
+    tst_selection_aa
+    tst_selection_alt
+    tst_selection_move
+    tst_selection_preview
+    tst_selection_save_load
+)
+set(PICTURA_QT_TEST_DRIVER_paint
+    tst_paint_api
+    tst_color_replacement
+    tst_options_bars_parity
+    tst_fill_tools
+    tst_eraser_tools
+    tst_retouch_tools
+    tst_stamp_hold
+    tst_brush_airbrush
+    tst_brush_dynamics
+    tst_bristle_brushes
+    tst_pen_tools
+    tst_path_selection_tools
+    tst_shape_tools
+    tst_shape_transform
+    tst_rotate_view
+    tst_move_feedback
+    tst_smart_guides
+    tst_tool_options_persistence
+    tst_brush_tip_preview
+    tst_brush_outline
+)
+set(PICTURA_QT_TEST_DRIVER_transform
+    tst_transform_api
+    tst_transform_options
+    tst_transform_controls
+    tst_transform_skew
+    tst_transform_distort
+    tst_transform_perspective
+    tst_transform_lock
+    tst_transform_overlay
+    tst_transform_warp
+    tst_transform_commands
+    tst_transform_selection
+)
+set(PICTURA_QT_TEST_DRIVER_layers
+    tst_layers_mask_commands
+    tst_mask_link_state
+    tst_last_layer
     tst_layers_panel
     tst_layer_target
     tst_linked_layers
@@ -82,57 +197,35 @@ set(PICTURA_QT_TESTS
     tst_rendering_indicator
     tst_damage_bounds
     tst_fill_layer_editor
-    tst_align_distribute
-    tst_color_replacement
-    tst_options_bars_parity
-    tst_transform_options
-    tst_transform_controls
-    tst_transform_skew
-    tst_transform_distort
-    tst_transform_perspective
-    tst_transform_lock
-    tst_transform_overlay
-    tst_transform_warp
-    tst_transform_commands
-    tst_transform_selection
-    tst_command_tree
-    tst_edition_gating
-    tst_measurement_scale
-    tst_toolbar_shape
-    tst_command_bus
-    tst_merge_commands
     tst_layer_commands
-    tst_fill_tools
-    tst_memory_governor
-    tst_performance_preferences
-    tst_eraser_tools
-    tst_retouch_tools
-    tst_stamp_hold
-    tst_brush_airbrush
-    tst_brush_dynamics
-    tst_bristle_brushes
-    tst_pen_tools
-    tst_path_selection_tools
-    tst_shape_tools
-    tst_shape_transform
-    tst_rotate_view
-    tst_save_for_web
-    tst_export_as
-    tst_export_batch
-    tst_export_layers
-    tst_file_export_tools
-    tst_load_files_into_stack
-    tst_statistics
-    tst_webp
+    tst_properties_panel
+    tst_properties_preview
+    tst_channels_panel
+    tst_channel_options
+    tst_paths_panel
+    tst_layer_style
+    tst_blend_mode_list
+    tst_auto_align
+    tst_auto_blend
+    tst_layers_smart_filters
+    tst_smart_filter_apply
+    tst_layers_effects
+    tst_smart_object_actions
+    tst_vector_smart_object
+    tst_vector_paste
+    tst_smart_object_relink
+    tst_layer_comps_panel
+    tst_layer_comps_export
+    tst_nested_layer_target
+)
+set(PICTURA_QT_TEST_DRIVER_type
+    tst_fonts
     tst_type_tools
     tst_type_panels
     tst_type_color_preview
     tst_type_edit_damage
     tst_paragraph_type
     tst_type_on_path
-    tst_move_feedback
-    tst_smart_guides
-    tst_tool_options_persistence
     tst_character_paragraph_panels
     tst_type_session_panels
     tst_paragraph_styles_panel
@@ -143,13 +236,16 @@ set(PICTURA_QT_TESTS
     tst_find_replace
     tst_type_placeholder
     tst_text_gamma_fonts
+)
+set(PICTURA_QT_TEST_DRIVER_ui
+    tst_design_system
+    tst_design_system_dialog
+    tst_ui_scale
+    tst_ui_localization
     tst_shared_widgets
     tst_value_input_enter
     tst_info_panel
-    tst_system_info
-    tst_debug_toolset
     tst_histogram_panel
-    tst_tool_hint_bar
     tst_swatches_panel
     tst_preset_manager
     tst_color_picker
@@ -158,23 +254,11 @@ set(PICTURA_QT_TESTS
     tst_proof_setup
     tst_profile_dialog
     tst_profile_warnings
-    tst_save_options
-    tst_psd_compatibility
-    tst_save_format_options
-    tst_save_format_catalog
-    tst_batch_dialog
-    tst_batch_run
-    tst_save_format_dialogs
-    tst_save_gif_copy
-    tst_properties_panel
-    tst_properties_preview
     tst_adjustment_presets
     tst_adjustments_panel
     tst_actions_panel
-    tst_channels_panel
-    tst_channel_options
-    tst_paths_panel
-    tst_icon_assets
+)
+set(PICTURA_QT_TEST_DRIVER_filters
     tst_filter_menu
     tst_filter_gallery
     tst_fade
@@ -203,77 +287,74 @@ set(PICTURA_QT_TESTS
     tst_vanishing_point
     tst_vanishing_point_retouch
     tst_vanishing_point_files
-    tst_layer_style
-    tst_blend_mode_list
-    tst_color_range
-    tst_refine_edge
-    tst_replace_color
+)
+set(PICTURA_QT_TEST_DRIVER_imaging
     tst_apply_image
     tst_calculations
     tst_match_color
-    tst_auto_align
-    tst_busy_job
-    tst_document_jobs
-    tst_auto_blend
-    tst_print
-    tst_save_pdf
-    tst_import_pdf
     tst_image_adjustments
-    tst_image_import
-    tst_layers_smart_filters
-    tst_smart_filter_apply
-    tst_layers_effects
-    tst_smart_object_actions
-    tst_vector_smart_object
-    tst_vector_paste
-    tst_smart_object_relink
-    tst_edit_shortcuts
-    tst_workspaces
-    tst_floating_workspaces
-    tst_floating_workspaces_restart
-    tst_zoom_tool
-    tst_large_document
-    tst_tool_commit
-    tst_recovery
-    tst_session_store
-    tst_settings_backup
-    tst_rulers_guides
-    tst_view_menu
-    tst_panels_parity
-    tst_layer_comps_panel
-    tst_layer_comps_export
-    tst_variables
-    tst_selection_aa
-    tst_selection_alt
-    tst_selection_move
-    tst_selection_preview
-    tst_selection_save_load
-    tst_selftest_report
-    tst_nested_layer_target
-    tst_screen_modes
-    tst_dialog_chrome
-    tst_keyboard_shortcuts
-    tst_search_bar
-    tst_native_menu_bar
-    tst_loading_tab
-    tst_document_windows
-    tst_document_float
-    tst_document_arrange
-    tst_document_navigate
+)
+set(PICTURA_QT_TEST_DRIVER_control
+    tst_client_registration
+    tst_control_approval
+    tst_control_editing
+    tst_control_limits
+    tst_control_live
+    tst_control_metrics
+    tst_control_metrics_off
+    tst_control_modal_guard
+    tst_control_policy
+    tst_control_serial
+)
+set(PICTURA_QT_TEST_DRIVER_preferences
+    tst_preferences_agent
+    tst_performance_preferences
+    tst_preferences_store
+    tst_preferences_reset
+    tst_update_preferences
+)
+set(PICTURA_QT_TEST_DRIVER_raw
     tst_pictura_raw
     tst_acr_settings
     tst_acr_dialog
     tst_raw_open
-    tst_canvas_context_menus
-    tst_brush_tip_preview
-    tst_brush_outline
-    tst_untrusted_input
-    tst_theme_apply
-    tst_test_support
-    tst_app_updater
-    tst_update_preferences
-    tst_notification_status_bar
 )
+
+set(PICTURA_QT_TESTS "")
+set(PICTURA_QT_TEST_SOURCES "")
+foreach(_driver IN LISTS PICTURA_QT_TEST_DRIVERS)
+    set(_driver_tests ${PICTURA_QT_TEST_DRIVER_${_driver}})
+    list(APPEND PICTURA_QT_TESTS ${_driver_tests})
+    foreach(_test_name IN LISTS _driver_tests)
+        set(PICTURA_QT_TEST_TARGET_${_test_name} tst_driver_${_driver})
+        list(APPEND PICTURA_QT_TEST_SOURCES ${_test_name}.cpp)
+    endforeach()
+endforeach()
+
+list(LENGTH PICTURA_QT_TESTS _pictura_qt_test_count)
+set(_pictura_qt_unique_tests ${PICTURA_QT_TESTS})
+list(REMOVE_DUPLICATES _pictura_qt_unique_tests)
+list(LENGTH _pictura_qt_unique_tests _pictura_qt_unique_count)
+if(NOT _pictura_qt_test_count EQUAL _pictura_qt_unique_count)
+    message(FATAL_ERROR "Qt Test suite registry contains duplicate suite names")
+endif()
+
+file(GLOB _pictura_qt_suite_sources CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tst_*.cpp")
+foreach(_source IN LISTS _pictura_qt_suite_sources)
+    get_filename_component(_source_name "${_source}" NAME)
+    if(_source_name IN_LIST PICTURA_QT_TEST_INCLUDED_SOURCES)
+        continue()
+    endif()
+    if(NOT _source_name IN_LIST PICTURA_QT_TEST_SOURCES)
+        message(FATAL_ERROR "Qt Test source is not registered: ${_source_name}")
+    endif()
+endforeach()
+foreach(_source_name IN LISTS PICTURA_QT_TEST_SOURCES)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_source_name}")
+        message(FATAL_ERROR "Registered Qt Test source is missing: ${_source_name}")
+    endif()
+endforeach()
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
 
@@ -292,12 +373,14 @@ set(PICTURA_QT_TEST_SHARDS
     tst_canvas_mask_domain
     tst_document_arrange
     tst_document_float
+    tst_document_navigate
     tst_document_windows
     tst_edit_refresh
     tst_floating_workspaces
     tst_import_pdf
     tst_loading_tab
     tst_print
+    tst_quick_mask
     tst_save_pdf
     tst_ui_scale
     tst_workspaces
@@ -331,25 +414,31 @@ target_link_libraries(pictura_test_support PRIVATE pictura_shell Qt6::Test)
 target_compile_options(pictura_test_support PRIVATE ${PICTURA_DEV_COMPILE_OPTIONS}
     "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g1>")
 
-set(PICTURA_QT_TEST_SOURCES "")
-foreach(test_name IN LISTS PICTURA_QT_TESTS)
-    list(APPEND PICTURA_QT_TEST_SOURCES ${test_name}.cpp)
-    add_executable(${test_name} ${test_name}.cpp)
+foreach(_driver IN LISTS PICTURA_QT_TEST_DRIVERS)
+    set(_driver_tests ${PICTURA_QT_TEST_DRIVER_${_driver}})
+    set(_driver_sources "")
+    foreach(_test_name IN LISTS _driver_tests)
+        list(APPEND _driver_sources ${_test_name}.cpp)
+    endforeach()
+    add_executable(tst_driver_${_driver} ${_driver_sources})
     if(PICTURA_SHELL_SHARED)
-        target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test
+        target_link_libraries(tst_driver_${_driver} PRIVATE pictura_shell Qt6::Test
             pictura_test_support)
     else()
-        target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test
+        target_link_libraries(tst_driver_${_driver} PRIVATE pictura_shell Qt6::Test
             pictura_assets pictura_test_support)
     endif()
     # Test debug info only needs line tables; the suites are not debugged through
     # full variable info, and this keeps the test objects and their links small.
-    target_compile_options(${test_name} PRIVATE ${PICTURA_DEV_COMPILE_OPTIONS}
+    target_compile_options(tst_driver_${_driver} PRIVATE ${PICTURA_DEV_COMPILE_OPTIONS}
         "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g1>")
     if(TARGET pictura_test_pch)
-        target_precompile_headers(${test_name} REUSE_FROM pictura_test_pch)
+        target_precompile_headers(tst_driver_${_driver} REUSE_FROM pictura_test_pch)
     endif()
+endforeach()
 
+foreach(test_name IN LISTS PICTURA_QT_TESTS)
+    set(_driver ${PICTURA_QT_TEST_TARGET_${test_name}})
     if(test_name IN_LIST PICTURA_QT_TEST_SHARDS)
         set(_pictura_shard_count ${PICTURA_QT_TEST_SHARD_COUNT})
         if(DEFINED ${test_name}_SHARD_COUNT)
@@ -358,7 +447,8 @@ foreach(test_name IN LISTS PICTURA_QT_TESTS)
         math(EXPR _pictura_last_shard "${_pictura_shard_count} - 1")
         foreach(_shard RANGE 0 ${_pictura_last_shard})
             set(_entry "${test_name}_${_shard}")
-            add_test(NAME ${_entry} COMMAND ${test_name}
+            add_test(NAME ${_entry} COMMAND ${_driver}
+                --suite ${test_name}
                 -o ${CMAKE_BINARY_DIR}/qt-test-results/${_entry}.xml,junitxml)
             set_tests_properties(${_entry} PROPERTIES
                 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PICTURA_TEST_SHARD=${_shard}/${_pictura_shard_count}"
@@ -366,7 +456,8 @@ foreach(test_name IN LISTS PICTURA_QT_TESTS)
             )
         endforeach()
     else()
-        add_test(NAME ${test_name} COMMAND ${test_name}
+        add_test(NAME ${test_name} COMMAND ${_driver}
+            --suite ${test_name}
             -o ${CMAKE_BINARY_DIR}/qt-test-results/${test_name}.xml,junitxml)
         set_tests_properties(${test_name} PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
@@ -375,16 +466,23 @@ foreach(test_name IN LISTS PICTURA_QT_TESTS)
     endif()
 endforeach()
 
-add_dependencies(tst_update_preferences pictura)
+add_dependencies(tst_driver_shell pictura)
+add_dependencies(tst_driver_ui pictura)
+add_dependencies(tst_driver_preferences pictura)
 set_property(TEST tst_update_preferences APPEND PROPERTY ENVIRONMENT
     "PICTURA_TEST_EXECUTABLE=$<TARGET_FILE:pictura>")
 
-add_dependencies(tst_structured_logging pictura)
-target_compile_definitions(tst_structured_logging PRIVATE
-    PICTURA_LOGGING_TEST_EXECUTABLE="$<TARGET_FILE:pictura>")
-
-add_dependencies(tst_ui_localization pictura)
-target_compile_definitions(tst_ui_localization PRIVATE PICTURA_TEST_APP="$<TARGET_FILE:pictura>")
+set_source_files_properties(
+    tst_structured_logging.cpp
+    tst_ui_localization.cpp
+    tst_preferences_store.cpp
+    PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+set_source_files_properties(tst_structured_logging.cpp PROPERTIES
+    COMPILE_DEFINITIONS "PICTURA_LOGGING_TEST_EXECUTABLE=\"$<TARGET_FILE:pictura>\"")
+set_source_files_properties(tst_ui_localization.cpp PROPERTIES
+    COMPILE_DEFINITIONS "PICTURA_TEST_APP=\"$<TARGET_FILE:pictura>\"")
+set_source_files_properties(tst_preferences_store.cpp PROPERTIES
+    COMPILE_DEFINITIONS "PICTURA_TEST_EXECUTABLE=\"$<TARGET_FILE:pictura>\"")
 set_tests_properties(tst_ui_localization PROPERTIES TIMEOUT 240)
 
 # The brush-outline suite maps logical canvas coordinates to QImage device
@@ -392,9 +490,17 @@ set_tests_properties(tst_ui_localization PROPERTIES TIMEOUT 240)
 set_tests_properties(tst_brush_outline PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1")
 
-# Quick Mask runs about 112 s under the 80% CPU budget; give it headroom over
-# the default 120 s timeout so a loaded machine does not fail a passing suite.
-set_tests_properties(tst_quick_mask PROPERTIES TIMEOUT 300)
+# Quick Mask's full suite runs about 112 s under the 80% CPU budget; give each
+# share headroom over the default 120 s timeout so a loaded machine does not fail
+# a passing suite.
+set(_pictura_quick_mask_shard_count ${PICTURA_QT_TEST_SHARD_COUNT})
+if(DEFINED tst_quick_mask_SHARD_COUNT)
+    set(_pictura_quick_mask_shard_count ${tst_quick_mask_SHARD_COUNT})
+endif()
+math(EXPR _pictura_quick_mask_last_shard "${_pictura_quick_mask_shard_count} - 1")
+foreach(_shard RANGE 0 ${_pictura_quick_mask_last_shard})
+    set_tests_properties(tst_quick_mask_${_shard} PROPERTIES TIMEOUT 300)
+endforeach()
 
 # The suites include the generated cxx-qt header, so they follow the bridge
 # stamp like the shell does.
@@ -402,12 +508,8 @@ pictura_depend_on_bridge_stamp(${PICTURA_QT_TEST_SOURCES}
     ${CMAKE_SOURCE_DIR}/crates/pictura-app/cpp/selftest_report.cpp
     ${CMAKE_SOURCE_DIR}/crates/pictura-app/cpp/selftest_run.cpp)
 
-target_compile_definitions(tst_preferences_store PRIVATE
-    PICTURA_TEST_EXECUTABLE="$<TARGET_FILE:pictura>")
-add_dependencies(tst_preferences_store pictura)
-
 # The self-test token harness lives in the selftest sources, which are linked
 # only into the pictura executable, so this suite compiles the harness itself.
-target_sources(tst_selftest_report PRIVATE
+target_sources(tst_driver_shell PRIVATE
     ${CMAKE_SOURCE_DIR}/crates/pictura-app/cpp/selftest_report.cpp
     ${CMAKE_SOURCE_DIR}/crates/pictura-app/cpp/selftest_run.cpp)

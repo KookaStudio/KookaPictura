@@ -448,5 +448,5 @@ void CropPreviewTest::ratioDragPinsTheStartCorner()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(CropPreviewTest)
+PICTURA_QT_TEST_MAIN(CropPreviewTest)
 #include "tst_crop_preview.moc"

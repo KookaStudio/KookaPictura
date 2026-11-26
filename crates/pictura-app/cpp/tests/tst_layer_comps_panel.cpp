@@ -546,6 +546,6 @@ void LayerCompsPanelTest::transformSessionBlocksApply()
     QSKIP("requires a live transform session fixture");
 }
 
-QTEST_MAIN(LayerCompsPanelTest)
+PICTURA_QT_TEST_MAIN(LayerCompsPanelTest)
 
 #include "tst_layer_comps_panel.moc"

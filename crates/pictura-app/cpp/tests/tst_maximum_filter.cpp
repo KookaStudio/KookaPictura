@@ -173,6 +173,6 @@ void MaximumFilterTest::roundnessCommitsAndRepeats()
     QCOMPARE(view->history_count(), afterFirst + 1);
 }
 
-QTEST_MAIN(MaximumFilterTest)
+PICTURA_QT_TEST_MAIN(MaximumFilterTest)
 
 #include "tst_maximum_filter.moc"

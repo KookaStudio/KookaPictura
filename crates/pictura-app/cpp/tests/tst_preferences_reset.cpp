@@ -151,7 +151,9 @@ void PreferencesResetTest::resetRefusesBusyProfileOrWriteFailure()
     const auto state = rootOf(sessionFilePath());
     QVERIFY(QDir().mkpath(state));
     QProcess holder;
-    holder.start(QCoreApplication::applicationFilePath(), {QStringLiteral("--hold-profile")});
+    holder.start(QCoreApplication::applicationFilePath(),
+                 {QStringLiteral("--suite"), QStringLiteral("tst_preferences_reset"),
+                  QStringLiteral("--hold-profile")});
     QVERIFY(holder.waitForStarted());
     QTRY_VERIFY_WITH_TIMEOUT(holder.bytesAvailable() > 0, 10000);
     QCOMPARE(holder.readAllStandardOutput(), QByteArray("ready\n"));
@@ -188,7 +190,9 @@ void PreferencesResetTest::concurrentInterruptedResetRecoverySerializes()
     environment.insert(QStringLiteral("XDG_STATE_HOME"), alternative.path());
     second.setProcessEnvironment(environment);
     for (QProcess* process : {&first, &second}) {
-        process->start(QCoreApplication::applicationFilePath(), {QStringLiteral("--recover-profile")});
+        process->start(QCoreApplication::applicationFilePath(),
+                       {QStringLiteral("--suite"), QStringLiteral("tst_preferences_reset"),
+                        QStringLiteral("--recover-profile")});
     }
     for (QProcess* process : {&first, &second}) {
         if (process->state() != QProcess::NotRunning) {
@@ -233,6 +237,7 @@ void PreferencesResetTest::completedRollbackDoesNotReplay()
     QCOMPARE(loadSession().recent, QStringList{QStringLiteral("/tmp/new.psd")});
 }
 
+namespace picturaQtTest_PreferencesResetTest {
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
@@ -254,6 +259,8 @@ int main(int argc, char** argv)
     }
     PreferencesResetTest test;
     return QTest::qExec(&test, argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(PreferencesResetTest)
 }
 
 #include "tst_preferences_reset.moc"

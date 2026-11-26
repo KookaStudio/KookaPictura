@@ -461,5 +461,5 @@ void BlendModeListTest::layerStyleKeepsUnsupportedCurrent()
     dialog.reject();
 }
 
-QTEST_MAIN(BlendModeListTest)
+PICTURA_QT_TEST_MAIN(BlendModeListTest)
 #include "tst_blend_mode_list.moc"

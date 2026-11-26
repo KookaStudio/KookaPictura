@@ -272,5 +272,5 @@ void ControlLimitsTest::nativeOpenMemoryRefusalIsPerRequest()
     QVERIFY(hasMemoryReason(completions[1]));
 }
 
-QTEST_MAIN(ControlLimitsTest)
+PICTURA_QT_TEST_MAIN(ControlLimitsTest)
 #include "tst_control_limits.moc"

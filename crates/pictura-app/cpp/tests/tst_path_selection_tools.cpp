@@ -210,5 +210,5 @@ void PathSelectionToolsTest::directSelectionTool()
     QCOMPARE(pictura::path_subpath_count(*f.view), 0);
 }
 
-QTEST_MAIN(PathSelectionToolsTest)
+PICTURA_QT_TEST_MAIN(PathSelectionToolsTest)
 #include "tst_path_selection_tools.moc"

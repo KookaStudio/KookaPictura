@@ -496,6 +496,6 @@ void TiltShiftTest::aSelectionOverTransparencyIsEmpty()
     view->deselect();
 }
 
-QTEST_MAIN(TiltShiftTest)
+PICTURA_QT_TEST_MAIN(TiltShiftTest)
 
 #include "tst_tilt_shift.moc"

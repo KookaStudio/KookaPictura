@@ -336,5 +336,5 @@ void UntrustedInputTest::controlAcceptsAPlainAbsolutePath()
     QVERIFY(document(QStringLiteral("open"), path).value(QStringLiteral("ok")).toBool());
 }
 
-QTEST_MAIN(UntrustedInputTest)
+PICTURA_QT_TEST_MAIN(UntrustedInputTest)
 #include "tst_untrusted_input.moc"

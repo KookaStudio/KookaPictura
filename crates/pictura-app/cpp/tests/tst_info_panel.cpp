@@ -554,5 +554,5 @@ void InfoPanelTest::customScaleUsesNumericLocale()
     QCOMPARE(pictura::measurement_scale_values(*view)[1], 1.5);
 }
 
-QTEST_MAIN(InfoPanelTest)
+PICTURA_QT_TEST_MAIN(InfoPanelTest)
 #include "tst_info_panel.moc"

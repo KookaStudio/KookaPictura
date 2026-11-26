@@ -899,5 +899,5 @@ void UiLocalizationTest::sharedFieldAppliesLocaleToKeys()
     QCOMPARE(commits.count(), 2);
 }
 
-QTEST_MAIN(UiLocalizationTest)
+PICTURA_QT_TEST_MAIN(UiLocalizationTest)
 #include "tst_ui_localization.moc"

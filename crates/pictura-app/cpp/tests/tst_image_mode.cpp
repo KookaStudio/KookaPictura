@@ -255,5 +255,5 @@ void ImageModeTest::bitmapDialogOffersThreeMethods()
     QCOMPARE(dialog.method(), 2);
 }
 
-QTEST_MAIN(ImageModeTest)
+PICTURA_QT_TEST_MAIN(ImageModeTest)
 #include "tst_image_mode.moc"

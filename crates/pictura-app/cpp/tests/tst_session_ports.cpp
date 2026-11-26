@@ -71,5 +71,5 @@ void SessionPortsTest::resolversPickImplementingHandlers()
             == nullptr);
 }
 
-QTEST_MAIN(SessionPortsTest)
+PICTURA_QT_TEST_MAIN(SessionPortsTest)
 #include "tst_session_ports.moc"

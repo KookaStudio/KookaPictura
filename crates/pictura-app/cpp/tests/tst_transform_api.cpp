@@ -63,5 +63,7 @@ void TransformApiTest::quadAndPreviewMatrixMatchTheLegacyFormat()
     QVERIFY(!transform_api::previewMatrix(view).valid);
 }
 
-QTEST_MAIN(TransformApiTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(TransformApiTest)
 #include "tst_transform_api.moc"

@@ -1391,5 +1391,5 @@ void MaskEditTest::saveSelectionIntoMissingMaskRefuses()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(MaskEditTest)
+PICTURA_QT_TEST_MAIN(MaskEditTest)
 #include "tst_mask_edit.moc"

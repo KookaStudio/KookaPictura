@@ -204,5 +204,5 @@ void PictureFrameDialogTest::lastFilterSettingsReopensItPrefilled()
     QCOMPARE(seen, committed);
 }
 
-QTEST_MAIN(PictureFrameDialogTest)
+PICTURA_QT_TEST_MAIN(PictureFrameDialogTest)
 #include "tst_picture_frame_dialog.moc"

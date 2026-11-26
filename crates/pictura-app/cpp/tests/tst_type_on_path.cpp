@@ -336,5 +336,5 @@ void TypeOnPathTest::moveAndTransformOnPath()
     QFile::remove(file);
 }
 
-QTEST_MAIN(TypeOnPathTest)
+PICTURA_QT_TEST_MAIN(TypeOnPathTest)
 #include "tst_type_on_path.moc"

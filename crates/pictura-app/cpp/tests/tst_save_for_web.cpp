@@ -755,5 +755,5 @@ void SaveForWebTest::menuCommand()
     QVERIFY(action->isEnabled());
 }
 
-QTEST_MAIN(SaveForWebTest)
+PICTURA_QT_TEST_MAIN(SaveForWebTest)
 #include "tst_save_for_web.moc"

@@ -169,5 +169,7 @@ void BusyJobTest::aNegativeProgressShowsABusyBar()
     QVERIFY2(!counted, "the bar never shows a percentage");
 }
 
-QTEST_MAIN(BusyJobTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(BusyJobTest)
 #include "tst_busy_job.moc"

@@ -602,5 +602,5 @@ void KeyboardShortcutsTest::listsPanelCommands()
     QCOMPARE(dialog.rowLabelForTest(character), QStringLiteral("Faux Bold"));
     QCOMPARE(dialog.rowGroupForTest(character), QStringLiteral("Character Panel"));
 }
-QTEST_MAIN(KeyboardShortcutsTest)
+PICTURA_QT_TEST_MAIN(KeyboardShortcutsTest)
 #include "tst_keyboard_shortcuts.moc"

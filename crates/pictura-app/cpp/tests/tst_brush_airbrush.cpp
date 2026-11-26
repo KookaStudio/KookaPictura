@@ -646,5 +646,5 @@ void BrushAirbrushTest::gpuHoldBuilds()
     QVERIFY(view->undo());
 }
 
-QTEST_MAIN(BrushAirbrushTest)
+PICTURA_QT_TEST_MAIN(BrushAirbrushTest)
 #include "tst_brush_airbrush.moc"

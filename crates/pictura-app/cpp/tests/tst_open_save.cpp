@@ -247,5 +247,5 @@ void OpenSaveTest::layeredRasterSaveOpensSaveAs()
     QVERIFY(window->isDocumentDirty(0));
 }
 
-QTEST_MAIN(OpenSaveTest)
+PICTURA_QT_TEST_MAIN(OpenSaveTest)
 #include "tst_open_save.moc"

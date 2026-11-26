@@ -376,6 +376,6 @@ void LayerCompsExportTest::exportLeavesHistoryAndDirtyUnchanged()
     QCOMPARE(pictura::document_api::isDirty(*view), dirty);
 }
 
-QTEST_MAIN(LayerCompsExportTest)
+PICTURA_QT_TEST_MAIN(LayerCompsExportTest)
 
 #include "tst_layer_comps_export.moc"

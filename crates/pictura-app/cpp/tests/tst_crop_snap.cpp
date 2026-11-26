@@ -109,5 +109,5 @@ void CropSnapTest::compositeBoundsAreTheLayerUnion()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(CropSnapTest)
+PICTURA_QT_TEST_MAIN(CropSnapTest)
 #include "tst_crop_snap.moc"

@@ -349,4 +349,4 @@ void ApplyImageTest::growsSmallLayerToDocument()
 
 #include "tst_apply_image.moc"
 
-QTEST_MAIN(ApplyImageTest)
+PICTURA_QT_TEST_MAIN(ApplyImageTest)

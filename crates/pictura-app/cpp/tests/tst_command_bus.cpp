@@ -251,5 +251,5 @@ void CommandBusTest::ae_record_refused()
     QVERIFY(events_.isEmpty());
 }
 
-QTEST_MAIN(CommandBusTest)
+PICTURA_QT_TEST_MAIN(CommandBusTest)
 #include "tst_command_bus.moc"

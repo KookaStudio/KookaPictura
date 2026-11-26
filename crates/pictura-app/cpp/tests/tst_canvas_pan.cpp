@@ -725,5 +725,5 @@ void CanvasPanTest::spacePanHoverAndMiddleButton()
     QVERIFY(!f.canvas->spacePanForTest());
 }
 
-QTEST_MAIN(CanvasPanTest)
+PICTURA_QT_TEST_MAIN(CanvasPanTest)
 #include "tst_canvas_pan.moc"

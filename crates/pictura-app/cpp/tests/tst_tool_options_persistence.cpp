@@ -1137,5 +1137,5 @@ void ToolOptionsPersistenceTest::outOfRangeEntriesClamp()
                         + describe(expected)));
 }
 
-QTEST_MAIN(ToolOptionsPersistenceTest)
+PICTURA_QT_TEST_MAIN(ToolOptionsPersistenceTest)
 #include "tst_tool_options_persistence.moc"

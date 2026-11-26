@@ -635,5 +635,5 @@ void MeasurementScaleTest::preservesCalibrationThroughEditionSave()
     }
 }
 
-QTEST_MAIN(MeasurementScaleTest)
+PICTURA_QT_TEST_MAIN(MeasurementScaleTest)
 #include "tst_measurement_scale.moc"

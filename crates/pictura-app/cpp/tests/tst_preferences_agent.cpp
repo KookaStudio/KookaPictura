@@ -271,5 +271,5 @@ void PreferencesAgentTest::menuOpensThePage()
     dialog->close();
 }
 
-QTEST_MAIN(PreferencesAgentTest)
+PICTURA_QT_TEST_MAIN(PreferencesAgentTest)
 #include "tst_preferences_agent.moc"

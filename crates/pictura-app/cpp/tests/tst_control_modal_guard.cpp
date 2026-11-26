@@ -184,5 +184,5 @@ void ControlModalGuardTest::aJobProgressWindowRunsToTheEnd()
     QVERIFY(window_->closeActiveDocument(false));
 }
 
-QTEST_MAIN(ControlModalGuardTest)
+PICTURA_QT_TEST_MAIN(ControlModalGuardTest)
 #include "tst_control_modal_guard.moc"

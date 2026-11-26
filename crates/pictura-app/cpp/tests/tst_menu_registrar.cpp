@@ -67,5 +67,7 @@ void MenuRegistrarTest::buildsMenuWithoutFrame()
     QVERIFY2(standard->isChecked(), "a checked provider reaches the menu action");
 }
 
-QTEST_MAIN(MenuRegistrarTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(MenuRegistrarTest)
 #include "tst_menu_registrar.moc"

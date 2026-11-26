@@ -261,4 +261,4 @@ void MatchColorTest::statisticsRoundTripThroughSaveLoad()
 
 #include "tst_match_color.moc"
 
-QTEST_MAIN(MatchColorTest)
+PICTURA_QT_TEST_MAIN(MatchColorTest)

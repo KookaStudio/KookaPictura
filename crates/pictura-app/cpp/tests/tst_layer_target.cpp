@@ -979,5 +979,5 @@ void LayerTargetTest::clickingEmptySpaceClearsCurrentRow()
     QVERIFY(panel_->currentPath().isEmpty());
 }
 
-QTEST_MAIN(LayerTargetTest)
+PICTURA_QT_TEST_MAIN(LayerTargetTest)
 #include "tst_layer_target.moc"

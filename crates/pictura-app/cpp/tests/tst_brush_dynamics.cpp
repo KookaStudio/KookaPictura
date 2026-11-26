@@ -351,5 +351,5 @@ void BrushDynamicsTest::tipPresetsFollowLightFamily()
     QVERIFY2(ink().lightness() < 96, "the light family repaints the tip in dark ink");
 }
 
-QTEST_MAIN(BrushDynamicsTest)
+PICTURA_QT_TEST_MAIN(BrushDynamicsTest)
 #include "tst_brush_dynamics.moc"

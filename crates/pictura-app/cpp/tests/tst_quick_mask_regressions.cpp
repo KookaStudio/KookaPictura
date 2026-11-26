@@ -250,5 +250,5 @@ void QuickMaskRegressionsTest::geometryResetDoesNotLeakStaleCoverage()
         QCOMPARE(view_->selection_coverage(8, 8), 0);
     }
 }
-QTEST_MAIN(QuickMaskRegressionsTest)
+PICTURA_QT_TEST_MAIN(QuickMaskRegressionsTest)
 #include "tst_quick_mask_regressions.moc"

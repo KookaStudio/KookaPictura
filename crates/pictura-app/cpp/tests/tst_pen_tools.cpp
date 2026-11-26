@@ -650,5 +650,5 @@ void PenToolsTest::enterInFieldKeepsPathActive()
     QCOMPARE(pictura::path_editing_subpath(*f.view), -1);
 }
 
-QTEST_MAIN(PenToolsTest)
+PICTURA_QT_TEST_MAIN(PenToolsTest)
 #include "tst_pen_tools.moc"

@@ -1300,9 +1300,12 @@ void WorkspacesTest::switcherVisibleForEveryTool()
     }
 }
 
+namespace picturaQtTest_WorkspacesTest {
 int main(int argc, char *argv[])
 {
     return pictura::test::shardedMain<WorkspacesTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(WorkspacesTest)
 }
 
 #include "tst_workspaces.moc"

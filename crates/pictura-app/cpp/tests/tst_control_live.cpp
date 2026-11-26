@@ -324,5 +324,5 @@ void ControlLiveTest::separateConfigRootIsHardDenied()
     }
 }
 
-QTEST_MAIN(ControlLiveTest)
+PICTURA_QT_TEST_MAIN(ControlLiveTest)
 #include "tst_control_live.moc"

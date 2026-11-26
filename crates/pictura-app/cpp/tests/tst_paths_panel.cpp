@@ -393,5 +393,5 @@ void PathsPanelTest::deletingTheVectorMaskRow()
     QCOMPARE(pictura::paths_active(v), -2);
 }
 
-QTEST_MAIN(PathsPanelTest)
+PICTURA_QT_TEST_MAIN(PathsPanelTest)
 #include "tst_paths_panel.moc"

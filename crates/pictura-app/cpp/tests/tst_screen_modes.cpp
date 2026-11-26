@@ -428,5 +428,5 @@ void ScreenModesTest::tabOnCanvasTogglesPanels()
     QVERIFY(panels->isVisible());
 }
 
-QTEST_MAIN(ScreenModesTest)
+PICTURA_QT_TEST_MAIN(ScreenModesTest)
 #include "tst_screen_modes.moc"

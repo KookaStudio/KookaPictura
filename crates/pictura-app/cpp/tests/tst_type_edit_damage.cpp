@@ -433,5 +433,5 @@ void TypeEditDamageTest::aHugeBoxRefreshesItsInk()
     QVERIFY2(damagedInside(damaged, QRect(0, 0, 500, 200)), "the words, not the box");
 }
 
-QTEST_MAIN(TypeEditDamageTest)
+PICTURA_QT_TEST_MAIN(TypeEditDamageTest)
 #include "tst_type_edit_damage.moc"

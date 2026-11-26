@@ -341,5 +341,5 @@ void ProfileWarningsTest::notADocumentEdit()
     QCOMPARE(view.is_dirty(), dirty);
 }
 
-QTEST_MAIN(ProfileWarningsTest)
+PICTURA_QT_TEST_MAIN(ProfileWarningsTest)
 #include "tst_profile_warnings.moc"

@@ -313,5 +313,5 @@ void ControlMetricsTest::frameResetClearsPendingTiming()
     QCOMPARE(row.value("input_count").toInt(), 0);
 }
 
-QTEST_MAIN(ControlMetricsTest)
+PICTURA_QT_TEST_MAIN(ControlMetricsTest)
 #include "tst_control_metrics.moc"

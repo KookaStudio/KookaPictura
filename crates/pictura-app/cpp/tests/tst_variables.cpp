@@ -240,5 +240,5 @@ void VariablesTest::desktopOpenLoadsTemplateMetadata()
     QVERIFY(reopened->registry()->action(applyId)->isEnabled());
 }
 
-QTEST_MAIN(VariablesTest)
+PICTURA_QT_TEST_MAIN(VariablesTest)
 #include "tst_variables.moc"

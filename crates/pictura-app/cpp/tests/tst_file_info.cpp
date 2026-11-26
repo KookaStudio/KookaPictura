@@ -335,5 +335,5 @@ void FileInfoTest::xmpOnlySharedFieldPrefillsControl()
     QCOMPARE(reopened->fieldForTest(QStringLiteral("2:90")), QStringLiteral("Paris"));
 }
 
-QTEST_MAIN(FileInfoTest)
+PICTURA_QT_TEST_MAIN(FileInfoTest)
 #include "tst_file_info.moc"

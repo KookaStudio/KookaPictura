@@ -168,5 +168,5 @@ void PicturaRawTest::menuEnablement()
     QVERIFY2(raw->isEnabled(), "Pictura Raw is enabled for a raster layer");
 }
 
-QTEST_MAIN(PicturaRawTest)
+PICTURA_QT_TEST_MAIN(PicturaRawTest)
 #include "tst_pictura_raw.moc"

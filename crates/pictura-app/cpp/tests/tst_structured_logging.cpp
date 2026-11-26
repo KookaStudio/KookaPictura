@@ -107,7 +107,8 @@ void StructuredLoggingTest::routesRustAndQtRecords()
     QVERIFY(root.isValid());
     QProcess child;
     start(child, QCoreApplication::applicationFilePath(),
-          {QStringLiteral("--logging-child"), QStringLiteral("records")}, root.path(),
+          {QStringLiteral("--suite"), QStringLiteral("tst_structured_logging"),
+          QStringLiteral("--logging-child"), QStringLiteral("records")}, root.path(),
           QStringLiteral("info,pictura::qt=debug"));
     QVERIFY(child.waitForFinished(30000));
     QCOMPARE(child.exitCode(), 0);
@@ -126,7 +127,8 @@ void StructuredLoggingTest::appliesTargetAndCategoryRules()
     QVERIFY(root.isValid());
     QProcess child;
     start(child, QCoreApplication::applicationFilePath(),
-          {QStringLiteral("--logging-child"), QStringLiteral("records")}, root.path(),
+          {QStringLiteral("--suite"), QStringLiteral("tst_structured_logging"),
+          QStringLiteral("--logging-child"), QStringLiteral("records")}, root.path(),
           QStringLiteral("warn,pictura::qt=debug"));
     QVERIFY(child.waitForFinished(30000));
     QCOMPARE(child.exitCode(), 0);
@@ -143,7 +145,8 @@ void StructuredLoggingTest::keepsPrivateFieldsOutOfFile()
     QVERIFY(root.isValid());
     QProcess child;
     start(child, QCoreApplication::applicationFilePath(),
-          {QStringLiteral("--logging-child"), QStringLiteral("records")}, root.path());
+          {QStringLiteral("--suite"), QStringLiteral("tst_structured_logging"),
+          QStringLiteral("--logging-child"), QStringLiteral("records")}, root.path());
     QVERIFY(child.waitForFinished(30000));
     QCOMPARE(child.exitCode(), 0);
     const auto records = fileRecords(root.path());
@@ -211,7 +214,8 @@ void StructuredLoggingTest::flushesAndPreservesFatalExit()
             && unavailableRoot.isValid());
     const auto exe = QCoreApplication::applicationFilePath();
     QProcess healthy;
-    start(healthy, exe, {QStringLiteral("--logging-child"), QStringLiteral("records")}, healthyRoot.path());
+    start(healthy, exe, {QStringLiteral("--suite"), QStringLiteral("tst_structured_logging"),
+          QStringLiteral("--logging-child"), QStringLiteral("records")}, healthyRoot.path());
     QVERIFY(healthy.waitForFinished(30000));
     QCOMPARE(healthy.exitCode(), 0);
     QVERIFY(hasEvent(fileRecords(healthyRoot.path()), QStringLiteral("document.save"), QStringLiteral("INFO")));
@@ -221,7 +225,8 @@ void StructuredLoggingTest::flushesAndPreservesFatalExit()
     QVERIFY(blocked.open(QIODevice::WriteOnly));
     blocked.close();
     QProcess unavailable;
-    start(unavailable, exe, {QStringLiteral("--logging-child"), QStringLiteral("records")},
+    start(unavailable, exe, {QStringLiteral("--suite"), QStringLiteral("tst_structured_logging"),
+          QStringLiteral("--logging-child"), QStringLiteral("records")},
           unavailableRoot.path());
     QVERIFY(unavailable.waitForFinished(30000));
     QCOMPARE(unavailable.exitCode(), 0);
@@ -230,14 +235,16 @@ void StructuredLoggingTest::flushesAndPreservesFatalExit()
     QVERIFY(fallback.contains("\"event\":\"document.save\""));
 
     QProcess stalled;
-    start(stalled, exe, {QStringLiteral("--logging-child"), QStringLiteral("stall")}, stalledRoot.path());
+    start(stalled, exe, {QStringLiteral("--suite"), QStringLiteral("tst_structured_logging"),
+          QStringLiteral("--logging-child"), QStringLiteral("stall")}, stalledRoot.path());
     QVERIFY(stalled.waitForFinished(7000));
     QCOMPARE(stalled.exitCode(), 0);
     QVERIFY(stalled.readAllStandardError().contains("diagnostic drain incomplete"));
     QVERIFY(stalled.readAllStandardOutput().isEmpty());
 
     QProcess fatal;
-    start(fatal, exe, {QStringLiteral("--logging-child"), QStringLiteral("fatal")}, fatalRoot.path());
+    start(fatal, exe, {QStringLiteral("--suite"), QStringLiteral("tst_structured_logging"),
+          QStringLiteral("--logging-child"), QStringLiteral("fatal")}, fatalRoot.path());
     QVERIFY(fatal.waitForFinished(10000));
     QCOMPARE(fatal.exitStatus(), QProcess::CrashExit);
     const auto stderrText = fatal.readAllStandardError();
@@ -246,6 +253,7 @@ void StructuredLoggingTest::flushesAndPreservesFatalExit()
     QVERIFY(stderrText.contains("diagnostic-fixture-fatal"));
 }
 
+namespace picturaQtTest_StructuredLoggingTest {
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
@@ -255,6 +263,8 @@ int main(int argc, char** argv)
     }
     StructuredLoggingTest suite;
     return QTest::qExec(&suite, argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(StructuredLoggingTest)
 }
 
 #include "tst_structured_logging.moc"

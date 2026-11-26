@@ -1160,5 +1160,5 @@ void SelectionPreviewTest::ellipticalStyleIsIndependent()
     rect->setMarqueeStyle(pictura::MarqueeStyle::Normal);
 }
 
-QTEST_MAIN(SelectionPreviewTest)
+PICTURA_QT_TEST_MAIN(SelectionPreviewTest)
 #include "tst_selection_preview.moc"

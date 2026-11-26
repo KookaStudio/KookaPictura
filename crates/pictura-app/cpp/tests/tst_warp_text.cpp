@@ -510,5 +510,5 @@ void WarpTextTest::warpSessionCancelsOrCommitsOnce()
     QCOMPARE(pictura::type_api::layerWarp(*f.view, path).style, QStringLiteral("arc"));
 }
 
-QTEST_MAIN(WarpTextTest)
+PICTURA_QT_TEST_MAIN(WarpTextTest)
 #include "tst_warp_text.moc"

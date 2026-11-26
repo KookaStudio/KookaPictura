@@ -178,5 +178,5 @@ void DocumentRegistryTest::removingADocumentNotifiesOwners()
     QCOMPARE(registry->count(), 0);
 }
 
-QTEST_MAIN(DocumentRegistryTest)
+PICTURA_QT_TEST_MAIN(DocumentRegistryTest)
 #include "tst_document_registry.moc"

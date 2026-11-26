@@ -547,5 +547,5 @@ void RulersGuidesTest::calibratedLengthUsesNumericLocale()
     QCOMPARE(pictura::measurement_scale_values(*view)[1], 1.5);
 }
 
-QTEST_MAIN(RulersGuidesTest)
+PICTURA_QT_TEST_MAIN(RulersGuidesTest)
 #include "tst_rulers_guides.moc"

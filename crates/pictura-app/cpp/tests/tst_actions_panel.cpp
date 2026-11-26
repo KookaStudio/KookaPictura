@@ -865,5 +865,5 @@ void ActionsPanelTest::ap_modal_parent()
 
 #include "tst_actions_panel_cases.cpp"
 
-QTEST_MAIN(ActionsPanelTest)
+PICTURA_QT_TEST_MAIN(ActionsPanelTest)
 #include "tst_actions_panel.moc"

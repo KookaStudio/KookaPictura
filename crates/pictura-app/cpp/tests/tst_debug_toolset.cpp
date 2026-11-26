@@ -755,5 +755,5 @@ void DebugToolsetTest::versionRowIsPlaceholder()
     QCOMPARE(panel()->rowText(QStringLiteral("build")), QStringLiteral("n/a (placeholder)"));
 }
 
-QTEST_MAIN(DebugToolsetTest)
+PICTURA_QT_TEST_MAIN(DebugToolsetTest)
 #include "tst_debug_toolset.moc"

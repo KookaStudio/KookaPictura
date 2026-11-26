@@ -74,5 +74,5 @@ void NativeMenuBarTest::nativeBarUnchangedAcrossScreenModes()
     QCOMPARE(bar->isNativeMenuBar(), initial);
 }
 
-QTEST_MAIN(NativeMenuBarTest)
+PICTURA_QT_TEST_MAIN(NativeMenuBarTest)
 #include "tst_native_menu_bar.moc"

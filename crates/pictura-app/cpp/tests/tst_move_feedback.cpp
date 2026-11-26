@@ -887,5 +887,5 @@ void MoveFeedbackTest::basePatchEdgeLeavesNoSeam()
     f.canvas->mouseReleased(QPointF(400.0, 200.0));
 }
 
-QTEST_MAIN(MoveFeedbackTest)
+PICTURA_QT_TEST_MAIN(MoveFeedbackTest)
 #include "tst_move_feedback.moc"

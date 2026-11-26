@@ -166,5 +166,5 @@ void SwatchesPanelTest::resetRestoresDefaults()
     QCOMPARE(grid->swatches().at(0).color.name(), QStringLiteral("#ff0000"));
 }
 
-QTEST_MAIN(SwatchesPanelTest)
+PICTURA_QT_TEST_MAIN(SwatchesPanelTest)
 #include "tst_swatches_panel.moc"

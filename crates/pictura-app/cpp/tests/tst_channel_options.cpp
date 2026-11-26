@@ -456,5 +456,5 @@ void ChannelOptionsTest::duplicateSelectedChannelNormalizesToMasked()
              QStringLiteral("Duplicate Channel"));
 }
 
-QTEST_MAIN(ChannelOptionsTest)
+PICTURA_QT_TEST_MAIN(ChannelOptionsTest)
 #include "tst_channel_options.moc"

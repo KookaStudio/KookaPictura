@@ -196,5 +196,5 @@ void ReplaceColorTest::rejectsWhenDocumentChangesOrCloses()
     QVERIFY(!tools->canvasSamplerActive());
 }
 
-QTEST_MAIN(ReplaceColorTest)
+PICTURA_QT_TEST_MAIN(ReplaceColorTest)
 #include "tst_replace_color.moc"

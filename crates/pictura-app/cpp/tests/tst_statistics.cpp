@@ -526,5 +526,5 @@ void StatisticsTest::worksWithoutDocument()
     QCOMPARE(window_->documentCount(), 1);
 }
 
-QTEST_MAIN(StatisticsTest)
+PICTURA_QT_TEST_MAIN(StatisticsTest)
 #include "tst_statistics.moc"

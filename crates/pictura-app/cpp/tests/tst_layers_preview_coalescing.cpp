@@ -731,5 +731,5 @@ void LayersPreviewCoalescingTest::groupOpacityPreviewFallsBackToFullRecomposite(
 }
 
 
-QTEST_MAIN(LayersPreviewCoalescingTest)
+PICTURA_QT_TEST_MAIN(LayersPreviewCoalescingTest)
 #include "tst_layers_preview_coalescing.moc"

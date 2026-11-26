@@ -873,8 +873,11 @@ void LoadingTabTest::nativeOpenCancelDiscardsLateFailure()
     QVERIFY(window_->statusBar()->currentMessage().isEmpty());
 }
 
+namespace picturaQtTest_LoadingTabTest {
 int main(int argc, char* argv[])
 {
     return pictura::test::shardedMain<LoadingTabTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(LoadingTabTest)
 }
 #include "tst_loading_tab.moc"

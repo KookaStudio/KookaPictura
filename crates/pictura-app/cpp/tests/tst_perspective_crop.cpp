@@ -252,5 +252,5 @@ void PerspectiveCropTest::enterInFieldKeepsQuadStaged()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(PerspectiveCropTest)
+PICTURA_QT_TEST_MAIN(PerspectiveCropTest)
 #include "tst_perspective_crop.moc"

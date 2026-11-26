@@ -101,5 +101,7 @@ void PaintApiTest::midStrokePresentKeepsStrokeOpen()
     QVERIFY(!view.is_painting());
 }
 
-QTEST_MAIN(PaintApiTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(PaintApiTest)
 #include "tst_paint_api.moc"

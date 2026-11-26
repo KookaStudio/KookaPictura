@@ -161,6 +161,6 @@ void DeInterlaceTest::noFilterTargetDisablesTheEntry()
     QVERIFY(action->isEnabled());
 }
 
-QTEST_MAIN(DeInterlaceTest)
+PICTURA_QT_TEST_MAIN(DeInterlaceTest)
 
 #include "tst_de_interlace.moc"

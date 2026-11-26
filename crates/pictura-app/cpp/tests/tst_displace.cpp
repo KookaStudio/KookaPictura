@@ -139,6 +139,6 @@ void DisplaceTest::unusableMapsAreRefused()
     QCOMPARE(view->image(), before);
 }
 
-QTEST_MAIN(DisplaceTest)
+PICTURA_QT_TEST_MAIN(DisplaceTest)
 
 #include "tst_displace.moc"

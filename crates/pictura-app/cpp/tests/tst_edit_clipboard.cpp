@@ -177,5 +177,5 @@ void EditClipboardTest::purgeCommands()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(EditClipboardTest)
+PICTURA_QT_TEST_MAIN(EditClipboardTest)
 #include "tst_edit_clipboard.moc"

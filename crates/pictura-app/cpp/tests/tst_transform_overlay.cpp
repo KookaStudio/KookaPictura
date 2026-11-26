@@ -240,5 +240,5 @@ void TransformOverlayTest::reducedPreviewDrawsAtDocumentSize()
     }
 }
 
-QTEST_MAIN(TransformOverlayTest)
+PICTURA_QT_TEST_MAIN(TransformOverlayTest)
 #include "tst_transform_overlay.moc"

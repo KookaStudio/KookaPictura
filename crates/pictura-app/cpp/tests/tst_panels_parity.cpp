@@ -830,5 +830,5 @@ void PanelsParityTest::hiddenLayerShowsFadedEye()
     window_->closeDocument(doc, false);
 }
 
-QTEST_MAIN(PanelsParityTest)
+PICTURA_QT_TEST_MAIN(PanelsParityTest)
 #include "tst_panels_parity.moc"

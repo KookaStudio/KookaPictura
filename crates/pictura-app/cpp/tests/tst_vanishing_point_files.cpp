@@ -169,5 +169,5 @@ void VanishingPointFilesTest::planeOnlyOkMarksTheDocumentModified()
     session(&reader, [] { QCOMPARE(pictura::vp_plane_count(), 0); }, false);
 }
 
-QTEST_MAIN(VanishingPointFilesTest)
+PICTURA_QT_TEST_MAIN(VanishingPointFilesTest)
 #include "tst_vanishing_point_files.moc"

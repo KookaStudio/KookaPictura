@@ -785,5 +785,5 @@ void FilterGalleryTest::zoomChangeRefiltersTheCache()
     dialog.reject();
 }
 
-QTEST_MAIN(FilterGalleryTest)
+PICTURA_QT_TEST_MAIN(FilterGalleryTest)
 #include "tst_filter_gallery.moc"

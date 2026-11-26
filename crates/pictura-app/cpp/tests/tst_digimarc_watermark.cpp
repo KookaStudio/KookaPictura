@@ -269,6 +269,6 @@ void DigimarcWatermarkTest::undetectedWatermarkLeavesTheTitlePlain()
     QVERIFY2(!bar->tabToolTip(tab).contains(QChar(0x00A9)), qPrintable(bar->tabToolTip(tab)));
 }
 
-QTEST_MAIN(DigimarcWatermarkTest)
+PICTURA_QT_TEST_MAIN(DigimarcWatermarkTest)
 
 #include "tst_digimarc_watermark.moc"

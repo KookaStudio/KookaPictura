@@ -178,6 +178,6 @@ void CustomFilterTest::lastFilterReusesTheKernel()
     QCOMPARE(back.green(), 255 - once.green());
 }
 
-QTEST_MAIN(CustomFilterTest)
+PICTURA_QT_TEST_MAIN(CustomFilterTest)
 
 #include "tst_custom_filter.moc"

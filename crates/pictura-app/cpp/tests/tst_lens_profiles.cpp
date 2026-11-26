@@ -280,5 +280,5 @@ void LensProfilesTest::onlineProfilesStayDisabled()
     dialog->reject();
 }
 
-QTEST_MAIN(LensProfilesTest)
+PICTURA_QT_TEST_MAIN(LensProfilesTest)
 #include "tst_lens_profiles.moc"

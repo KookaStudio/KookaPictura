@@ -251,6 +251,6 @@ void LensBlurDialogTest::lastFilterSurvivesAStoreChurn()
     QCOMPARE(view->history_count(), states + 1);
 }
 
-QTEST_MAIN(LensBlurDialogTest)
+PICTURA_QT_TEST_MAIN(LensBlurDialogTest)
 
 #include "tst_lens_blur_dialog.moc"

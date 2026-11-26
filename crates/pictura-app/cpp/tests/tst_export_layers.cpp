@@ -528,6 +528,6 @@ void ExportLayersTest::layersSingleLayerWritesOneFile()
     QCOMPARE(files(dir.path()).size(), 1);
 }
 
-QTEST_MAIN(ExportLayersTest)
+PICTURA_QT_TEST_MAIN(ExportLayersTest)
 
 #include "tst_export_layers.moc"

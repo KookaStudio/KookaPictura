@@ -869,5 +869,5 @@ void QuickMaskTest::targetSwatchesSurviveQuickMaskAndDocumentSwitch()
     QCOMPARE(c->foreground(), QColor(20, 40, 60));
 }
 
-QTEST_MAIN(QuickMaskTest)
+PICTURA_QT_TEST_SHARDED_MAIN(QuickMaskTest)
 #include "tst_quick_mask.moc"

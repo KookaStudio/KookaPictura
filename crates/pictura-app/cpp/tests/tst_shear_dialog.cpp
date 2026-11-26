@@ -392,6 +392,6 @@ void ShearDialogTest::paneShowsTheBlendMode()
     QVERIFY2(red < 80, qPrintable(QStringLiteral("gray multiplied by itself, got %1").arg(red)));
 }
 
-QTEST_MAIN(ShearDialogTest)
+PICTURA_QT_TEST_MAIN(ShearDialogTest)
 
 #include "tst_shear_dialog.moc"

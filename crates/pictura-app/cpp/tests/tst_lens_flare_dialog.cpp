@@ -233,5 +233,5 @@ void LensFlareDialogTest::lastFilterSettingsReopensItPrefilled()
     QCOMPARE(seen, QList<double>({180.0, 0.6, 0.4, 2.0}));
 }
 
-QTEST_MAIN(LensFlareDialogTest)
+PICTURA_QT_TEST_MAIN(LensFlareDialogTest)
 #include "tst_lens_flare_dialog.moc"

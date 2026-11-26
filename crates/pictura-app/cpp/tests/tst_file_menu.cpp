@@ -184,5 +184,5 @@ void FileMenuTest::scriptsBrowseIsDisabled()
     QVERIFY(!action->isEnabled());
 }
 
-QTEST_MAIN(FileMenuTest)
+PICTURA_QT_TEST_MAIN(FileMenuTest)
 #include "tst_file_menu.moc"

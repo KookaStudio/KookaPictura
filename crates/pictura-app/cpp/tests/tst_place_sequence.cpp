@@ -1187,5 +1187,5 @@ void PlaceSequenceTest::closingDocumentAbortsTheBatch()
     QCOMPARE(layers_api::rowCount(*other), otherRows);
 }
 
-QTEST_MAIN(PlaceSequenceTest)
+PICTURA_QT_TEST_MAIN(PlaceSequenceTest)
 #include "tst_place_sequence.moc"

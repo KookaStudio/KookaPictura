@@ -379,5 +379,5 @@ void BrushOutlineTest::noRingForOtherTools()
     QVERIFY2(!f.canvas->hasBrushOutline(), "leaving the canvas clears the ring");
 }
 
-QTEST_MAIN(BrushOutlineTest)
+PICTURA_QT_TEST_MAIN(BrushOutlineTest)
 #include "tst_brush_outline.moc"

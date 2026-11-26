@@ -299,5 +299,7 @@ void IconAssetsTest::themeChangeRerenders()
     QVERIFY2(dark != light, "palette generation did not advance on a theme change");
 }
 
-QTEST_MAIN(IconAssetsTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(IconAssetsTest)
 #include "tst_icon_assets.moc"

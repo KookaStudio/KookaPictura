@@ -244,5 +244,5 @@ void TypePreferencesTest::glyphProtectionTogglesFallback()
     QVERIFY2(on != off, "the fallback face changes the uncovered glyph");
 }
 
-QTEST_MAIN(TypePreferencesTest)
+PICTURA_QT_TEST_MAIN(TypePreferencesTest)
 #include "tst_type_preferences.moc"

@@ -174,5 +174,5 @@ void HdrConversionTest::failedConversionRecordsNoHistory()
     QCOMPARE(view->history_count(), before);
 }
 
-QTEST_MAIN(HdrConversionTest)
+PICTURA_QT_TEST_MAIN(HdrConversionTest)
 #include "tst_hdr_conversion.moc"

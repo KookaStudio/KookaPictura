@@ -217,5 +217,7 @@ void ClientRegistrationTest::missingCliIsReported()
     QVERIFY(box.rowStatus(0).contains(QStringLiteral("not found")));
 }
 
-QTEST_MAIN(ClientRegistrationTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(ClientRegistrationTest)
 #include "tst_client_registration.moc"

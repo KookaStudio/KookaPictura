@@ -994,5 +994,5 @@ void TransformControlsTest::movePreviewKeepsAPromotedTransform()
     QCOMPARE(view->history_count(), base);
 }
 
-QTEST_MAIN(TransformControlsTest)
+PICTURA_QT_TEST_MAIN(TransformControlsTest)
 #include "tst_transform_controls.moc"

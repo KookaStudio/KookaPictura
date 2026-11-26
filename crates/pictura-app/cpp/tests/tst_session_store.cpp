@@ -277,5 +277,5 @@ void SessionStoreTest::columnRailModePersistsIndependently()
     QCOMPARE(pictura::loadSession().panelColumns, state.panelColumns);
 }
 
-QTEST_MAIN(SessionStoreTest)
+PICTURA_QT_TEST_MAIN(SessionStoreTest)
 #include "tst_session_store.moc"

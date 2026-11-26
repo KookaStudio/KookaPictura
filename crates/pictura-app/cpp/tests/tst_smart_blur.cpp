@@ -169,6 +169,6 @@ void SmartBlurTest::lastFilterRepeatsTheMode()
     QCOMPARE(again.pixelColor(6, 20), QColor(0, 0, 0));
 }
 
-QTEST_MAIN(SmartBlurTest)
+PICTURA_QT_TEST_MAIN(SmartBlurTest)
 
 #include "tst_smart_blur.moc"

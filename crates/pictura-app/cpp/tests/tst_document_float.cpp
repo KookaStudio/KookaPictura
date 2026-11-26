@@ -1227,9 +1227,12 @@ void DocumentFloatTest::workspaceSwitchKeepsFloats()
     QCOMPARE(tabBar()->count(), 1);
 }
 
+namespace picturaQtTest_DocumentFloatTest {
 int main(int argc, char* argv[])
 {
     return pictura::test::shardedMain<DocumentFloatTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(DocumentFloatTest)
 }
 
 #include "tst_document_float.moc"

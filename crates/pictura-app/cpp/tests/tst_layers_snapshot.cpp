@@ -493,5 +493,7 @@ void LayersSnapshotTest::patternFillThumbnailAndMask()
              QColor(Qt::black));
 }
 
-QTEST_MAIN(LayersSnapshotTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(LayersSnapshotTest)
 #include "tst_layers_snapshot.moc"

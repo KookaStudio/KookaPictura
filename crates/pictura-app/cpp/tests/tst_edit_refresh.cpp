@@ -955,9 +955,12 @@ void EditRefreshTest::typeLayoutRegistersTheFallbacks()
     QVERIFY(pictura::typeFallbacksRegistered());
 }
 
+namespace picturaQtTest_EditRefreshTest {
 int main(int argc, char* argv[])
 {
     return pictura::test::shardedMain<EditRefreshTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(EditRefreshTest)
 }
 
 #include "tst_edit_refresh.moc"

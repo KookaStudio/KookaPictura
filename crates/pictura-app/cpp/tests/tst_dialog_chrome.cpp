@@ -211,5 +211,7 @@ void DialogChromeTest::messageBoxGetsChrome()
     QVERIFY(text->geometry().top() >= bar->height());
 }
 
-QTEST_MAIN(DialogChromeTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(DialogChromeTest)
 #include "tst_dialog_chrome.moc"

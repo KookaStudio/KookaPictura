@@ -1396,5 +1396,5 @@ void CommandTreeTest::panelCommandShortcutWired() { pictura::test::panelCommandS
 void CommandTreeTest::panelCommandsInShortcuts() { pictura::test::panelCommandsInShortcuts(*window_); }
 void CommandTreeTest::panelPreferencesNotCommands() { pictura::test::panelPreferencesNotCommands(*window_); }
 void CommandTreeTest::undoLabelTracksHistory() { pictura::test::undoLabelTracksHistory(*window_); }
-QTEST_MAIN(CommandTreeTest)
+PICTURA_QT_TEST_MAIN(CommandTreeTest)
 #include "tst_command_tree.moc"

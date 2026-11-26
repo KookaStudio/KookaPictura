@@ -344,5 +344,5 @@ void SmartObjectRelinkTest::repairPreservesSmartFilters()
     QCOMPARE(layer_smart_filter_count(*window->activeView(), sharedPath), 1);
 }
 
-QTEST_MAIN(SmartObjectRelinkTest)
+PICTURA_QT_TEST_MAIN(SmartObjectRelinkTest)
 #include "tst_smart_object_relink.moc"

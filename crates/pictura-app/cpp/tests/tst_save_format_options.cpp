@@ -1134,5 +1134,5 @@ void SaveFormatOptionsTest::saveAsStepWithoutOptionsUsesRemembered()
     closeActive();
 }
 
-QTEST_MAIN(SaveFormatOptionsTest)
+PICTURA_QT_TEST_MAIN(SaveFormatOptionsTest)
 #include "tst_save_format_options.moc"
