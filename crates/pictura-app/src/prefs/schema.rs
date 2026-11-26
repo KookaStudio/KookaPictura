@@ -97,6 +97,8 @@ fields! {
     "agent" / "agentRoots": Vec<String> = Vec::new();
     "unitsAndGuides" / "rulerUnit": i32 = 1;
     "unitsAndGuides" / "traditionalPoints": bool = false;
+    "unitsAndGuides" / "columnWidthInches": f64 = 2.5;
+    "unitsAndGuides" / "columnGutterInches": f64 = 1.0 / 6.0;
     "unitsAndGuides" / "guideColor": String = "#4affff".into();
     "unitsAndGuides" / "guideDashed": bool = false;
     "keyboard" / "shortcuts": BTreeMap<String, Vec<String>> = BTreeMap::new();

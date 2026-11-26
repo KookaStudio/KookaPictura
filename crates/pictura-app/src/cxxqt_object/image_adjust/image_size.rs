@@ -40,6 +40,9 @@ pub mod ffi {
         /// Whether the document shows its resolution in pixels/cm.
         fn document_ppi_per_cm(view: &PictureView) -> bool;
 
+        /// Whether the document has a top-level Background for Canvas Size fill.
+        fn canvas_size_has_background(view: &PictureView) -> bool;
+
         /// Image ▸ Image Size: resample to `width` × `height` with `resample`
         /// (`"nearest"`, `"bilinear"`, `"bicubic"`; empty keeps the pixels) and
         /// set the resolution to `ppi` (shown per cm when `per_cm`). One

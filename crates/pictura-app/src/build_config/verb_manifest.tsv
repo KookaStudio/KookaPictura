@@ -8,6 +8,7 @@ free	apply_history_states	apply_history_states	api/document_bridge.h	pictura_app
 free	cancel_mode_preview	cancel_mode_preview	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	canvas_size_apply	canvas_size_apply	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	canvas_size_fits_budget	canvas_size_fits_budget	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
+free	canvas_size_has_background	canvas_size_has_background	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	clear_guides	clear_guides	api/document_bridge.h	pictura_app/src/cxxqt_object/guides.cxxqt.h
 free	compatibility_preview_available	compatibility_preview_available	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	compatibility_reason	compatibility_reason	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h

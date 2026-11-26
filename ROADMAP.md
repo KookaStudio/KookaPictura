@@ -316,7 +316,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] Vibrance Auto and presets (#564)
 - [ ] Smoother, Sharper and Automatic image-size kernels, Scale Styles, Auto
       resolution, picas and columns, and float resample (#565)
-- [ ] Picas and columns in Canvas Size, and extension-fill availability gating
+- [x] Picas and columns in Canvas Size, and extension-fill availability gating
       (#566)
 - [ ] The arbitrary rotation dialog, the interpolation preference, and the
       ruler-straighten prefill (#567)

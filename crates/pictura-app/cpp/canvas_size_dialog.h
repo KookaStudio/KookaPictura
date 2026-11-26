@@ -62,14 +62,16 @@ public:
     QWidget* controlForTest(const QString& name) const;
 
 private:
-    void buildUi();
+    void buildUi(bool canExtendBackground);
     void updateSizes();
     void relativeToggled(bool on);
     void extensionChosen();
     void pickExtensionColor();
     void updateSwatch();
     double unitScale(int unit) const;
-    int toPixels(const QDoubleSpinBox* field, int unit, int base) const;
+    int toPixels(double value, int unit, int base) const;
+    double fromPixels(int pixels, int unit, int base) const;
+    int resultSize(const QDoubleSpinBox* field, int unit, int base) const;
     // Restate `field` in `unit`, keeping the size it describes; `previous` is
     // the unit its number is written in now.
     void changeUnit(QDoubleSpinBox* field, int unit, int& previous, int base);
@@ -77,6 +79,9 @@ private:
     int pixelWidth_ = 1;
     int pixelHeight_ = 1;
     double resolution_ = 72.0;
+    bool traditionalPoints_ = false;
+    double columnWidthPixels_ = 0.0;
+    double columnPitchPixels_ = 0.0;
     double bytesPerPixel_ = 3.0;
     QColor foreground_;
     QColor background_;

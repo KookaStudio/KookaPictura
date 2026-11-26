@@ -1,9 +1,11 @@
 #include "canvas_size_dialog.h"
 #include <QtCore/QCoreApplication>
 
+#include "canvas_ruler.h"
 #include "color_picker_dialog.h"
 #include "image_size_dialog.h"
 #include "panels/color_swatch_widget.h"
+#include "preferences.h"
 
 #include "api/document_bridge.h"
 
@@ -22,14 +24,18 @@
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace pictura {
 
 namespace {
 
 // Width/Height units, in CS6's order.
-enum Unit { UnitPercent = 0, UnitPixels, UnitInches, UnitCm, UnitMm, UnitPoints };
+enum Unit {
+    UnitPercent = 0, UnitPixels, UnitInches, UnitCm, UnitMm, UnitPoints, UnitPicas, UnitColumns
+};
 
 constexpr int kCell = 26;
 
@@ -39,6 +45,16 @@ const QString kWhite = QStringLiteral("White");
 const QString kBlack = QStringLiteral("Black");
 const QString kGray = QStringLiteral("Gray");
 const QString kOther = QStringLiteral("Other…");
+
+void setRestatedValue(QDoubleSpinBox* field, double value)
+{
+    if (std::isfinite(value) && std::abs(value) > field->maximum()) {
+        const double bound = std::abs(value) <= std::numeric_limits<double>::max() / 2.0
+            ? std::abs(value) * 2.0 : std::numeric_limits<double>::max();
+        field->setRange(-bound, bound);
+    }
+    field->setValue(value);
+}
 
 } // namespace
 
@@ -150,7 +166,19 @@ CanvasSizeDialog::CanvasSizeDialog(PictureView* view, const QColor& foreground,
         resolution_ = document_ppi(*view);
     }
     bytesPerPixel_ = bytesPerPixel(view);
-    buildUi();
+    const auto prefs = loadPreferences();
+    const auto defaults = defaultPreferences();
+    traditionalPoints_ = prefs.traditionalPoints;
+    const double width = prefs.columnWidthInches * resolution_;
+    const double gutter = prefs.columnGutterInches * resolution_;
+    columnWidthPixels_ = std::isfinite(width) && width > 0.0
+        ? width : defaults.columnWidthInches * resolution_;
+    columnPitchPixels_ = columnWidthPixels_ + gutter;
+    if (gutter < 0.0 || !std::isfinite(columnPitchPixels_)) {
+        columnPitchPixels_ = columnWidthPixels_ + defaults.columnGutterInches * resolution_;
+    }
+
+    buildUi(view && canvas_size_has_background(*view));
     updateSizes();
 }
 
@@ -165,29 +193,55 @@ double CanvasSizeDialog::unitScale(int unit) const
         return resolution_ / 25.4;
     case UnitPoints:
         return resolution_ / 72.0;
+    case UnitPicas:
+        return pixelsPerRulerUnit(RulerUnit::Picas, resolution_, traditionalPoints_, 0.0);
+    case UnitColumns:
+        return columnPitchPixels_;
     default:
         return 1.0;
     }
 }
 
-int CanvasSizeDialog::toPixels(const QDoubleSpinBox* field, int unit, int base) const
+int CanvasSizeDialog::toPixels(double value, int unit, int base) const
 {
-    // A percentage is of the current size either way; Relative decides
-    // whether the result is added to it or replaces it.
-    return unit == UnitPercent ? qRound(base * field->value() / 100.0)
-                               : qRound(field->value() * unitScale(unit));
+    double pixels = value * unitScale(unit);
+    if (unit == UnitPercent) {
+        pixels = base * value / 100.0;
+    } else if (unit == UnitColumns && !relative_->isChecked()) {
+        pixels = value <= 1.0 ? value * columnWidthPixels_
+                              : columnWidthPixels_ + (value - 1.0) * columnPitchPixels_;
+    }
+    constexpr double limit = std::numeric_limits<int>::max();
+    return static_cast<int>(qRound64(qBound(-limit, pixels, limit)));
+}
+
+double CanvasSizeDialog::fromPixels(int pixels, int unit, int base) const
+{
+    if (unit == UnitPercent) {
+        return pixels * 100.0 / base;
+    }
+    if (unit == UnitColumns && !relative_->isChecked()) {
+        return pixels <= columnWidthPixels_ ? pixels / columnWidthPixels_
+                                            : 1.0 + (pixels - columnWidthPixels_) / columnPitchPixels_;
+    }
+    return pixels / unitScale(unit);
+}
+
+int CanvasSizeDialog::resultSize(const QDoubleSpinBox* field, int unit, int base) const
+{
+    const qint64 pixels = toPixels(field->value(), unit, base);
+    const qint64 size = relative_->isChecked() ? base + pixels : pixels;
+    return static_cast<int>(qBound(qint64{1}, size, qint64{std::numeric_limits<int>::max()}));
 }
 
 int CanvasSizeDialog::resultWidth() const
 {
-    const int v = toPixels(width_, widthUnit_->currentIndex(), pixelWidth_);
-    return qMax(1, relative_->isChecked() ? pixelWidth_ + v : v);
+    return resultSize(width_, widthUnit_->currentIndex(), pixelWidth_);
 }
 
 int CanvasSizeDialog::resultHeight() const
 {
-    const int v = toPixels(height_, heightUnit_->currentIndex(), pixelHeight_);
-    return qMax(1, relative_->isChecked() ? pixelHeight_ + v : v);
+    return resultSize(height_, heightUnit_->currentIndex(), pixelHeight_);
 }
 
 QString CanvasSizeDialog::anchorName() const
@@ -216,7 +270,7 @@ QColor CanvasSizeDialog::extensionColor() const
     return customColor_;
 }
 
-void CanvasSizeDialog::buildUi()
+void CanvasSizeDialog::buildUi(bool canExtendBackground)
 {
     auto* outer = new QHBoxLayout(this);
     outer->setContentsMargins(12, 12, 12, 12);
@@ -247,7 +301,7 @@ void CanvasSizeDialog::buildUi()
         newGrid->addWidget(new QLabel(label, this), row, 0, Qt::AlignRight);
         field = new QDoubleSpinBox(this);
         field->setObjectName(name);
-        field->setRange(-300000.0, 300000.0);
+        field->setRange(-1e15, 1e15);
         field->setDecimals(0);
         field->setMinimumWidth(90);
         newGrid->addWidget(field, row, 1);
@@ -255,7 +309,8 @@ void CanvasSizeDialog::buildUi()
         unit->setObjectName(name + QStringLiteral("Unit"));
         unit->addItems({QStringLiteral("Percent"), QStringLiteral("Pixels"),
                         QStringLiteral("Inches"), QStringLiteral("Centimeters"),
-                        QStringLiteral("Millimeters"), QStringLiteral("Points")});
+                        QStringLiteral("Millimeters"), QStringLiteral("Points"),
+                        QStringLiteral("Picas"), QStringLiteral("Columns")});
         newGrid->addWidget(unit, row, 2);
     };
     addRow(1, QStringLiteral("Width:"), QStringLiteral("canvasSizeWidth"), width_, widthUnit_);
@@ -270,9 +325,13 @@ void CanvasSizeDialog::buildUi()
     left->addWidget(newBox);
 
     auto* extensionRow = new QHBoxLayout;
-    extensionRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Canvas extension color:"), this));
+    auto* extensionLabel =
+        new QLabel(QCoreApplication::translate("PicturaUi", "Canvas extension color:"), this);
+    extensionLabel->setEnabled(canExtendBackground);
+    extensionRow->addWidget(extensionLabel);
     extension_ = new QComboBox(this);
     extension_->setObjectName(QStringLiteral("canvasSizeExtension"));
+    extension_->setEnabled(canExtendBackground);
     extension_->addItems({kForeground, kBackground});
     extension_->insertSeparator(extension_->count());
     extension_->addItems({kWhite, kBlack, kGray});
@@ -285,6 +344,7 @@ void CanvasSizeDialog::buildUi()
     swatch_ = new ColorSwatchWidget(this);
     swatch_->setObjectName(QStringLiteral("canvasSizeSwatch"));
     swatch_->setFixedSize(24, 22);
+    swatch_->setEnabled(canExtendBackground);
     swatch_->setToolTip(QCoreApplication::translate("PicturaUi", "Choose the canvas extension color"));
     extensionRow->addWidget(swatch_);
     left->addLayout(extensionRow);
@@ -329,12 +389,16 @@ void CanvasSizeDialog::buildUi()
 
 void CanvasSizeDialog::changeUnit(QDoubleSpinBox* field, int unit, int& previous, int base)
 {
-    const int pixels = toPixels(field, previous, base);
+    const int pixels = toPixels(field->value(), previous, base);
     previous = unit;
     const QSignalBlocker block(field);
-    field->setDecimals(unit == UnitPixels ? 0 : 2);
-    field->setValue(unit == UnitPercent ? (base > 0 ? pixels * 100.0 / base : 0.0)
-                                        : pixels / unitScale(unit));
+    int decimals = 2;
+    if (unit == UnitPicas || unit == UnitColumns) {
+        const double scale = unitScale(unit);
+        decimals = scale > 1e7 ? qBound(8, int(std::min(15.0, std::ceil(std::log10(scale)))) + 1, 16) : 8;
+    }
+    field->setDecimals(unit == UnitPixels ? 0 : decimals);
+    setRestatedValue(field, fromPixels(pixels, unit, base));
     updateSizes();
 }
 
@@ -345,7 +409,7 @@ void CanvasSizeDialog::relativeToggled(bool on)
     const QSignalBlocker bw(width_);
     const QSignalBlocker bh(height_);
     const auto restore = [this, on](QDoubleSpinBox* field, int unit, int base) {
-        field->setValue(on ? 0.0 : unit == UnitPercent ? 100.0 : base / unitScale(unit));
+        setRestatedValue(field, on ? 0.0 : fromPixels(base, unit, base));
     };
     restore(width_, widthUnit_->currentIndex(), pixelWidth_);
     restore(height_, heightUnit_->currentIndex(), pixelHeight_);
@@ -363,6 +427,9 @@ void CanvasSizeDialog::extensionChosen()
 
 void CanvasSizeDialog::pickExtensionColor()
 {
+    if (!swatch_->isEnabled()) {
+        return;
+    }
     const QColor picked = ColorPickerDialog::getColor(extensionColor(), this,
                                                       QStringLiteral("Canvas Extension Color"));
     if (picked.isValid()) {
