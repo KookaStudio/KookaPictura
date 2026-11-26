@@ -175,6 +175,7 @@ private:
     bool previewing_ = false;
     bool previewSuspended_ = false;
     AdjustmentControls* controls_ = nullptr;
+    AdjustmentControls* advancedControls_ = nullptr;
     PresetCombo* preset_ = nullptr;
     QCheckBox* preview_ = nullptr;
     QTimer* previewTimer_ = nullptr;

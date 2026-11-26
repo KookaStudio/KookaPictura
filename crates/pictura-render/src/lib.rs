@@ -193,9 +193,11 @@ mod calculations;
 pub use calculations::{calculate, CalculationsParams};
 mod filter;
 pub use filter::{
-    apply_adjustment_region, apply_adjustment_region_in_mode, apply_filter, apply_filter_region,
+    adjustment_native_target, apply_adjustment_region, apply_adjustment_region_in_mode,
+    apply_adjustment_region_with_native, apply_filter, apply_filter_region,
 };
 
+mod shadow_highlight;
 mod smart_filter;
 pub use smart_filter::{
     apply_smart_filter_chain, bake_smart_source_preview, decode_smart_filter, SmartFilterOp,

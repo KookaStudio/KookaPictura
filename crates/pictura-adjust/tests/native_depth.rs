@@ -136,6 +136,7 @@ fn covered() -> Vec<Adjustment> {
         Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
             shadows_amount: 70.0,
             highlights_amount: 40.0,
+            local: None,
         }),
         Adjustment::ColorBalance(ColorBalanceParams {
             shadows: [12.0, -6.0, 4.0],

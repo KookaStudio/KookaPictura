@@ -235,10 +235,16 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment, cmyk: bool) -> Option<
                 ),
             ],
         ),
-        Adjustment::ShadowsHighlights(_) => plain(
-            "Shadows/Highlights",
-            vec![
-                slider("shadowAmount", "Shadows Amount", U16(0), (0.0, 100.0), 0.0),
+        Adjustment::ShadowsHighlights(params) => {
+            let expanded = params.local.is_some();
+            let mut specs = vec![
+                slider(
+                    "shadowAmount",
+                    "Shadows Amount",
+                    U16(0),
+                    (0.0, 100.0),
+                    if expanded { 35.0 } else { 0.0 },
+                ),
                 slider(
                     "highlightAmount",
                     "Highlights Amount",
@@ -246,8 +252,22 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment, cmyk: bool) -> Option<
                     (0.0, 100.0),
                     0.0,
                 ),
-            ],
-        ),
+            ];
+            if expanded {
+                specs.extend([
+                    slider("shadowWidth", "Shadows Tonal Width", U16(6), (0.0, 100.0), 50.0),
+                    slider("shadowRadius", "Shadows Radius", U16(8), (0.0, 500.0), 30.0),
+                    slider("highlightWidth", "Highlights Tonal Width", U16(10), (0.0, 100.0), 50.0),
+                    slider("highlightRadius", "Highlights Radius", U16(12), (0.0, 500.0), 30.0),
+                    slider("brightness", "Brightness", I16(14), (-100.0, 100.0), 0.0),
+                    slider("colorCorrection", "Color Correction", I16(16), (-100.0, 100.0), 20.0),
+                    slider("midtoneContrast", "Midtone Contrast", I16(18), (-100.0, 100.0), 0.0),
+                    slider("blackClip", "Black Clip", U16Hundredths(20), (0.0, 10.0), 0.01),
+                    slider("whiteClip", "White Clip", U16Hundredths(22), (0.0, 10.0), 0.01),
+                ]);
+            }
+            plain("Shadows/Highlights", specs)
+        }
         Adjustment::HueSaturation(_) => {
             // Master at 10..16, then range k's Hue/Saturation/Lightness at
             // 16 + 14k + 8. The Master keys stay unprefixed.

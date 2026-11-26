@@ -50,7 +50,11 @@ pub(crate) fn adjustment(layer: &Layer) -> Result<Option<AdjustmentData>, PsdErr
         Adjustment::SelectiveColor(p) => crate::encode_selective_color(p.method, &p.ranges),
         Adjustment::GradientMap(p) => crate::encode_gradient_map(p, false),
         Adjustment::ShadowsHighlights(p) => {
-            crate::encode_shadows_highlights(p.shadows_amount as u16, p.highlights_amount as u16)
+            if p.local.is_some() {
+                crate::encode_shadows_highlights_local(*p).ok_or_else(unsupported)?
+            } else {
+                crate::encode_shadows_highlights(p.shadows_amount as u16, p.highlights_amount as u16)
+            }
         }
         Adjustment::Levels(_)
         | Adjustment::Exposure(_)

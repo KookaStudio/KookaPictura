@@ -90,14 +90,7 @@ pub fn apply_adjustment_region(
     mask: Option<&Coverage>,
     region: PsdRect,
 ) -> Result<(), FilterError> {
-    apply_op_region(
-        layer,
-        Op::Adjustment(adjustment),
-        mask,
-        region,
-        None,
-        ColorBalanceMode::Rgb,
-    )
+    apply_adjustment_region_in_mode(layer, adjustment, mask, region, None, ColorBalanceMode::Rgb)
 }
 
 /// As [`apply_adjustment_region`], with the document's CMYK state so a Channel
@@ -119,6 +112,47 @@ pub fn apply_adjustment_region_in_mode(
         cmyk,
         color_balance,
     )
+}
+
+/// Resolve retained storage and document-depth support for a local adjustment.
+pub fn adjustment_native_target(
+    doc: &pictura_core::Document,
+    path: &str,
+    adjustment: &Adjustment,
+) -> Result<bool, FilterError> {
+    if !local_shadows_highlights(adjustment) {
+        return Ok(false);
+    }
+    use pictura_core::BitDepth;
+    match crate::document_bit_depth(doc) {
+        BitDepth::Eight => Ok(false),
+        BitDepth::Sixteen => crate::apply_image_native(doc, path),
+        _ => Err(FilterError::Unsupported(
+            "Shadows/Highlights supports 8 and 16 bits per channel".into(),
+        )),
+    }
+}
+
+/// Apply in authoritative native storage when the document owns the planes.
+pub fn apply_adjustment_region_with_native(
+    layer: &mut Layer,
+    adjustment: &Adjustment,
+    mask: Option<&Coverage>,
+    region: PsdRect,
+    cmyk: Option<&crate::channel_mixer_cmyk::CmykMix>,
+    mode: ColorBalanceMode,
+    native: bool,
+) -> Result<(), FilterError> {
+    if native && local_shadows_highlights(adjustment) {
+        return crate::shadow_highlight::apply_native_region(
+            layer, adjustment, mask, region, mode,
+        );
+    }
+    apply_adjustment_region_in_mode(layer, adjustment, mask, region, cmyk, mode)
+}
+
+fn local_shadows_highlights(adjustment: &Adjustment) -> bool {
+    matches!(adjustment, Adjustment::ShadowsHighlights(params) if params.local.is_some())
 }
 
 /// What [`apply_op_region`] runs on the working buffer.
@@ -148,6 +182,12 @@ fn apply_op_region(
     let Some(clip) = region.intersect(lrect) else {
         return Ok(());
     };
+    let local = matches!(op, Op::Adjustment(adjustment) if local_shadows_highlights(adjustment));
+    let source = if local { lrect } else { clip };
+    let sw = source.width() as usize;
+    let sh = source.height() as usize;
+    let sx = (source.left - lrect.left) as usize;
+    let sy = (source.top - lrect.top) as usize;
     let lw = lrect.width() as usize;
     let full_n = lw * lrect.height() as usize;
     let cw = clip.width() as usize;
@@ -209,16 +249,16 @@ fn apply_op_region(
     } else {
         [c0, channel(layer, 1).unwrap(), channel(layer, 2).unwrap()]
     };
-    let mut buf = PixelBuffer::new(cw as u32, ch as u32, if fold_alpha { 4 } else { 3 });
+    let mut buf = PixelBuffer::new(sw as u32, sh as u32, if fold_alpha { 4 } else { 3 });
     buf.data
         .as_mut_slice()
-        .par_chunks_mut(cw)
+        .par_chunks_mut(sw)
         .enumerate()
         .for_each(|(i, row)| {
-            let r = i % ch;
-            let from = (oy + r) * lw + ox;
-            if i / ch < 3 {
-                row.copy_from_slice(&sources[i / ch][from..from + cw]);
+            let r = i % sh;
+            let from = (sy + r) * lw + sx;
+            if i / sh < 3 {
+                row.copy_from_slice(&sources[i / sh][from..from + sw]);
             } else {
                 row.copy_from_slice(
                     &alpha_original.as_ref().expect("folded")[r * cw..(r + 1) * cw],
@@ -230,10 +270,23 @@ fn apply_op_region(
     // transparent pixels untouched; only opaque pixels take the filter colour.
     // Without a mask or a transparency lock every pixel takes the filtered
     // value whole, so the pre-filter copy is kept only for the blend.
-    let orig = (mask.is_some() || alpha_locked).then(|| buf.clone());
+    let crop_to_clip = |buffer: PixelBuffer| {
+        if source == clip {
+            return buffer;
+        }
+        let left = (clip.left - source.left) as usize;
+        let top = (clip.top - source.top) as usize;
+        let mut cropped = PixelBuffer::new(cw as u32, ch as u32, buffer.channels);
+        for (i, row) in cropped.data.as_mut_slice().chunks_exact_mut(cw).enumerate() {
+            let from = (i / ch) * sw * sh + (top + i % ch) * sw + left;
+            row.copy_from_slice(&buffer.data[from..from + cw]);
+        }
+        cropped
+    };
+    let orig = (mask.is_some() || alpha_locked).then(|| crop_to_clip(buf.clone()));
     // Auto's histograms count only selected pixels. The coverage plane is in
     // clip coordinates; any nonzero coverage selects the pixel.
-    let coverage_plane = if matches!(op, Op::Adjustment(..)) {
+    let coverage_plane = if !local && matches!(op, Op::Adjustment(..)) {
         mask.map(|mask| {
             let mut plane = vec![0u8; n];
             plane.par_chunks_mut(cw).enumerate().for_each(|(y, row)| {
@@ -263,13 +316,14 @@ fn apply_op_region(
                     adjustment,
                     &mut buf,
                     coverage_plane.as_deref(),
-                    color_balance,
+                    if local && grayscale { ColorBalanceMode::Grayscale } else { color_balance },
                 )
                 .map_err(|error| FilterError::InvalidParams(error.to_string()))?
             }
         }
     }
 
+    let buf = crop_to_clip(buf);
     let at = Placement {
         lw,
         ox,

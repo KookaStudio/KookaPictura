@@ -24,7 +24,7 @@ pub use channel_mixer::{encode_channel_mixer, encode_channel_mixer_ink};
 pub use color_balance::encode_color_balance;
 pub use color_lookup::{encode_color_lookup, identity_cube};
 pub use curves::encode_curves;
-pub use defaults::{encode_shadows_highlights, Defaults};
+pub use defaults::{encode_shadows_highlights, encode_shadows_highlights_local, Defaults};
 pub use fill::{
     decode_gradient_fill, decode_pattern_fill, encode_gradient_fill, encode_gradient_fill_params,
     encode_pattern_fill, gradient_params_from_desc, pattern_params_from_desc,
@@ -50,6 +50,7 @@ pub fn decode_adjustment(data: &AdjustmentData) -> Option<Adjustment> {
         b"phfl" => basic::decode_photo_filter(d),
         b"vibA" => basic::decode_vibrance(d),
         b"shdH" => basic::decode_shadows_highlights(d),
+        b"shd2" => basic::decode_shadows_highlights_local(d),
         b"blwh" => basic::decode_black_white(d),
         b"gdrm" | b"grdm" => gradient_map::decode_gradient_map(d),
         b"blnc" => color_balance::decode_color_balance(d),

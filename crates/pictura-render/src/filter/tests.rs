@@ -1186,3 +1186,46 @@ fn selection_filters_read_a_tiled_selection() {
     .unwrap();
     assert_eq!(got, want, "auto tone");
 }
+
+#[test]
+fn native_shadow_highlight_region_preserves_depth_and_selection() {
+    use pictura_core::{BitDepth, Samples, ShadowsHighlightsOptions, ShadowsHighlightsParams, SourceChannels};
+
+    let mut layer = step_layer(8, 2, 255);
+    let rect = layer.rect;
+    let original: Vec<u16> = chan(&layer, 0)
+        .iter()
+        .enumerate()
+        .map(|(index, &value)| (u16::from(value) << 8) + (index as u16 + 1))
+        .collect();
+    layer.source_channels = Some(SourceChannels::new(
+        BitDepth::Sixteen,
+        rect,
+        (0..=2)
+            .map(|id| (id, Samples::U16(original.clone().into())))
+            .collect(),
+    ));
+    let adjustment = Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
+        shadows_amount: 45.0,
+        highlights_amount: 0.0,
+        local: Some(ShadowsHighlightsOptions::FACTORY),
+    });
+    let mut whole = layer.clone();
+    apply_adjustment_region_with_native(
+        &mut whole, &adjustment, None, rect, None, ColorBalanceMode::Rgb, true,
+    )
+    .unwrap();
+    let clip = PsdRect { right: rect.left + 1, bottom: rect.top + 1, ..rect };
+    apply_adjustment_region_with_native(
+        &mut layer, &adjustment, None, clip, None, ColorBalanceMode::Rgb, true,
+    )
+    .unwrap();
+    let store = layer.source_channels.as_ref().unwrap();
+    let Samples::U16(edited) = &store.planes[0].1 else { unreachable!() };
+    let whole_store = whole.source_channels.as_ref().unwrap();
+    let Samples::U16(full) = &whole_store.planes[0].1 else { unreachable!() };
+    assert_eq!(edited[0], full[0]);
+    assert!(edited[0] > original[0]);
+    assert_eq!(&edited[1..], &original[1..]);
+    assert_eq!(chan(&layer, 0)[0], (edited[0] >> 8) as u8);
+}

@@ -11,6 +11,7 @@ use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use pictura_adjust::Adjustment;
 use pictura_core::{layer_pixel_locked, layer_transparency_locked, PsdRect};
 
 impl qobject::PictureView {
@@ -223,6 +224,17 @@ pub(super) fn apply_op_active_region(
         rust.filter_error = Some("another session is live".to_string());
         return None;
     }
+    if matches!(op, ActiveOp::Adjustment(Adjustment::ShadowsHighlights(p)) if p.local.is_some())
+        && rust.session.doc.as_ref().is_some_and(|doc| {
+            !matches!(
+                pictura_render::document_bit_depth(doc),
+                pictura_core::BitDepth::Eight | pictura_core::BitDepth::Sixteen
+            )
+        })
+    {
+        rust.filter_error = Some("Shadows/Highlights supports 8 and 16 bits per channel".into());
+        return None;
+    }
     if rust.session.quick_mask.active {
         return rust.apply_quick_mask_op(op, commit);
     }
@@ -243,6 +255,15 @@ pub(super) fn apply_op_active_region(
         }
     };
     let native = match (op, rust.session.doc.as_ref()) {
+        (ActiveOp::Adjustment(adjustment), Some(doc)) => {
+            match pictura_render::adjustment_native_target(doc, &path, adjustment) {
+                Ok(native) => native,
+                Err(error) => {
+                    rust.filter_error = Some(error.to_string());
+                    return None;
+                }
+            }
+        }
         (ActiveOp::ApplyImage(_), Some(doc)) => {
             match pictura_render::apply_image_native(doc, &path) {
                 Ok(native) => native,
@@ -365,13 +386,14 @@ pub(super) fn apply_op_active_region(
     // whole layer, which shares its planes until they are written.
     let baseline = (!commit).then(|| PreviewBaseline::save(layer, section.filter(|_| !native)));
     let applied = match op {
-        ActiveOp::Adjustment(adjustment) => pictura_render::apply_adjustment_region_in_mode(
+        ActiveOp::Adjustment(adjustment) => pictura_render::apply_adjustment_region_with_native(
             layer,
             adjustment,
             mask.as_ref(),
             section.unwrap_or(lrect),
             cmyk.as_ref(),
             mode,
+            native,
         ),
         ActiveOp::ApplyImage(params) => pictura_render::apply_image_region(
             layer,

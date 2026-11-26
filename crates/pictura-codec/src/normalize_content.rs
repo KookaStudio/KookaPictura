@@ -148,6 +148,7 @@ pub fn retire_layer_content(layer: &mut Layer) {
                 | b"phfl"
                 | b"vibA"
                 | b"shdH"
+                | b"shd2"
                 | b"blwh"
                 | b"gdrm"
                 | b"grdm"

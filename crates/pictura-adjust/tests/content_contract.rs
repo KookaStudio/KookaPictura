@@ -94,6 +94,7 @@ fn neutral_adjustments() -> Vec<(Adjustment, u8)> {
             Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
                 shadows_amount: 0.0,
                 highlights_amount: 0.0,
+                local: None,
             }),
             128,
         ),

@@ -19,6 +19,7 @@ mod match_color;
 mod native;
 mod pictura_raw;
 mod replace_color;
+mod shadow_highlight;
 mod tonal;
 mod types;
 
@@ -47,5 +48,5 @@ pub use types::{
     CurvesParams, ExposureParams, GradientFillParams, GradientKind, GradientMapParams,
     GradientStop, HueRange, HueSaturationParams, LevelsChannel, LevelsParams, Lut3d, OpacityStop,
     PatternFillParams, PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams,
-    SelectiveRange, ShadowsHighlightsParams, VibranceParams,
+    SelectiveRange, ShadowsHighlightsOptions, ShadowsHighlightsParams, VibranceParams,
 };

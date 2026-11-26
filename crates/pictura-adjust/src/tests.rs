@@ -1191,6 +1191,7 @@ fn alpha_is_never_modified() {
         Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
             shadows_amount: 20.0,
             highlights_amount: 10.0,
+            local: None,
         }),
         Adjustment::Equalize,
         Adjustment::ColorLookup(ColorLookupParams {

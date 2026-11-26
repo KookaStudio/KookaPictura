@@ -2,7 +2,7 @@ use crate::layer_content_budget::ContentAlloc;
 use crate::DescValue;
 use pictura_core::{
     Adjustment, BlackWhiteParams, BrightnessContrastParams, ExposureParams, HueRange,
-    HueSaturationParams, LevelsChannel, LevelsParams, PhotoFilterParams, ShadowsHighlightsParams,
+    HueSaturationParams, LevelsChannel, LevelsParams, PhotoFilterParams, ShadowsHighlightsOptions, ShadowsHighlightsParams,
     VibranceParams,
 };
 use pictura_core::{AdjustmentData, FillContent};
@@ -318,7 +318,33 @@ pub fn decode_shadows_highlights(d: &[u8]) -> Option<Adjustment> {
     Some(Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
         shadows_amount: shadows as f64,
         highlights_amount: highlights as f64,
+        local: None,
     }))
+}
+
+/// `shd2`: the amounts and version followed by fixed-width local settings.
+pub fn decode_shadows_highlights_local(d: &[u8]) -> Option<Adjustment> {
+    if d.len() != 24 || be_u16(d, 4)? != 1 {
+        return None;
+    }
+    let unsigned = |offset| be_u16(d, offset).map(f64::from);
+    let signed = |offset| be_u16(d, offset).map(|v| f64::from(v as i16));
+    let params = ShadowsHighlightsParams {
+        shadows_amount: unsigned(0)?,
+        highlights_amount: unsigned(2)?,
+        local: Some(ShadowsHighlightsOptions {
+            shadows_width: unsigned(6)?,
+            shadows_radius: unsigned(8)?,
+            highlights_width: unsigned(10)?,
+            highlights_radius: unsigned(12)?,
+            brightness: signed(14)?,
+            color_correction: signed(16)?,
+            midtone_contrast: signed(18)?,
+            black_clip: unsigned(20)? / 100.0,
+            white_clip: unsigned(22)? / 100.0,
+        }),
+    };
+    params.is_valid().then_some(Adjustment::ShadowsHighlights(params))
 }
 
 /// `blwh`: descriptor block with the six channel-percentage longs, a `useTint`
