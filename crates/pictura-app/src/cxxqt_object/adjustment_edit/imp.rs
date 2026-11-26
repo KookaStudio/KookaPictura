@@ -49,7 +49,7 @@ fn adjustment_input_document(view: &PictureView, path: &QString) -> Option<pictu
     };
     let mut prefix = doc.clone();
     let mut root = 0;
-    let mut layers = &doc.layers[..];
+    let mut layers = &doc.layers;
     for (depth, &index) in indices.iter().enumerate().take(indices.len() - 1) {
         let layer = &layers[index];
         if layer.blend != pictura_core::BlendMode::PassThrough
