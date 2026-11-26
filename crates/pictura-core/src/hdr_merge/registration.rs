@@ -33,10 +33,10 @@ pub(super) fn offset(
     }));
     let mut best = None::<(f64, isize, isize)>;
     for &(_, dx, dy) in candidates.iter().take(12) {
-        if let Some(score) = image.score(dx, dy)
-            && best.is_none_or(|current| score > current.0)
-        {
-            best = Some((score, dx, dy));
+        if let Some(score) = image.score(dx, dy) {
+            if best.is_none_or(|current| score > current.0) {
+                best = Some((score, dx, dy));
+            }
         }
     }
     let (score, dx, dy) = best?;
