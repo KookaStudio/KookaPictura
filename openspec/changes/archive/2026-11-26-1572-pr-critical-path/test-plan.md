@@ -3,10 +3,10 @@
 | Scenario | Steps | Expected | Coverage |
 |---|---|---|---|
 | C++-only change | Classify a JSON list containing only `crates/pictura-app/cpp/panel.cpp`. | `cpp=true`, `rust=false`, `render=false`, `docs=false`. | `scripts/classify-ci-paths.py::self_check` |
-| `ci_rust_bucket` | Classify a list containing `crates/pictura-mcp/src/lib.rs`. | `rust=true` and `cpp=true`. | `scripts/classify-ci-paths.py::self_check` |
-| `ci_mixed_buckets` | Classify C++ and renderer paths together. | `rust`, `cpp`, and `render` are true. | `scripts/classify-ci-paths.py::self_check` |
-| `ci_unknown_path` | Classify an unfamiliar root path. | `rust` and `cpp` are true. | `scripts/classify-ci-paths.py::self_check` |
-| `ci_workflow_edit` | Classify `.github/workflows/ci.yml`. | `rust`, `cpp`, and `render` are true. | `scripts/classify-ci-paths.py::self_check` |
+| `Rust change runs everything` | Classify a list containing `crates/pictura-mcp/src/lib.rs`. | `rust=true` and `cpp=true`. | `scripts/classify-ci-paths.py::self_check` |
+| `Mixed change runs everything` | Classify C++ and renderer paths together. | `rust`, `cpp`, and `render` are true. | `scripts/classify-ci-paths.py::self_check` |
+| `Unrecognized path runs everything` | Classify an unfamiliar root path. | `rust` and `cpp` are true. | `scripts/classify-ci-paths.py::self_check` |
+| `Workflow edit re-runs the suite` | Classify `.github/workflows/ci.yml`. | `rust`, `cpp`, and `render` are true. | `scripts/classify-ci-paths.py::self_check` |
 | A skipped job still reports | Open a C++-only pull request and inspect the skipped job checks. | Skipped jobs report success instead of no check run. | manual: GitHub Actions job-level skip reporting requires a live workflow run. |
 | `ci_fetch_retry` | Force the first paths-filter attempt to fail in a live workflow run. | The second attempt supplies the file list, the classifier job succeeds, and no third fetch occurs. | manual: failure injection for a hosted action requires a live workflow run. |
 | `ci_fetch_fail_closed` | Pass a failed filter status and malformed JSON to the classifier self-check, then inspect the workflow conditions. | Run-all outputs are written before the non-zero classifier exit. | `scripts/classify-ci-paths.py::self_check` |

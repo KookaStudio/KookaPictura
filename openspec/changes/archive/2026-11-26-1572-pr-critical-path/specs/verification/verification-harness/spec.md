@@ -41,19 +41,19 @@ failed classifier or missing output cannot suppress required coverage.
 - **WHEN** a pull request changes only files under `crates/pictura-app/cpp/`
 - **THEN** `cpp` is true, `rust` and `render` are false, `qt-headless` runs, and `lint` and `test` are skipped
 
-#### Scenario: Rust change runs required jobs [ci_rust_bucket]
+#### Scenario: Rust change runs everything
 - **WHEN** a pull request changes any file under `crates/` outside `crates/pictura-app/cpp/`
 - **THEN** `rust` and `cpp` are true, and `lint`, `test`, and `qt-headless` run
 
-#### Scenario: Mixed change runs every affected job [ci_mixed_buckets]
+#### Scenario: Mixed change runs everything
 - **WHEN** a pull request changes both C++ sources and a render input
 - **THEN** `rust`, `cpp`, and `render` are true, and every build job runs
 
-#### Scenario: Unrecognized path runs required jobs [ci_unknown_path]
+#### Scenario: Unrecognized path runs everything
 - **WHEN** a pull request changes a path not recognized by the classifier
 - **THEN** `rust` and `cpp` are true, and the Qt application and Rust coverage are not skipped
 
-#### Scenario: Workflow edit re-runs the suite [ci_workflow_edit]
+#### Scenario: Workflow edit re-runs the suite
 - **WHEN** a pull request changes `.github/workflows/ci.yml`
 - **THEN** `rust`, `cpp`, and `render` are true and every build job runs
 
