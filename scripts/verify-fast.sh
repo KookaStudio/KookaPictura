@@ -52,6 +52,9 @@ if [ "$docs_only" -eq 1 ]; then
   python3 scripts/check-selftest-codes.py
   echo "== test plan =="
   python3 scripts/check-test-plan.py
+  echo "== public docs =="
+  python3 scripts/check-public-docs-commands.py --self-test
+  python3 scripts/check-public-docs-commands.py
   echo "== parity =="
   python3 scripts/check-parity.py --self-check
   python3 scripts/check-parity.py
@@ -137,6 +140,11 @@ test_plan_check() {
         python3 scripts/check-test-plan.py
 }
 
+public_docs_check() {
+    python3 scripts/check-public-docs-commands.py --self-test &&
+        python3 scripts/check-public-docs-commands.py
+}
+
 parity_check() {
     python3 scripts/check-parity.py --self-check &&
         python3 scripts/check-parity.py
@@ -171,6 +179,7 @@ start_check icon-provenance python3 scripts/check-icon-provenance.py
 start_check guard bash scripts/guard.sh --changed "$changed_file"
 start_check shell-seams shell_seams_check
 start_check test-plan test_plan_check
+start_check public-docs public_docs_check
 start_check parity parity_check
 start_check source-fragments source_fragments_check
 start_check cpu-budget python3 scripts/cpu-budget.py --self-check
