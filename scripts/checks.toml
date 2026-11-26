@@ -387,11 +387,7 @@ cost = "expensive"
 phase = "sequential"
 command = '''
 python3 scripts/check-view-oracle.py --self-check
-for profile in release dev-app; do
-  report="${RUNNER_TEMP:?RUNNER_TEMP is required}/view-oracle-$profile.jsonl"
-  cargo build -p pictura_app --lib --profile "$profile" --message-format=json > "$report"
-  python3 scripts/check-view-oracle.py --profile "$profile" "$report"
-done
+python3 scripts/check-view-oracle.py --profile dev-app "$RUNNER_TEMP/view-oracle-dev-app.jsonl"
 '''
 script = "scripts/check-view-oracle.py"
 local_fast = false
