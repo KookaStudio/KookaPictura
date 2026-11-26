@@ -125,11 +125,11 @@ pictura::LayersPanel* AdjustmentsPanelTest::layers() const
 
 QList<QAction*> AdjustmentsPanelTest::selectiveColorActions()
 {
-    auto* registry = window_->commandRegistry();
+    auto* registry = window_->findChild<pictura::CommandRegistry*>();
     const QString name = QStringLiteral("Selective Color");
     const QString layerId = layerAdjustmentId(name);
-    QAction* image = registry->action(imageAdjustmentId(name));
-    QAction* layer = registry->action(layerId);
+    QAction* image = registry ? registry->action(imageAdjustmentId(name)) : nullptr;
+    QAction* layer = registry ? registry->action(layerId) : nullptr;
 
     QAction* footer = nullptr;
     auto* add = layers()->findChild<QToolButton*>(QStringLiteral("layersStripFillAdjustment"));
@@ -375,8 +375,10 @@ void AdjustmentsPanelTest::selectiveColorRequiresComposite()
 
     channels()->selectChannelForTest(1);
     compareSelectiveColorAvailability(false);
-    auto* registry = window_->commandRegistry();
-    QVERIFY(registry->action(imageAdjustmentId(QStringLiteral("Levels")))->isEnabled());
+    auto* registry = window_->findChild<pictura::CommandRegistry*>();
+    QVERIFY(registry);
+    auto* levels = registry->action(imageAdjustmentId(QStringLiteral("Levels")));
+    QVERIFY(levels && levels->isEnabled());
     QVERIFY(panel()->buttonByIdForTest(QStringLiteral("levels"))->isEnabled());
     const int history = view->history_count();
     const int layerCount = pictura::layers_api::rowCount(*view);
