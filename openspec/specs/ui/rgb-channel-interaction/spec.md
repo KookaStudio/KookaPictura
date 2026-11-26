@@ -1,7 +1,9 @@
 # ui/rgb-channel-interaction Specification
 
 ## Purpose
-TBD - created by archiving change rgb-channel-interaction. Update Purpose after archive.
+Define how the Channels panel selects and displays RGB channels, how eye
+toggles control visibility, and how channel state affects adjustment availability.
+Use the Layers panel conventions for row and thumbnail presentation.
 
 ## Requirements
 
