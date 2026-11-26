@@ -275,7 +275,7 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | ID | Feature | S | E | CC | Status | Scope | Evidence | Check | Notes | Tracking |
 |---|---|---|---|---|---|---|---|---|---|---|
 | P-IMG-01 | Brightness/Contrast | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src/tonal.rs | none | Auto ships | #578 |
-| P-IMG-02 | Levels | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Eyedroppers and Alt-drag clipping preview remain | #560 |
+| P-IMG-02 | Levels | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/levels_dialog.cpp | tst_levels_canvas_controls | RGB and Grayscale eyedroppers and clipping preview ship; CS6 and native-depth behavior remain unverified | #560 |
 | P-IMG-03 | Curves | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | On-image, pencil, smooth, sliders, display options, CMYK/Lab graphs remain | #561 |
 | P-IMG-04 | Exposure | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
 | P-IMG-05 | Vibrance | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Auto and presets remain | #564 |
