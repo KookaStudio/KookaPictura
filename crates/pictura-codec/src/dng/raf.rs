@@ -1,14 +1,16 @@
 //! Fujifilm RAF (#1473): a big-endian header naming three sections (the
 //! camera JPEG, a directory of 16-bit-tagged records and the sensor section),
 //! the sensor section being a TIFF whose one entry points at Fujifilm's raw
-//! directory. Uncompressed 16-bit words and the 12- and 14-bit packings are
-//! read for X-Trans and Bayer sensors; Fujifilm-compressed data (#1620),
-//! SuperCCD and EXR sensors (#1621) are refused. Built from ExifTool's public
-//! RAF tag documentation and observation of real files.
+//! directory. Uncompressed 16-bit words, the 12- and 14-bit packings and
+//! Fujifilm's compressed data (`raf_compressed.rs`, #1620) are read for
+//! X-Trans and Bayer sensors; SuperCCD and EXR sensors (#1621) are refused.
+//! Built from ExifTool's public RAF tag documentation and observation of real
+//! files.
 
 use rayon::prelude::*;
 
 use super::levels::{self, Area, Levels};
+use super::raf_compressed;
 use super::tiff::{Ifd, Order, Tiff};
 use super::{to_usize, CfaPattern, DngColor, DngCrop, DngImage, Tags, MAKE, ORIENTATION};
 use crate::error::PsdError;
@@ -250,7 +252,7 @@ fn coding(
     let packed = (n * bits as usize).div_ceil(8);
     if stored < packed {
         return Err(unsupported(
-            "Fujifilm-compressed sensor data is not supported yet",
+            "sensor data shorter than its packed size has no compressed-data header",
         ));
     }
     let stride = stride.ok_or_else(|| unsupported("sensor data layout"))?;
@@ -411,6 +413,16 @@ pub(super) fn read_raf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
     };
     let width = size(RAW_WIDTH, "missing raw width")?;
     let height = size(RAW_HEIGHT, "missing raw height")?;
+    let start = size(DATA_OFFSET, "missing data offset")?;
+    let stored = size(DATA_BYTES, "missing data size")?;
+    // Compressed data may run past its recorded size (LibRaw notes the
+    // X-H2S), so its blocks are bounded by the section instead.
+    let tail = sensor.get(start..).ok_or(PsdError::Truncated)?;
+    let compressed = match width.checked_mul(height) {
+        Some(n) if n.checked_mul(2) == Some(stored) => None,
+        _ => raf_compressed::header(tail).transpose()?,
+    };
+    let (width, height) = compressed.map_or((width, height), |h| (h.width, h.height));
     let max = budget.max_dimension as usize;
     if width == 0 || height == 0 || width > max || height > max {
         return Err(invalid(&format!(
@@ -421,20 +433,20 @@ pub(super) fn read_raf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
     if plane_bytes > budget.max_alloc_bytes || 2 * plane_bytes > budget.max_document_bytes {
         return Err(invalid("sensor plane exceeds the allocation budget"));
     }
-    let bits = raw.uint(RAW_BITS)?.unwrap_or(14);
-    if !(8..=16).contains(&bits) {
-        return Err(unsupported(&format!("{bits}-bit samples")));
-    }
-    let bits = bits as u32;
-    let start = size(DATA_OFFSET, "missing data offset")?;
-    let stored = size(DATA_BYTES, "missing data size")?;
-    let coding = coding(&raw, stored, bits, (width, height))?;
-    let data = start
-        .checked_add(stored)
-        .and_then(|end| sensor.get(start..end))
-        .ok_or(PsdError::Truncated)?;
-    let big_endian = tiff.order == Order::Big;
-    let plane = decode(data, coding, big_endian, (width, height));
+    let (plane, bits) = match compressed {
+        Some(header) => (raf_compressed::decode(tail, &header, &cfa)?, header.bits),
+        None => {
+            let bits = raw.uint(RAW_BITS)?.unwrap_or(14);
+            if !(8..=16).contains(&bits) {
+                return Err(unsupported(&format!("{bits}-bit samples")));
+            }
+            let bits = bits as u32;
+            let coding = coding(&raw, stored, bits, (width, height))?;
+            let data = tail.get(..stored).ok_or(PsdError::Truncated)?;
+            let big_endian = tiff.order == Order::Big;
+            (decode(data, coding, big_endian, (width, height)), bits)
+        }
+    };
 
     let (black, side) = black(&raw)?;
     let ceiling = ((1u32 << bits) - 1) as f64;

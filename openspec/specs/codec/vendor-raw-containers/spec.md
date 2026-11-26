@@ -720,11 +720,14 @@ at `0xF007` from the section's start. For `n` photosites, `2n` bytes SHALL be
 32-bit words) is absent or 0; with a row length, rows of that length SHALL
 hold 12-bit samples packed least
 significant bit first, or 14-bit samples packed most significant bit first
-over little-endian 32-bit words. Fewer bytes than the packed size is
-Fujifilm-compressed data and SHALL be refused as unsupported, with a message
-saying that compressed sensor data is not supported yet. Any other size or
-bit depth SHALL be refused as unsupported, and declared sizes SHALL be
-charged against the image budget before the plane is allocated.
+over little-endian 32-bit words. Data that is not `2n` bytes and starts with
+Fujifilm's compressed-data header SHALL be decoded as "Fujifilm-compressed
+RAF data is decoded as LibRaw decodes it" requires, the header's width and
+height replacing `0xF001` and `0xF002`. Fewer bytes than the packed size
+without that header SHALL be refused as unsupported, with a message naming
+the missing compressed-data header. Any other size or bit depth SHALL be
+refused as unsupported, and declared sizes SHALL be charged against the
+image budget before the plane is allocated.
 
 #### Scenario: Sixteen-bit words [raf_words]
 
@@ -738,8 +741,8 @@ charged against the image budget before the plane is allocated.
 
 #### Scenario: Compressed data is refused by name [raf_compressed]
 
-- **WHEN** a RAF's data holds one byte per photosite
-- **THEN** it is named RAF and refused as unsupported, naming compressed sensor data
+- **WHEN** a RAF's data holds one byte per photosite and does not start with the compressed-data header
+- **THEN** it is named RAF and refused as unsupported, naming the compressed-data header
 
 #### Scenario: Refused sensors and layouts [raf_unsupported]
 
@@ -797,4 +800,51 @@ matrices SHALL come from the per-camera table.
 #### Scenario: Real camera files [raf_corpus]
 
 - **WHEN** `PICTURA_RAW_CORPUS` names a directory of user-supplied `.RAF` files
-- **THEN** each is named RAF, each compressed, SuperCCD or EXR file is refused as unsupported, and each other reads non-flat and demosaics with each photosite's own channel equal to its sample
+- **THEN** each is named RAF, each SuperCCD or EXR file is refused as unsupported, and each other, compressed or not, reads non-flat and demosaics with each photosite's own channel equal to its sample
+
+### Requirement: Fujifilm-compressed RAF data is decoded as LibRaw decodes it
+
+The RAF reader SHALL decode Fujifilm-compressed sensor data as LibRaw
+0.22.1's `fuji_compressed.cpp` does. The data SHALL start with a 16-byte
+big-endian header: signature `0x4953`, a lossless flag (1 lossless, 0
+lossy), the sensor type (16 X-Trans, 0 Bayer), the precision (12, 14 or 16
+bits), the height, the width rounded up to whole strips, the width, the
+strip width `0x300`, the strip count and the count of six-row lines. A
+header outside LibRaw's limits (height a multiple of 6 up to `0x4002`,
+width a multiple of 24 from `0x300` to `0x4200`, the rounded width a whole
+number of strips less than one strip beyond the width, lines equal to the
+height over 6), or whose sensor type disagrees with the layout record, SHALL
+be refused as invalid. The header SHALL be followed by the strips' 32-bit
+byte counts padded to 16 bytes, for lossy data by one quantizer base per
+strip and line (each strip's run padded to 16), then the strips' bit
+streams; a strip that runs past the sensor section SHALL fail as
+truncated. Each strip SHALL decode six rows at a time through LibRaw's 18
+line buffers, six passes and adaptive gradient codes, lossy lines with the
+main quantizer of their base and LibRaw's three fine quantizers, and its rows
+SHALL be laid out through the file's CFA. Corrupt codes SHALL fail or decode
+without a panic.
+
+#### Scenario: Lossless data [raf_compressed_lossless]
+
+- **WHEN** noise planes two strips wide, the second narrower, are coded losslessly on the compressed X-Trans pattern at 12 and 14 bits and on RGGB at 14 and 16 bits
+- **THEN** each decodes to the written plane, normalized by its black and its precision's ceiling
+
+#### Scenario: Lossy data [raf_compressed_lossy]
+
+- **WHEN** such planes are coded lossy with quantizer bases varying by strip and line between 0 and 9, on X-Trans at 14 bits and RGGB at 14 and 16 bits
+- **THEN** each decodes to the plane the coder reconstructed, which differs from the written plane by between 1 and 9
+
+#### Scenario: Header checks [raf_compressed_header]
+
+- **WHEN** a compressed RAF's lossless flag, sensor type, precision, height, width, strip width, strip count or line count is outside LibRaw's limits, or its X-Trans header sits in a Bayer-layout file
+- **THEN** reading fails as invalid data naming compressed data
+
+#### Scenario: Hostile compressed files [raf_compressed_hostile]
+
+- **WHEN** lossless and lossy compressed RAFs are cut short, have bytes of their compressed data flipped, or record a strip size past the section
+- **THEN** reading returns without panicking, and the cut files and the oversized strip fail with an error
+
+#### Scenario: Real files match LibRaw [raf_compressed_libraw]
+
+- **WHEN** `PICTURA_RAW_CORPUS` holds compressed RAFs and python3 with rawpy is available
+- **THEN** each decodes to LibRaw's raw plane of the same size, sample for sample after the same normalization
