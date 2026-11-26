@@ -105,6 +105,8 @@ private:
     void rebuild(const QString& mode, const QStringList& alphaNames, bool storedPlates);
     void addRow(const QString& name, const QString& shortcut, int alpha, RowKind kind=RowKind::Color);
     void refreshThumbnails();
+    void selectRow(int index);
+    void setRgbVisibility(int mask);
     void toggle(int index);
     void toggleAlpha(int alpha);
     void updateAlphaEyes();

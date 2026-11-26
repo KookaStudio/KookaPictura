@@ -230,7 +230,7 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
 {
     auto* rowWidget = new ChannelRowWidget(list_);
     auto* rowLayout = new QHBoxLayout(rowWidget);
-    rowLayout->setContentsMargins(2, 1, 6, 1);
+    rowLayout->setContentsMargins(2, 2, 6, 2);
     auto* eye = new QToolButton(rowWidget);
     eye->setCheckable(true);
     eye->setChecked(alpha < 0 || shownAlphas_.contains(alpha));
@@ -260,7 +260,6 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
 
     const int index = rows_.size();
     connect(eye, &QToolButton::clicked, this, [this, index]() {
-        list_->setCurrentRow(index);
         toggle(index);
     });
     auto* item = new QListWidgetItem(list_);
@@ -436,27 +435,46 @@ void ChannelsPanel::toggle(int index)
         }
         return;
     }
-    if (!shownAlphas_.isEmpty()) {
-        shownAlphas_.clear();
-        updateAlphaEyes();
-        emit alphaVisibilityChanged();
-    }
+    int nextMask = mask_;
     if (index == 0) {
         // The composite eye shows every channel.
-        mask_ = 0x7;
+        nextMask = 0x7;
     } else {
         const int bit = 1 << (index - 1);
         // The last visible channel stays visible.
         if (mask_ != bit) {
-            mask_ ^= bit;
+            nextMask ^= bit;
         }
     }
+    setRgbVisibility(nextMask);
+}
+
+void ChannelsPanel::setRgbVisibility(int mask)
+{
+    mask_ = mask;
     for (int i = 0; i < liveRows_; ++i) {
         const bool on = i == 0 ? mask_ == 0x7 : (mask_ & (1 << (i - 1))) != 0;
         rows_[i].eye->setChecked(on);
         applyEyeIcon(rows_[i].eye);
     }
     emit channelMaskChanged(mask_);
+}
+
+void ChannelsPanel::selectRow(int index)
+{
+    list_->setCurrentRow(index);
+    if (index < 0 || index >= liveRows_) {
+        return;
+    }
+    if (index == 0) {
+        setRgbVisibility(0x7);
+    } else {
+        const int bit = 1 << (index - 1);
+        if (mask_ == 0x7 || !(mask_ & bit)) {
+            setRgbVisibility(bit);
+        }
+    }
+    styleRows();
 }
 
 void ChannelsPanel::toggleAlpha(int alpha)
@@ -540,7 +558,7 @@ void ChannelsPanel::styleRows()
         if (!widget) {
             continue;
         }
-        widget->setSurface(Theme::contrastShade(base, i == current ? 3 : 1));
+        widget->setSurface(Theme::contrastShade(base, (i == current || (mode_ == QLatin1String("rgb") && current == 0 && i > 0 && i < liveRows_)) ? 3 : 1));
     }
 }
 
@@ -638,7 +656,11 @@ bool ChannelsPanel::eventFilter(QObject* watched, QEvent* event)
             dragRow_ = rowAt(pos);
             dragStart_ = pos;
             if (mouse->button() == Qt::LeftButton && dragRow_ >= 0) {
-                list_->setCurrentRow(dragRow_);
+                if (mouse->modifiers() & Qt::ControlModifier) {
+                    list_->setCurrentRow(dragRow_);
+                } else {
+                    selectRow(dragRow_);
+                }
             }
             if (mouse->button() == Qt::LeftButton && (mouse->modifiers() & Qt::ControlModifier)) {
                 loadRowSelection(dragRow_, mouse->modifiers());

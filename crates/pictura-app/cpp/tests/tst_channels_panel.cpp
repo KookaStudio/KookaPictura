@@ -118,6 +118,8 @@ private slots:
     void initTestCase();
     void cleanup();
     void rowsAndThumbnails();
+    void rgbSelectionAndVisibility();
+    void rgbAdjustmentAvailability();
     void eyesHideChannelsOnTheCanvas();
     void channelShortcutsToggleFromTheCanvas();
     void alphaChannelsAndFooter();
@@ -198,6 +200,76 @@ void ChannelsPanelTest::rowsAndThumbnails()
     for (int i = 0; i < panel_->channelCountForTest(); ++i) {
         QVERIFY2(!panel_->channelThumbnailForTest(i).isNull(), "thumbnail pixmap");
     }
+}
+
+void ChannelsPanelTest::rgbSelectionAndVisibility()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("RGB rows"), 16, 16,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    panel_->clickChannelForTest(1, Qt::NoModifier);
+    QCOMPARE(panel_->currentChannelForTest(), 1);
+    QCOMPARE(panel_->channelMask(), 1);
+    panel_->clickChannelForTest(0, Qt::NoModifier);
+    QCOMPARE(panel_->channelMask(), 7);
+    QCOMPARE(panel_->rowSurfaceForTest(0), panel_->rowSurfaceForTest(1));
+    QCOMPARE(panel_->rowSurfaceForTest(0), panel_->rowSurfaceForTest(2));
+    QCOMPARE(panel_->rowSurfaceForTest(0), panel_->rowSurfaceForTest(3));
+    panel_->eyeForTest(3)->click();
+    QCOMPARE(panel_->currentChannelForTest(), 0);
+    QCOMPARE(panel_->channelMask(), 3);
+    QVERIFY(!panel_->channelVisibleForTest(3));
+    panel_->clickChannelForTest(1, Qt::NoModifier);
+    QCOMPARE(panel_->currentChannelForTest(), 1);
+    QCOMPARE(panel_->channelMask(), 3);
+    panel_->clickChannelForTest(3, Qt::NoModifier);
+    QCOMPARE(panel_->currentChannelForTest(), 3);
+    QCOMPARE(panel_->channelMask(), 4);
+    QVERIFY(panel_->channelVisibleForTest(3));
+    QVERIFY(!panel_->channelVisibleForTest(1));
+    panel_->clickChannelForTest(0, Qt::NoModifier);
+    QCOMPARE(panel_->channelMask(), 7);
+    for (int i = 0; i < 4; ++i) {
+        QVERIFY(panel_->channelVisibleForTest(i));
+    }
+}
+
+void ChannelsPanelTest::rgbAdjustmentAvailability()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("RGB adjustments"), 16, 16,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    const auto action = [this](const char* name) {
+        return window_->registry()->action(pictura::commandIdForPath(
+            {QStringLiteral("Image"), QStringLiteral("Adjustments"), QString::fromUtf8(name)}));
+    };
+    const auto check = [&](bool composite) {
+        window_->registry()->refresh();
+        for (const char* name : {"Exposure", "Vibrance", "Hue/Saturation", "Color Balance",
+                                 "Black & White", "Photo Filter", "Channel Mixer", "Color Lookup",
+                                 "Gradient Map", "Selective Color", "Desaturate", "Match Color"}) {
+            QVERIFY2(action(name), name);
+            QCOMPARE(action(name)->isEnabled(), composite);
+        }
+        for (const char* name : {"Brightness/Contrast", "Levels", "Curves", "Invert",
+                                 "Posterize", "Threshold", "Shadows/Highlights", "HDR Toning",
+                                 "Replace Color", "Equalize"}) {
+            QVERIFY2(action(name) && action(name)->isEnabled(), name);
+        }
+    };
+    check(true);
+    panel_->eyeForTest(3)->click();
+    check(false);
+    panel_->clickChannelForTest(1, Qt::NoModifier);
+    check(false);
+    panel_->clickChannelForTest(0, Qt::NoModifier);
+    check(true);
 }
 
 // The RGB eyes hide channels on the canvas (#71): one hidden shows the other
@@ -752,7 +824,7 @@ void ChannelsPanelTest::clickAlphaEyeSelectsRow()
     QToolButton* eye = panel_->eyeForTest(4);
     QVERIFY(eye && eye->isEnabled());
     QTest::mouseClick(eye, Qt::LeftButton, Qt::NoModifier, eye->rect().center());
-    QCOMPARE(panel_->currentChannelForTest(), 4);
+    QCOMPARE(panel_->currentChannelForTest(), 0);
     QVERIFY(panel_->shownAlphas().contains(0));
 }
 
