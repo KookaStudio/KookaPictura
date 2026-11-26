@@ -41,7 +41,7 @@ CurvesDialog::CurvesDialog(PictureView* view, const QByteArray& block, const QRe
         }
     });
     connect(curves_, &CurvesControls::grayPointPicked, this, [this](const QColor& color) {
-        setBlock(curvesGrayPointBlock(block(), color));
+        setBlock(curvesGrayPointBlock(this->block(), color));
     });
     connect(this, &QDialog::finished, curves_, &CurvesControls::disarm);
 }
