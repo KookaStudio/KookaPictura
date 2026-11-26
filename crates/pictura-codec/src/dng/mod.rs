@@ -8,7 +8,7 @@
 //! both kinds (#402).
 //! The demosaic (`demosaic`, #397) and the colour transform
 //! (`as_shot_transform`, #398) consume the result. Vendor containers (#399,
-//! `vendor.rs`, `cr2.rs`, `cr3.rs`, `nef.rs`, `arw.rs`, `orf.rs`, `rw2.rs`)
+//! `vendor.rs`, `cr2.rs`, `cr3.rs`, `nef.rs`, `arw.rs`, `orf.rs`, `rw2.rs`, `raf.rs`)
 //! produce the same `DngImage` through `read_raw`.
 
 use rayon::prelude::*;
@@ -35,6 +35,7 @@ mod nef;
 mod nef_decode;
 mod orf;
 mod orf_meta;
+mod raf;
 mod rw2;
 mod rw2_decode;
 mod tiff;
@@ -52,7 +53,7 @@ pub use develop::{
 use levels::{Area, Levels};
 pub use linear::{read_linear_dng, LinearDng};
 use tiff::{Ifd, Order, Tiff};
-pub use vendor::{read_raw, sniff_raw, sniff_raw_prefix, RawFormat};
+pub use vendor::{raw_exif, read_raw, sniff_raw, sniff_raw_prefix, RawFormat};
 pub use write::{read_original_raw, write_dng, DngCompatibility, DngPixels, DngRgb8, DngWrite};
 
 const NEW_SUBFILE_TYPE: u16 = 254;

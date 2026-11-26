@@ -1,6 +1,6 @@
 //! The camera raw entry point (#399): names a container by its signature and
 //! reads any supported one (DNG, Canon CR2 and CR3, Nikon NEF, Sony ARW,
-//! Olympus ORF, Panasonic RW2) into the same normalized CFA image as `read_dng`.
+//! Olympus ORF, Panasonic RW2, Fujifilm RAF) into the same normalized CFA image as `read_dng`.
 //! Also the helpers the TIFF-based vendor containers share.
 
 use super::camera_jpeg_matrices::JPEG_CAMERAS;
@@ -8,7 +8,7 @@ use super::camera_matrices::CAMERAS;
 use super::levels::Area;
 use super::tiff::{Entry, Ifd, Tiff};
 use super::{
-    arw, cr2, cr3, nef, orf, read_dng, rw2, to_usize, DngColor, DngImage, Tags, DNG_VERSION,
+    arw, cr2, cr3, nef, orf, raf, read_dng, rw2, to_usize, DngColor, DngImage, Tags, DNG_VERSION,
 };
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
@@ -26,6 +26,7 @@ pub enum RawFormat {
     Arw,
     Orf,
     Rw2,
+    Raf,
 }
 
 /// Names the raw container `bytes` hold, from its signature and, for a DNG,
@@ -43,6 +44,9 @@ pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
     if rw2::is_rw2(bytes) {
         return Some(RawFormat::Rw2);
     }
+    if raf::is_raf(bytes) {
+        return Some(RawFormat::Raf);
+    }
     let (tiff, first) = Tiff::parse(bytes).ok()?;
     let ifd0 = tiff.ifd(first).ok()?;
     if ifd0.get(DNG_VERSION).is_some() {
@@ -57,12 +61,23 @@ pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
 /// IFD0's entry table (and, for a NEF or an ARW, its `Make` value) is read, so the
 /// prefix need not hold the other values.
 pub fn sniff_raw_prefix(prefix: &[u8]) -> bool {
-    if cr2::is_cr2(prefix) || cr3::is_cr3(prefix) || orf::is_orf(prefix) || rw2::is_rw2(prefix) {
+    if cr2::is_cr2(prefix)
+        || cr3::is_cr3(prefix)
+        || orf::is_orf(prefix)
+        || rw2::is_rw2(prefix)
+        || raf::is_raf(prefix)
+    {
         return true;
     }
     Tiff::parse(prefix).is_ok_and(|(tiff, first)| {
         tiff.lists_tag(first, DNG_VERSION) || nef::is_nef(&tiff, first) || arw::is_arw(&tiff, first)
     })
+}
+
+/// The TIFF holding a raw file's shooting data (Exif IFD0 and its Exif IFD):
+/// a RAF's camera-JPEG Exif, else the file itself (the TIFF-based containers).
+pub fn raw_exif(bytes: &[u8]) -> &[u8] {
+    raf::exif(bytes).unwrap_or(bytes)
 }
 
 /// Reads any supported raw container's full-resolution CFA plane, normalized
@@ -76,6 +91,7 @@ pub fn read_raw(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError
         Some(RawFormat::Arw) => arw::read_arw(bytes, budget),
         Some(RawFormat::Orf) => orf::read_orf(bytes, budget),
         Some(RawFormat::Rw2) => rw2::read_rw2(bytes, budget),
+        Some(RawFormat::Raf) => raf::read_raf(bytes, budget),
         None => Err(PsdError::Unsupported("camera raw format".into())),
     }
 }

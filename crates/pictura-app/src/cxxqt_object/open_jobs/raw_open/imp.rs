@@ -55,8 +55,29 @@ pub(in crate::cxxqt_object) struct PendingRaw {
     pub(super) dng_job: Option<super::save_dng::DngJob>,
 }
 
+/// The size the develop produces: the default crop, turned by the
+/// orientation.
+fn developed_size(look: &RawLook, camera: &CameraRgb) -> (usize, usize) {
+    let side = |v: f64, max: usize| {
+        if v.is_finite() {
+            (v.round().max(1.0) as usize).min(max)
+        } else {
+            max
+        }
+    };
+    let (w, h) = (
+        side(look.crop.width, camera.width),
+        side(look.crop.height, camera.height),
+    );
+    if (5..=8).contains(&look.orientation) {
+        (h, w)
+    } else {
+        (w, h)
+    }
+}
+
 fn raw_photo_info(path: &str, bytes: &[u8], width: usize, height: usize) -> RawPhotoInfo {
-    let exif = parse_exif(bytes);
+    let exif = parse_exif(pictura_codec::raw_exif(bytes));
     RawPhotoInfo {
         name: Path::new(path)
             .file_name()
@@ -105,7 +126,8 @@ pub(super) fn decode_pending(
     let record = store::read_record(Path::new(path), &key, stores)
         .or_else(|| pictura_codec::raw_xmp(&bytes));
     let seed = seed_settings(record.as_deref(), source.as_shot);
-    let info = raw_photo_info(path, &bytes, source.camera.width, source.camera.height);
+    let (width, height) = developed_size(&source.look, &source.camera);
+    let info = raw_photo_info(path, &bytes, width, height);
     Ok(PendingRaw {
         path: path.to_string(),
         source,
@@ -493,6 +515,57 @@ mod photo_info_tests {
         assert_eq!(row("iso"), Some("ISO 100"));
         assert_eq!(row("focal_length"), Some("50 mm"));
         assert_eq!(info.ppi, Some(240.0));
+    }
+
+    /// A RAF header naming a camera JPEG whose Exif is `tiff`.
+    fn raf_with_exif(tiff: &[u8]) -> Vec<u8> {
+        let mut jpeg = vec![0xFF, 0xD8, 0xFF, 0xE1];
+        jpeg.extend(((tiff.len() + 8) as u16).to_be_bytes());
+        jpeg.extend(b"Exif\0\0");
+        jpeg.extend(tiff);
+        jpeg.extend([0xFF, 0xD9]);
+        let mut raf = b"FUJIFILMCCD-RAW 0201FF000000".to_vec();
+        raf.resize(0x94, 0);
+        raf[0x54..0x58].copy_from_slice(&0x94u32.to_be_bytes());
+        raf[0x58..0x5C].copy_from_slice(&(jpeg.len() as u32).to_be_bytes());
+        raf.extend(jpeg);
+        raf
+    }
+
+    #[test]
+    fn raw_photo_info_reads_a_raf_cameras_jpeg_exif() {
+        let info = raw_photo_info("shot.raf", &raf_with_exif(&tiff_with_exposure()), 16, 12);
+        let row = |key: &str| {
+            info.exposure
+                .iter()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(row("f_number"), Some("f/8"));
+        assert_eq!(row("iso"), Some("ISO 100"));
+        assert_eq!(info.ppi, Some(240.0));
+    }
+
+    #[test]
+    fn photo_info_size_is_the_developed_size() {
+        let camera = CameraRgb {
+            width: 40,
+            height: 30,
+            rgb: vec![0; 40 * 30 * 3],
+        };
+        let mut look = RawLook {
+            color: pictura_codec::DngColor::default(),
+            crop: pictura_codec::DngCrop {
+                x: 4.0,
+                y: 2.0,
+                width: 32.0,
+                height: 24.0,
+            },
+            orientation: 1,
+        };
+        assert_eq!(developed_size(&look, &camera), (32, 24));
+        look.orientation = 6;
+        assert_eq!(developed_size(&look, &camera), (24, 32));
     }
 
     #[test]
