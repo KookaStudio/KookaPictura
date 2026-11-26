@@ -64,6 +64,9 @@ public:
     // Move the selected point to (`input`, `output`) in 0..255, its input
     // kept strictly between its neighbours'; endpoints keep their input.
     void moveSelected(int input, int output);
+    bool selectTone(int input);
+    int outputAt(int input) const;
+    void setEndpoint(bool white, int input);
 
     void buildLut(uint8_t lut[256]) const;
 

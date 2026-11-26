@@ -57,6 +57,7 @@ public:
 
     void setView(PictureView* view);
     void updateLevelsClipping();
+    void startCurvesCanvas(int action);
     void setTools(ToolController* tools) { tools_ = tools; }
     void refresh();
     void scheduleThresholdSelectionRefresh();
@@ -139,6 +140,8 @@ private:
     ToolController* tools_ = nullptr;
     bool levelsClipping_ = false;
     bool levelsPicking_ = false;
+    bool curvesPicking_ = false;
+    bool autoSelectCurves_ = false;
     QString path_;
     QString title_;
     QString kind_;

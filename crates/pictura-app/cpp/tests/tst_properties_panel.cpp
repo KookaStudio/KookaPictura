@@ -12,6 +12,8 @@
 #include "api/layers_bridge.h"
 
 #include "panels/numeric_field.h"
+#include "panels/adjustment_controls.h"
+#include "panels/curve_widget.h"
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -45,6 +47,7 @@ private slots:
     void thresholdHistogramRespectsGroupBoundaries();
     void groupsCurvesAndFooter();
     void curvesPointFields();
+    void curvesControlsAndMenu();
     void levelsHandlesAndMenu();
     void channelMixerMonochrome();
     void channelMixerCmykGroups();
@@ -114,6 +117,46 @@ void PropertiesPanelTest::levelsHandlesAndMenu()
     clipping->trigger();
     panel_->updatePanelMenu(&menu);
     QVERIFY(clipping->isChecked());
+}
+
+void PropertiesPanelTest::curvesControlsAndMenu()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("curves")));
+    auto* graph = panel_->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve"));
+    auto* black = panel_->findChild<QSlider*>(QStringLiteral("curvesBlackSlider"));
+    QVERIFY(graph && black);
+    auto* target = panel_->findChild<QToolButton*>(QStringLiteral("curvesTarget"));
+    auto* controls = panel_->findChild<pictura::AdjustmentControls*>(QStringLiteral("propertiesControls"));
+    QVERIFY(target && controls);
+    QSignalSpy requested(controls, &pictura::AdjustmentControls::curvesCanvasRequested);
+    target->click();
+    QCOMPARE(requested.count(), 1);
+    QCOMPARE(requested.takeFirst().at(0).toInt(), 0);
+    QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("curvesBlackPoint")));
+    QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("curvesGrayPoint")));
+    QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("curvesWhitePoint")));
+    QVERIFY(graph->selectTone(128));
+    auto* input = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveInput"));
+    auto* output = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveOutput"));
+    QVERIFY(input && output && input->isEnabled() && output->isEnabled());
+    QCOMPARE(input->value(), 128);
+    output->setValue(150);
+    QCOMPARE(qRound(graph->points()[graph->selected()].y() * 255), 150);
+    black->setValue(20);
+    QCOMPARE(qRound(graph->points().first().x() * 255), 20);
+    QMenu menu;
+    auto* display = menu.addAction(QStringLiteral("Display"));
+    display->setData(QStringLiteral("properties.curvesDisplay"));
+    auto* clipping = menu.addAction(QStringLiteral("Clipping"));
+    clipping->setData(QStringLiteral("properties.showClipping"));
+    clipping->setCheckable(true);
+    panel_->updatePanelMenu(&menu);
+    QVERIFY(display->isEnabled());
+    QVERIFY(clipping->isEnabled());
+    auto* options = panel_->findChild<QWidget*>(QStringLiteral("curvesDisplayOptions"));
+    QVERIFY(options && options->isHidden());
+    display->trigger();
+    QVERIFY(!options->isHidden());
 }
 
 void PropertiesPanelTest::curvesPointFields()

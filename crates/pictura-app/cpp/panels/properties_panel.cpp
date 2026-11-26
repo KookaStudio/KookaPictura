@@ -6,6 +6,7 @@
 #include "api/type_api.h"
 
 #include "adjustment_controls.h"
+#include "curve_widget.h"
 #include "adjustment_presets.h"
 #include "tools.h"
 #include "image_view.h"
@@ -49,6 +50,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <memory>
 
 namespace pictura {
 
@@ -197,6 +199,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     });
     connect(controls_, &AdjustmentControls::valueChanged, this, &PropertiesPanel::push);
     connect(controls_, &AdjustmentControls::valueChanged, this, [this] { if (levelsClipping_) updateLevelsClipping(); });
+    connect(controls_, &AdjustmentControls::curvesCanvasRequested, this, &PropertiesPanel::startCurvesCanvas);
     connect(controls_, &AdjustmentControls::levelsChannelChanged, this, [this] { if (levelsClipping_) updateLevelsClipping(); });
     connect(controls_, &AdjustmentControls::levelsPickRequested, this, [this](int point) {
         if (!tools_ || !view_ || path_.isEmpty() || tools_->canvasSamplerActive() || tools_->canvasBrushActive()) return;
@@ -238,6 +241,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
             refresh();
         }, false);
     });
+    connect(controls_, &AdjustmentControls::curveChanged, this, [this] { if (levelsClipping_) updateLevelsClipping(); });
     connect(controls_, &AdjustmentControls::curveChanged, this,
             [this](int channel, const QString& points) {
                 if (!view_ || path_.isEmpty()) {
@@ -681,7 +685,9 @@ void PropertiesPanel::setView(PictureView* view)
     if (view != view_) {
         if (tools_ && tools_->canvas()) tools_->canvas()->clearFilterPreview();
         if (levelsPicking_ && tools_) tools_->setCanvasSampler({});
+        if (curvesPicking_ && tools_) tools_->setCanvasBrush({});
         levelsPicking_ = false;
+        curvesPicking_ = false;
         levelsClipping_ = false;
         commit();
     }
@@ -724,7 +730,9 @@ void PropertiesPanel::refresh()
     if (path != path_) {
         if (tools_ && tools_->canvas()) tools_->canvas()->clearFilterPreview();
         if (levelsPicking_ && tools_) tools_->setCanvasSampler({});
+        if (curvesPicking_ && tools_) tools_->setCanvasBrush({});
         levelsPicking_ = false;
+        curvesPicking_ = false;
         levelsClipping_ = false;
         commit();
     }
@@ -872,7 +880,7 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
     } else {
         preset_->setBlock(QString(), QByteArray());
     }
-    if (view_ && kind_ == QLatin1String("levels")) {
+    if (view_ && (kind_ == QLatin1String("levels") || kind_ == QLatin1String("curves"))) {
         std::array<std::array<int, 256>, 4> histograms{};
         const auto source = adjustment_auto_source(*view_, path_);
         for (int channel = 0; channel < 4; ++channel) {
@@ -889,6 +897,7 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
     if (view_ && !dirty_) {
         controls_->refreshThresholdHistogram(*view_, path_);
     }
+    if (kind_ == QLatin1String("curves") && autoSelectCurves_ && !curvesPicking_) startCurvesCanvas(0);
     title_ = controls_->title();
     header_->setText(title_);
 }
@@ -969,6 +978,60 @@ void PropertiesPanel::performPanelMenuAction(const QString& id)
     }
 }
 
+void PropertiesPanel::startCurvesCanvas(int action)
+{
+    if (!tools_ || !view_ || kind_ != QLatin1String("curves") || !controls_->curveWidget()) return;
+    if (curvesPicking_) {
+        tools_->setCanvasBrush({});
+        curvesPicking_ = false;
+    }
+    if (tools_->canvasBrushActive() || tools_->canvasSamplerActive()) return;
+    curvesPicking_ = true;
+    const QString path = path_;
+    PictureView* const view = view_;
+    auto startY = std::make_shared<qreal>(0);
+    auto input = std::make_shared<int>(-1);
+    auto output = std::make_shared<int>(0);
+    tools_->setCanvasBrush([this, action, path, view, startY, input, output](ToolController::CanvasBrushPhase phase, const QPointF& pos, Qt::KeyboardModifiers) {
+        if (view_ != view || path_ != path || !controls_->curveWidget()) return;
+        auto* curve = controls_->curveWidget();
+        using Phase = ToolController::CanvasBrushPhase;
+        if (phase == Phase::Press) {
+            const QRgb pixel = adjustment_input_argb(*view, path, int(std::floor(pos.x())), int(std::floor(pos.y())));
+            if (!qAlpha(pixel)) return;
+            const std::array<int, 4> values{qGray(pixel), qRed(pixel), qGreen(pixel), qBlue(pixel)};
+            const int channel = std::clamp(controls_->curveChannel(), 0, 3);
+            const int value = values[channel];
+            if (action == 0) {
+                *startY = pos.y();
+                *input = curve->selectTone(value) ? value : -1;
+                *output = curve->outputAt(value);
+            } else if (action == 1 || action == 3) {
+                curve->setEndpoint(action == 3, value);
+            } else {
+                commit();
+                const int gray = values[0];
+                for (int c = 1; c < 4; ++c) {
+                    const int x = std::clamp(values[c], 1, 254);
+                    const QString points = QStringLiteral("0,0 %1,%2 255,255").arg(x).arg(gray);
+                    if (!adjustment_set_curve(*view, path, c, points)) {
+                        adjustment_cancel(*view);
+                        refresh();
+                        return;
+                    }
+                }
+                adjustment_commit(*view, title_);
+                refresh();
+            }
+        } else if (phase == Phase::Drag && action == 0 && *input >= 0) {
+            curve->moveSelected(*input, *output + qRound(*startY - pos.y()));
+        } else if (phase == Phase::Release) {
+            *input = -1;
+            commit();
+        }
+    });
+}
+
 void PropertiesPanel::updateLevelsClipping()
 {
     if (!tools_ || !tools_->canvas()) return;
@@ -1005,8 +1068,47 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
     const bool hasLayer = !path_.isEmpty();
     for (QAction* action : menu->actions()) {
         const QString id = action->data().toString();
-        if (id == QLatin1String("properties.showClipping")) {
-            action->setEnabled(hasLayer && kind_ == QLatin1String("levels"));
+        if (id == QLatin1String("properties.curvesDisplay")) {
+            action->setEnabled(hasLayer && kind_ == QLatin1String("curves"));
+            if (!action->property("propertiesConnected").toBool()) {
+                action->setProperty("propertiesConnected", true);
+                connect(action, &QAction::triggered, this, [this] { controls_->toggleCurvesDisplay(); });
+            }
+        } else if (id == QLatin1String("properties.autoTarget")) {
+            action->setEnabled(hasLayer && kind_ == QLatin1String("curves"));
+            action->setChecked(autoSelectCurves_);
+            if (!action->property("propertiesConnected").toBool()) {
+                action->setProperty("propertiesConnected", true);
+                connect(action, &QAction::triggered, this, [this](bool enabled) {
+                    autoSelectCurves_ = enabled;
+                    if (enabled && !curvesPicking_) startCurvesCanvas(0);
+                    else if (!enabled && curvesPicking_ && tools_) { tools_->setCanvasBrush({}); curvesPicking_ = false; }
+                });
+            }
+        } else if (id == QLatin1String("properties.deletePreset")) {
+            const bool saved = preset_ && savedPresetNames(kind_).contains(preset_->currentText());
+            action->setText(kind_ == QLatin1String("curves") ? tr("Delete Current Curves Preset") : tr("Delete Current Levels Preset"));
+            action->setEnabled(hasLayer && saved);
+            if (!action->property("propertiesConnected").toBool()) {
+                action->setProperty("propertiesConnected", true);
+                connect(action, &QAction::triggered, this, [this] {
+                    if (preset_ && deleteAdjustmentPreset(kind_, preset_->currentText())) {
+                        preset_->reload();
+                        refresh();
+                    }
+                });
+            }
+        } else if (id == QLatin1String("properties.reset")) {
+            action->setText(kind_ == QLatin1String("curves") ? tr("Reset Curves") : tr("Reset Levels"));
+            action->setEnabled(hasLayer && (kind_ == QLatin1String("levels") || kind_ == QLatin1String("curves")));
+            if (!action->property("propertiesConnected").toBool()) {
+                action->setProperty("propertiesConnected", true);
+                connect(action, &QAction::triggered, this, [this] {
+                    if (registry_) registry_->dispatch(QString::fromLatin1(command_ids::PanelPropertiesReset));
+                });
+            }
+        } else if (id == QLatin1String("properties.showClipping")) {
+            action->setEnabled(hasLayer && (kind_ == QLatin1String("levels") || kind_ == QLatin1String("curves")));
             action->setChecked(levelsClipping_);
             if (!action->property("propertiesClippingConnected").toBool()) {
                 action->setProperty("propertiesClippingConnected", true);

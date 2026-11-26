@@ -111,6 +111,7 @@ void AdjustmentControls::clear()
     curve_ = nullptr;
     thresholdHistogram_ = nullptr;
     curveChannel_ = nullptr;
+    curveDisplay_ = nullptr;
     levelsRefresh_ = {};
 }
 
@@ -393,8 +394,61 @@ void AdjustmentControls::addCurves()
     curve_ = new CurveWidget();
     curve_->setObjectName(QStringLiteral("adjustmentCurve"));
     curve_->setMinimumSize(180, 180);
-    curve_->setShowHistogram(false);
+    curve_->setShowHistogram(true);
+    curve_->setShowRamps(true);
+    auto* tools = new QWidget(this);
+    auto* toolRow = new QHBoxLayout(tools);
+    toolRow->setContentsMargins(0, 0, 0, 0);
+    const QStringList labels{tr("On-image"), tr("Black"), tr("Gray"), tr("White")};
+    const QStringList names{QStringLiteral("curvesTarget"), QStringLiteral("curvesBlackPoint"),
+                            QStringLiteral("curvesGrayPoint"), QStringLiteral("curvesWhitePoint")};
+    for (int action = 0; action < labels.size(); ++action) {
+        auto* button = new QToolButton(tools);
+        button->setObjectName(names[action]);
+        button->setText(labels[action]);
+        button->setAccessibleName(labels[action]);
+        toolRow->addWidget(button);
+        connect(button, &QToolButton::clicked, this, [this, action] { emit curvesCanvasRequested(action); });
+    }
+    insert(tools);
     insert(curve_);
+    auto* endpoints = new QWidget(this);
+    auto* endpointLayout = new QHBoxLayout(endpoints);
+    endpointLayout->setContentsMargins(0, 0, 0, 0);
+    auto* black = new QSlider(Qt::Horizontal, endpoints);
+    auto* white = new QSlider(Qt::Horizontal, endpoints);
+    black->setObjectName(QStringLiteral("curvesBlackSlider"));
+    white->setObjectName(QStringLiteral("curvesWhiteSlider"));
+    for (auto* slider : {black, white}) {
+        slider->setRange(0, 255);
+        endpointLayout->addWidget(slider);
+        connect(slider, &QSlider::sliderReleased, this, &AdjustmentControls::gestureEnded);
+    }
+    connect(black, &QSlider::valueChanged, this, [this](int value) { curve_->setEndpoint(false, value); });
+    connect(white, &QSlider::valueChanged, this, [this](int value) { curve_->setEndpoint(true, value); });
+    const auto refreshEndpoints = [this, black, white] {
+        const auto points = curve_->points();
+        if (points.size() < 2) return;
+        const QSignalBlocker b(black), w(white);
+        black->setValue(qRound(points.first().x() * 255));
+        white->setValue(qRound(points.last().x() * 255));
+    };
+    connect(curve_, &CurveWidget::curveChanged, endpoints, refreshEndpoints);
+    insert(endpoints);
+    curveDisplay_ = new QWidget(this);
+    curveDisplay_->setObjectName(QStringLiteral("curvesDisplayOptions"));
+    auto* displayLayout = new QHBoxLayout(curveDisplay_);
+    displayLayout->setContentsMargins(0, 0, 0, 0);
+    auto* histogramOption = new QCheckBox(tr("Histogram"), curveDisplay_);
+    auto* baselineOption = new QCheckBox(tr("Baseline"), curveDisplay_);
+    histogramOption->setChecked(true);
+    baselineOption->setChecked(true);
+    displayLayout->addWidget(histogramOption);
+    displayLayout->addWidget(baselineOption);
+    connect(histogramOption, &QCheckBox::toggled, curve_, &CurveWidget::setShowHistogram);
+    connect(baselineOption, &QCheckBox::toggled, curve_, &CurveWidget::setShowBaseline);
+    insert(curveDisplay_);
+    curveDisplay_->hide();
     auto* pointFields = new QWidget(this);
     auto* pointLayout = new QHBoxLayout(pointFields);
     pointLayout->setContentsMargins(0, 0, 0, 0);
@@ -437,7 +491,9 @@ void AdjustmentControls::addCurves()
         emit gestureEnded();
         loading_ = true;
         loadCurve();
+        if (levelsHistogramSource_) curve_->setBins(levelsHistogramSource_(curveChannel_->currentIndex()));
         loading_ = false;
+        emit levelsChannelChanged();
     });
     connect(curve_, &CurveWidget::curveChanged, this, [this]() {
         if (!loading_) {
@@ -445,6 +501,26 @@ void AdjustmentControls::addCurves()
         }
     });
     loadCurve();
+    if (levelsHistogramSource_) curve_->setBins(levelsHistogramSource_(curveChannel_->currentIndex()));
+    refreshEndpoints();
+}
+
+void AdjustmentControls::setLevelsHistogramSource(std::function<std::array<int, 256>(int)> source)
+{
+    levelsHistogramSource_ = std::move(source);
+    if (curve_ && curveChannel_ && levelsHistogramSource_) {
+        curve_->setBins(levelsHistogramSource_(curveChannel_->currentIndex()));
+    }
+}
+
+int AdjustmentControls::curveChannel() const
+{
+    return curveChannel_ ? curveChannel_->currentIndex() : 0;
+}
+
+void AdjustmentControls::toggleCurvesDisplay()
+{
+    if (curveDisplay_) curveDisplay_->setVisible(!curveDisplay_->isVisible());
 }
 
 void AdjustmentControls::loadCurve()
@@ -464,6 +540,14 @@ void AdjustmentControls::showGroup(int group)
 
 bool AdjustmentControls::levelsClippingParameters(int& channel, int& black, int& white) const
 {
+    if (title_ == QLatin1String("Curves") && curve_ && curveChannel_) {
+        const auto points = curve_->points();
+        if (points.size() < 2) return false;
+        channel = curveChannel_->currentIndex();
+        black = qRound(points.first().x() * 255);
+        white = qRound(points.last().x() * 255);
+        return true;
+    }
     if (title_ != QLatin1String("Levels") || !groups_) return false;
     const QStringList prefixes{QString(), QStringLiteral("red."), QStringLiteral("green."), QStringLiteral("blue.")};
     channel = groups_->currentIndex();

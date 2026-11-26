@@ -76,3 +76,9 @@ The fitted Levels and Curves parameters SHALL remain editable and survive PSD an
 - **WHEN** a Levels adjustment layer is selected
 - **THEN** Properties SHALL show the adjustment input histogram, draggable input and output handles, and black, gray and white point tools
 - **AND** Show Clipping SHALL display a clipping preview of the adjustment input
+
+#### Scenario: Curves Properties canvas controls [curves_properties_canvas]
+
+- **WHEN** a Curves adjustment layer is selected
+- **THEN** Properties SHALL provide input histogram, endpoint controls, selected point values, on-image adjustment and point samplers using the adjustment input
+- **AND** its menu SHALL expose display options, automatic targeting, clipping preview, preset management and reset
