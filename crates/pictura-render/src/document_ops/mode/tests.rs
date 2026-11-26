@@ -1,4 +1,6 @@
 use super::*;
+
+mod indexed;
 use pictura_codec::{
     read_psd, web_safe_palette, write_psd, ColorReduction, Dither, PaletteOptions,
 };

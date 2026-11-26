@@ -159,7 +159,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 |---|---|---|---|---|---|
 | IMG-1 | `image-modes.md`, `duotone.md` | Duotone conversion + Options dialog | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs`; `mode/mod.rs:72` | #553 |
 | IMG-2 | `image-modes.md` | Multichannel conversion | MISSING | `mode/mod.rs:72` | #554 |
-| IMG-3 | `image-modes.md`, `indexed-color.md` | Color Table + Indexed transparency/Forced palette | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs`; `indexed_color_dialog.h:16` | #555 |
 | IMG-4 | `image-modes.md` | Bitmap Halftone Screen + Custom Pattern | MISSING | `mode/flat.rs:20,185` | #556 |
 | IMG-5 | `bit-depth-and-conversion.md`, `hdr-toning.md` | HDR Conversion tone methods implemented; the Local Adaptation Toning Curve/Corner remains | PARTIAL | `hdr_conversion_dialog.cpp`; `pictura-adjust/src/hdr_toning/` | #557 |
 | IMG-6 | `32-bit-hdr.md` | Merge To HDR Pro | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #558 |

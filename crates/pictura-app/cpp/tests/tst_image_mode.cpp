@@ -1,17 +1,21 @@
 // Image > Mode: color-mode and bit-depth conversions, ported from photorust.
 
 #include <QtCore/QTimer>
+#include <QtGui/QImage>
 #include <QtTest/QtTest>
 #include <QtWidgets/QAbstractButton>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QTableWidget>
 
 #include <functional>
 
 #include "bitmap_mode_dialog.h"
 #include "commands.h"
+#include "color_table_dialog.h"
 #include "frame.h"
 #include "indexed_color_dialog.h"
 
@@ -42,6 +46,14 @@ private slots:
     void recordedBitmapMethodsReplayTheirOptions();
     void modalBitmapReplayPrefillsEditsAndCancels();
     void silentBitmapReplayRefusesMissingPattern();
+    void exactFallsBackWhenOptionsExceedCapacity();
+    void exactRemainsAvailableAtCapacity();
+    void indexedColorTableCancelKeepsDocument();
+    void colorTableCommitCanBeUndone();
+    void colorTableInterpolatesRange();
+    void colorTableActRoundTrip();
+    void colorTableRejectsShortAct();
+    void colorTableUnchangedAcceptance();
 
 private:
     // A new white RGB document filled with `color`; returns its view.
@@ -587,6 +599,187 @@ void ImageModeTest::silentBitmapReplayRefusesMissingPattern()
     QCOMPARE(pictura::image_mode(*view), QStringLiteral("grayscale"));
     QCOMPARE(view->history_count(), history);
     QCOMPARE(bitmapPixels(*view), before);
+    closeActive();
+}
+
+namespace {
+
+bool openExactSource(pictura::PictureView& view, const QString& path, int opaqueCount)
+{
+    QImage image(opaqueCount + 1, 1, QImage::Format_ARGB32);
+    for (int i = 0; i < opaqueCount; ++i) {
+        image.setPixel(i, 0, qRgb(i, 30, 80));
+    }
+    image.setPixel(opaqueCount, 0, qRgba(0, 0, 0, 0));
+    return image.save(path) && view.open_image(path);
+}
+
+QDialog* visibleColorTableDialog()
+{
+    for (auto* widget : QApplication::topLevelWidgets()) {
+        if (widget->objectName() == QStringLiteral("indexedColorTableDialog")
+            && widget->isVisible()) {
+            return qobject_cast<QDialog*>(widget);
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void ImageModeTest::exactFallsBackWhenOptionsExceedCapacity()
+{
+    pictura::PictureView view;
+    QVERIFY(openExactSource(view, dir_.filePath(QStringLiteral("exact-overflow.png")), 255));
+    QVERIFY(pictura::indexed_exact_available_with_options(view, true, {}));
+    pictura::IndexedColorDialog dialog(true, true, nullptr);
+    connect(&dialog, &pictura::IndexedColorDialog::optionsChanged, &dialog, [&] {
+        dialog.setExactAvailable(pictura::indexed_exact_available_with_options(
+            view, dialog.transparency(), dialog.forcedColors()));
+    });
+    auto* forced = dialog.findChild<QComboBox*>(QStringLiteral("indexedForced"));
+    QVERIFY(forced);
+    forced->setCurrentIndex(1);
+    QCOMPARE(dialog.palette(), 4);
+    QCOMPARE(dialog.findChild<QComboBox*>(QStringLiteral("indexedPalette"))->findData(0), -1);
+}
+
+void ImageModeTest::exactRemainsAvailableAtCapacity()
+{
+    pictura::PictureView view;
+    QVERIFY(openExactSource(view, dir_.filePath(QStringLiteral("exact-capacity.png")), 253));
+    QVERIFY(pictura::indexed_exact_available_with_options(view, true, {}));
+    pictura::IndexedColorDialog dialog(true, true, nullptr);
+    connect(&dialog, &pictura::IndexedColorDialog::optionsChanged, &dialog, [&] {
+        dialog.setExactAvailable(pictura::indexed_exact_available_with_options(
+            view, dialog.transparency(), dialog.forcedColors()));
+    });
+    auto* forced = dialog.findChild<QComboBox*>(QStringLiteral("indexedForced"));
+    QVERIFY(forced);
+    forced->setCurrentIndex(1);
+    QCOMPARE(dialog.palette(), 0);
+    QVERIFY(pictura::convert_to_indexed_with_options(
+        view, dialog.palette(), dialog.colors(), dialog.dither(), dialog.amount(),
+        dialog.transparency(), dialog.forcedColors()));
+    QCOMPARE(pictura::indexed_color_table(view).size(), qsizetype(256 * 4));
+}
+
+void ImageModeTest::indexedColorTableCancelKeepsDocument()
+{
+    auto* view = newFilled(Qt::red);
+    QVERIFY(view);
+    QVERIFY(pictura::convert_to_indexed(*view, 0, 256, 0, 0));
+    window_->registry()->refresh();
+    const auto before = pictura::indexed_color_table(*view);
+    const auto history = view->history_count();
+    auto* command = action(pictura::command_ids::ImageModeColorTable);
+    QVERIFY(command && command->isEnabled());
+    bool opened = false;
+    QTimer::singleShot(0, this, [&] {
+        auto* dialog = visibleColorTableDialog();
+        if (!dialog) {
+            return;
+        }
+        auto* table = dialog->findChild<QTableWidget*>(QStringLiteral("indexedColorTable"));
+        auto* clear = dialog->findChild<QPushButton*>(QStringLiteral("tableSetTransparent"));
+        opened = table && table->item(0, 0) && clear;
+        if (opened) {
+            table->setCurrentCell(0, 0);
+            clear->click();
+        }
+        dialog->reject();
+    });
+    command->trigger();
+    QVERIFY(opened);
+    QCOMPARE(pictura::indexed_color_table(*view), before);
+    QCOMPARE(view->history_count(), history);
+    closeActive();
+}
+
+void ImageModeTest::colorTableCommitCanBeUndone()
+{
+    auto* view = newFilled(Qt::red);
+    QVERIFY(view);
+    QVERIFY(pictura::convert_to_indexed(*view, 0, 256, 0, 0));
+    window_->registry()->refresh();
+    const auto before = pictura::indexed_color_table(*view);
+    const auto history = view->history_count();
+    auto edited = before;
+    edited[3] = 0;
+    auto* command = action(pictura::command_ids::ImageModeColorTable);
+    QVERIFY(command && command->isEnabled());
+    QTimer::singleShot(0, this, [] {
+        if (auto* dialog = visibleColorTableDialog()) {
+            auto* clear = dialog->findChild<QPushButton*>(QStringLiteral("tableSetTransparent"));
+            if (clear) {
+                clear->click();
+            }
+            dialog->accept();
+        }
+    });
+    command->trigger();
+    QCOMPARE(pictura::indexed_color_table(*view), edited);
+    QCOMPARE(qAlpha(view->composite_argb(4, 4)), 0);
+    QCOMPARE(view->history_count(), history + 1);
+    QVERIFY(view->undo());
+    QCOMPARE(pictura::indexed_color_table(*view), before);
+    QCOMPARE(qAlpha(view->composite_argb(4, 4)), 255);
+    closeActive();
+}
+
+void ImageModeTest::colorTableInterpolatesRange()
+{
+    pictura::PictureView view;
+    QVERIFY(openExactSource(view, dir_.filePath(QStringLiteral("interpolate.png")), 2));
+    QVERIFY(pictura::convert_to_indexed(view, 0, 256, 0, 0));
+    pictura::ColorTableDialog dialog(pictura::indexed_color_table(view), 3);
+    dialog.interpolate(0, 2, QColor(Qt::black), QColor(200, 100, 50));
+    QCOMPARE(dialog.table(), QByteArray::fromHex("000000ff643219ffc86432ff"));
+    QVERIFY(pictura::apply_indexed_color_table(view, dialog.table()));
+    QCOMPARE(view.composite_argb(0, 0), qRgb(0, 0, 0));
+    QCOMPARE(view.composite_argb(1, 0), qRgb(100, 50, 25));
+    QCOMPARE(view.composite_argb(2, 0), qRgb(200, 100, 50));
+}
+
+void ImageModeTest::colorTableActRoundTrip()
+{
+    const auto table = QByteArray::fromHex("104080ff90602000");
+    pictura::ColorTableDialog dialog(table, 2);
+    pictura::ColorTableDialog reader(QByteArray::fromHex("000000ffffffffff"), 2);
+    QVERIFY(reader.loadAct(dialog.saveAct()));
+    QCOMPARE(reader.table(), table);
+}
+
+void ImageModeTest::colorTableRejectsShortAct()
+{
+    const auto table = QByteArray::fromHex("104080ff90602000");
+    pictura::ColorTableDialog dialog(table, 2);
+    const auto shortAct = pictura::encode_indexed_act(QByteArray::fromHex("000000ff"));
+    QVERIFY(!dialog.loadAct(shortAct));
+    QCOMPARE(dialog.table(), table);
+}
+
+void ImageModeTest::colorTableUnchangedAcceptance()
+{
+    auto* view = newFilled(Qt::blue);
+    QVERIFY(view);
+    QVERIFY(pictura::convert_to_indexed(*view, 0, 256, 0, 0));
+    window_->registry()->refresh();
+    const auto before = pictura::indexed_color_table(*view);
+    const auto history = view->history_count();
+    auto* command = action(pictura::command_ids::ImageModeColorTable);
+    QVERIFY(command && command->isEnabled());
+    bool accepted = false;
+    QTimer::singleShot(0, this, [&accepted] {
+        if (auto* dialog = visibleColorTableDialog()) {
+            accepted = true;
+            dialog->accept();
+        }
+    });
+    command->trigger();
+    QVERIFY(accepted);
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(pictura::indexed_color_table(*view), before);
     closeActive();
 }
 

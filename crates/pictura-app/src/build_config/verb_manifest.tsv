@@ -5,6 +5,7 @@
 kind	cpp_name	rust_name	owner	bridge
 free	add_guide	add_guide	api/document_bridge.h	pictura_app/src/cxxqt_object/guides.cxxqt.h
 free	apply_history_states	apply_history_states	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
+free	apply_indexed_color_table	apply_indexed_color_table	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	cancel_mode_preview	cancel_mode_preview	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	canvas_size_apply	canvas_size_apply	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	canvas_size_fits_budget	canvas_size_fits_budget	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
@@ -18,8 +19,10 @@ free	convert_to_bitmap	convert_to_bitmap	api/document_bridge.h	pictura_app/src/c
 free	convert_to_bitmap_halftone	convert_to_bitmap_halftone	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	convert_to_bitmap_pattern	convert_to_bitmap_pattern	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	convert_to_indexed	convert_to_indexed	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
+free	convert_to_indexed_with_options	convert_to_indexed_with_options	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	create_document	create_document	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	current_history_label	current_history_label	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
+free	decode_indexed_act	decode_indexed_act	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	document_budget_allows	document_budget_allows	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	document_job_arm	document_job_arm	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	document_job_attempt	document_job_attempt	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
@@ -36,6 +39,7 @@ free	document_job_status	document_job_status	api/document_bridge.h	pictura_app/s
 free	document_op_result	document_op_result	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	document_ppi	document_ppi	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	document_ppi_per_cm	document_ppi_per_cm	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
+free	encode_indexed_act	encode_indexed_act	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	frame_capture_generation	frame_capture_generation	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	frame_capture_record	frame_capture_record	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	frame_revision	frame_revision	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
@@ -60,7 +64,10 @@ free	image_mode_available	image_mode_available	api/document_bridge.h	pictura_app
 free	image_resolution	image_resolution	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	image_size_apply	image_size_apply	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	image_size_fits_budget	image_size_fits_budget	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
+free	indexed_color_table	indexed_color_table	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
+free	indexed_color_table_minimum	indexed_color_table_minimum	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	indexed_exact_available	indexed_exact_available	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
+free	indexed_exact_available_with_options	indexed_exact_available_with_options	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	load_files_into_stack	load_files_into_stack	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	move_composite_pending	move_composite_pending	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	move_composite_set_delay	move_composite_set_delay	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
@@ -83,6 +90,7 @@ free	output_path_protected	output_path_protected	api/document_bridge.h	pictura_a
 free	preview_gif_indexed	preview_gif_indexed	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	preview_image	preview_image	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	preview_indexed	preview_indexed	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
+free	preview_indexed_with_options	preview_indexed_with_options	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	preview_present_level	preview_present_level	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	purge_all	purge_all	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	purge_history	purge_history	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h

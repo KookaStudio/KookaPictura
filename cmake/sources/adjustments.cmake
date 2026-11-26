@@ -43,6 +43,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/hdr_toning_dialog.h
     crates/pictura-app/cpp/hue_saturation_dialog.cpp
     crates/pictura-app/cpp/hue_saturation_dialog.h
+    crates/pictura-app/cpp/color_table_dialog.cpp
+    crates/pictura-app/cpp/color_table_dialog.h
     crates/pictura-app/cpp/indexed_color_dialog.cpp
     crates/pictura-app/cpp/indexed_color_dialog.h
     crates/pictura-app/cpp/levels_dialog.cpp

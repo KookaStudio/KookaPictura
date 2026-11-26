@@ -1,11 +1,7 @@
-//! The flattening conversions: `Image > Mode > Indexed Color` and `Bitmap`.
-//! Both modes hold no layers in CS6, so the visible stack is flattened first
-//! (hidden layers are discarded) and the result is one history state.
+//! Bitmap conversion and legacy Exact eligibility for GIF save options.
 
-use pictura_codec::{document_resolution, quantize, PaletteOptions, PatternPixels};
-use pictura_core::{
-    BitDepth, ColorMode, Document, PixelBuffer, PsdRect, Samples, SourceChannels, SourcePlanes,
-};
+use pictura_codec::{document_resolution, PatternPixels};
+use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, PsdRect, Samples, SourcePlanes};
 use pictura_ops::OpsError;
 
 use super::{can_convert_mode, planes};
@@ -63,80 +59,6 @@ fn flatten(doc: &mut Document) -> Result<(), OpsError> {
     doc.source
         .set_native(None, doc.source.planes().clone())
         .expect("valid source depth");
-    Ok(())
-}
-
-/// `Image > Mode > Indexed Color`: flatten, build a palette of at most
-/// `options.colors` entries with `options.reduction`, map every pixel to it
-/// (dithered per `options.dither` / `options.amount`), and record the result as
-/// an Indexed source (palette + index planes) that a save writes as header
-/// mode Indexed. The working RGB becomes the palette expansion.
-///
-/// ponytail: Transparency/Matte and Forced colors are not offered (the
-/// flattened image is opaque and the writer has no transparent-index
-/// resource); System, Uniform, Master, Custom, and Previous palettes are absent.
-pub fn convert_to_indexed(doc: &mut Document, options: PaletteOptions) -> Result<(), OpsError> {
-    if !can_convert_mode(doc, ColorMode::Indexed) {
-        return Err(refuse(doc, ColorMode::Indexed));
-    }
-    flatten(doc)?;
-    planes::expand_gray(doc);
-    let (w, h) = (doc.width, doc.height);
-    let n = w as usize * h as usize;
-    let layer = &mut doc.layers[0];
-    let pos = planes::color_positions(layer, 3)
-        .ok_or_else(|| OpsError::InvalidParams("flattened layer has no RGB planes".into()))?;
-    let mut rgba = vec![255u8; n * 4];
-    for (c, &i) in pos.iter().enumerate() {
-        for (p, &v) in layer.channels()[i].data.iter().enumerate().take(n) {
-            rgba[p * 4 + c] = v;
-        }
-    }
-    let indexed = quantize(
-        &rgba,
-        w,
-        h,
-        PaletteOptions {
-            transparency: false,
-            matte: [255, 255, 255],
-            ..options
-        },
-    );
-    let mut palette = [0u8; 768];
-    for (i, entry) in indexed.palette.iter().enumerate().take(256) {
-        palette[i] = entry[0];
-        palette[256 + i] = entry[1];
-        palette[512 + i] = entry[2];
-    }
-    let rgb = pictura_codec::indexed_to_rgb(&indexed.indices, &palette);
-    for (c, &i) in pos.iter().enumerate() {
-        layer.channels_mut()[i].data = rgb[c * n..(c + 1) * n].to_vec().into();
-    }
-    layer.source_channels = Some(SourceChannels::new(
-        BitDepth::Eight,
-        layer.rect,
-        vec![(0, Samples::U8(indexed.indices.clone().into()))],
-    ));
-    doc.composite
-        .replace(PixelBuffer {
-            width: w,
-            height: h,
-            channels: 3,
-            data: rgb.into(),
-        })
-        .expect("valid composite");
-    doc.source
-        .replace_planes(Some(SourcePlanes {
-            depth: BitDepth::Eight,
-            width: w,
-            height: h,
-            samples: Samples::U8(indexed.indices.into()),
-        }))
-        .expect("valid source planes");
-    doc.source
-        .set_encoding(Some(ColorMode::Indexed), Some(palette))
-        .expect("valid source encoding");
-    doc.source.set_working_profile(None);
     Ok(())
 }
 

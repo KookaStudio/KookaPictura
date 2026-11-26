@@ -4,6 +4,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Indexed Color Table, #555** (OpenSpec change `indexed-color-table`,
+  capability `ui/image-mode-menu`). Indexed documents with an editable palette
+  can change entries, interpolate ranges, assign a transparent entry, and load
+  or save ACT files. Accepting edits preserves pixel indices and creates one
+  undo step. Indexed Color conversion accepts forced colours and transparency,
+  and Exact checks the total number of required entries. PSD and PSB preserve
+  the active palette count and transparent index.
 - **Fujifilm RAF and X-Trans, #1473** (OpenSpec change `vendor-raw-raf`;
   `codec/vendor-raw-containers`, `codec/raw-demosaic`,
   `codec/camera-matrices`, `document/raw-open` modified). `dng/raf.rs` reads

@@ -508,9 +508,14 @@ pub(in crate::cxxqt_object) fn write_gif(rust: &mut PictureViewRust, path: &str)
                 return false;
             };
             let highest = indices.iter().copied().max().unwrap_or(0) as usize;
-            let count = (highest + 1).clamp(2, 256);
+            let (_, transparent) = pictura_codec::indexed_metadata(doc);
+            let minimum = transparent.map_or(2, |i| (usize::from(i) + 1).max(2));
+            let count = (highest + 1).max(minimum);
             let palette = (0..count)
-                .map(|i| [palette[i], palette[256 + i], palette[512 + i], 255])
+                .map(|i| {
+                    let alpha = if transparent == Some(i as u8) { 0 } else { 255 };
+                    [palette[i], palette[256 + i], palette[512 + i], alpha]
+                })
                 .collect();
             pictura_codec::encode_gif(
                 &pictura_codec::Indexed {
@@ -655,6 +660,7 @@ mod tests {
         pictura_render::convert_to_indexed(&mut doc, options()).unwrap();
         assert!(pictura_codec::indexed_source_is_current(&doc));
 
+        pictura_codec::set_indexed_metadata(&mut doc, Some(200), None);
         let palette = doc.source.palette().expect("retained palette");
         let plane = doc.width as usize * doc.height as usize;
         let indices = {
@@ -714,6 +720,52 @@ mod tests {
         rust.session.doc.set(Some(doc));
         rust.session.dirty = true;
         let target = path("indexed.gif");
+        assert!(write_gif(&mut rust, &target));
+        assert_eq!(std::fs::read(&target).unwrap(), expected);
+        let _ = std::fs::remove_file(&target);
+    }
+
+    #[test]
+    fn gif_retains_transparent_index_above_used_opaque_colors() {
+        let mut doc =
+            pictura_core::Document::from_rgba("Source", 2, 1, &[255, 0, 0, 255, 0, 0, 0, 0]);
+        let mut settings = options();
+        settings.transparency = true;
+        pictura_render::document_ops::convert_to_indexed_with_forced(
+            &mut doc,
+            settings,
+            &[[255, 0, 0], [0, 255, 0], [0, 0, 255]],
+            true,
+        )
+        .unwrap();
+        let palette = doc.source.palette().unwrap();
+        let clear = pictura_codec::indexed_metadata(&doc).1.unwrap();
+        assert_eq!(clear, 3);
+        let Samples::U8(indices) = &doc.source.planes().as_ref().unwrap().samples else {
+            panic!("expected indices");
+        };
+        let expected = pictura_codec::encode_gif(
+            &pictura_codec::Indexed {
+                width: 2,
+                height: 1,
+                palette: (0..=usize::from(clear))
+                    .map(|i| {
+                        [
+                            palette[i],
+                            palette[256 + i],
+                            palette[512 + i],
+                            if i == usize::from(clear) { 0 } else { 255 },
+                        ]
+                    })
+                    .collect(),
+                indices: indices.to_vec(),
+            },
+            false,
+        );
+        let mut rust = PictureViewRust::default();
+        rust.session.doc.set(Some(doc));
+        rust.session.dirty = true;
+        let target = path("transparent-indexed.gif");
         assert!(write_gif(&mut rust, &target));
         assert_eq!(std::fs::read(&target).unwrap(), expected);
         let _ = std::fs::remove_file(&target);

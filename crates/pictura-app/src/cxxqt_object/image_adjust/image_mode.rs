@@ -81,6 +81,39 @@ pub mod ffi {
             amount: i32,
         ) -> bool;
 
+        fn indexed_exact_available_with_options(
+            view: &PictureView,
+            transparency: bool,
+            forced_rgb: &QByteArray,
+        ) -> bool;
+
+        fn convert_to_indexed_with_options(
+            view: Pin<&mut PictureView>,
+            palette: i32,
+            colors: i32,
+            dither: i32,
+            amount: i32,
+            transparency: bool,
+            forced_rgb: &QByteArray,
+        ) -> bool;
+
+        fn preview_indexed_with_options(
+            view: Pin<&mut PictureView>,
+            palette: i32,
+            colors: i32,
+            dither: i32,
+            amount: i32,
+            transparency: bool,
+            forced_rgb: &QByteArray,
+        ) -> bool;
+
+        // Color Table uses tightly packed RGBA entries with at most one clear entry.
+        fn indexed_color_table(view: &PictureView) -> QByteArray;
+        fn indexed_color_table_minimum(view: &PictureView) -> i32;
+        fn apply_indexed_color_table(view: Pin<&mut PictureView>, rgba: &QByteArray) -> bool;
+        fn decode_indexed_act(bytes: &QByteArray) -> QByteArray;
+        fn encode_indexed_act(rgba: &QByteArray) -> QByteArray;
+
         /// Show the GIF save preview: quantize the writer's 8-bit sRGB snapshot
         /// with the same palette settings the GIF encoder will use. Each call
         /// starts from the pre-preview document.

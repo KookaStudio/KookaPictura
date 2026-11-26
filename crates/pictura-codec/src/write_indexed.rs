@@ -37,10 +37,15 @@ fn layer_rgb_planes(layer: &Layer) -> Option<Vec<&[u8]>> {
 /// True when every non-group layer that carries RGB color can be rebuilt from
 /// its retained index plane. A group recurses; a layer with no RGB color
 /// channels (an adjustment or empty layer) does not participate.
-fn indexed_layers_unchanged(layers: &[Layer], palette: &[u8; 768], depth: u16) -> bool {
+fn indexed_layers_unchanged(
+    layers: &[Layer],
+    palette: &[u8; 768],
+    depth: u16,
+    clear: Option<u8>,
+) -> bool {
     layers.iter().all(|layer| {
         if layer.is_group() {
-            return indexed_layers_unchanged(layer.children(), palette, depth);
+            return indexed_layers_unchanged(layer.children(), palette, depth, clear);
         }
         let Some(rgb) = layer_rgb_planes(layer) else {
             return true;
@@ -48,7 +53,18 @@ fn indexed_layers_unchanged(layers: &[Layer], palette: &[u8; 768], depth: u16) -
         let Some(index) = layer_retained(layer, depth, 0).map(|s| s.to_bytes()) else {
             return false;
         };
-        crate::color_mode::indexed_to_rgb(&index, palette) == rgb.concat()
+        if crate::color_mode::indexed_to_rgb(&index, palette) != rgb.concat() {
+            return false;
+        }
+        if let Some(clear) = clear {
+            let alpha = layer.channels().iter().find(|channel| channel.id == -1);
+            if index.iter().enumerate().any(|(i, &value)| {
+                value == clear && alpha.is_none_or(|channel| channel.data.get(i) != Some(&0))
+            }) {
+                return false;
+            }
+        }
+        true
     })
 }
 
@@ -62,8 +78,11 @@ fn writes_indexed_impl(doc: &Document, depth: u16, plane: usize, allow_opaque_rg
     if depth != 8 || doc.source.depth().is_some() || doc.source.mode() != Some(ColorMode::Indexed) {
         return false;
     }
+    let clear = crate::indexed_metadata(doc).1;
     let composite_channels = doc.composite.channels;
-    if composite_channels != 3 && !(allow_opaque_rgba && composite_channels == 4) {
+    if composite_channels != 3
+        && !((allow_opaque_rgba || clear.is_some()) && composite_channels == 4)
+    {
         return false;
     }
     let Some(palette) = doc.source.palette() else {
@@ -81,24 +100,34 @@ fn writes_indexed_impl(doc: &Document, depth: u16, plane: usize, allow_opaque_rg
         let Some(current) = doc.composite.data.get(..3 * plane) else {
             return false;
         };
-        if crate::color_mode::indexed_to_rgb(&index, &palette).as_slice() != current {
+        if (0..3).any(|c| {
+            current[c * plane..(c + 1) * plane]
+                .iter()
+                .zip(&index)
+                .any(|(&rgb, &i)| Some(i) != clear && rgb != palette[c * 256 + usize::from(i)])
+        }) {
             return false;
         }
         if composite_channels == 4 {
             let Some(alpha) = doc.composite.data.get(3 * plane..4 * plane) else {
                 return false;
             };
-            if alpha.iter().any(|&value| value != 255) {
+            if alpha
+                .iter()
+                .zip(&index)
+                .any(|(&value, &i)| value != if Some(i) == clear { 0 } else { 255 })
+            {
                 return false;
             }
+        } else if clear.is_some_and(|i| index.contains(&i)) {
+            return false;
         }
     }
-    indexed_layers_unchanged(&doc.layers, &palette, depth)
+    indexed_layers_unchanged(&doc.layers, &palette, depth, clear)
 }
 
-/// The strict PSD/PDF predicate: an 8-bit Indexed source whose retained palette
-/// and index planes still expand to the current three-channel composite and
-/// layers.
+/// An 8-bit Indexed source whose retained palette and index planes still
+/// expand to the current composite and layers. A transparent index uses RGBA.
 pub(crate) fn writes_indexed(doc: &Document, depth: u16, plane: usize) -> bool {
     writes_indexed_impl(doc, depth, plane, false)
 }
@@ -113,8 +142,7 @@ pub fn indexed_source_is_current(doc: &Document) -> bool {
 /// Whether the retained Indexed palette and index plane still expand to the
 /// current composite when the app's full refresh has stored the working RGBA
 /// frame instead of the source's three planes. The RGB planes must match and
-/// the alpha plane must be fully opaque; PSD/PDF keep the strict
-/// [`writes_indexed`] check.
+/// the alpha plane must agree with the retained transparent index.
 pub fn gif_indexed_source_is_current(doc: &Document) -> bool {
     writes_indexed_impl(doc, 8, doc.width as usize * doc.height as usize, true)
 }

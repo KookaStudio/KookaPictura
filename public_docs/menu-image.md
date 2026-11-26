@@ -12,13 +12,14 @@ flatten or discard data, so Pictura asks before a lossy change.
 |---|---|---|---|
 | Bitmap | `—` | Converts to one-bit black and white. |  |
 | Grayscale | `—` | Converts to a single grey channel. |  |
-| Indexed Color | `—` | Converts to an indexed palette. |  |
+| Indexed Color | `—` | Converts to an indexed palette with optional forced colours and transparency. |  |
 | RGB Color | `—` | Converts to RGB colour. |  |
 | CMYK Color | `—` | Converts to CMYK for print. |  |
 | Lab Color | `—` | Converts to Lab colour. |  |
 | 8 Bits/Channel | `—` | Sets 8 bits per channel. |  |
 | 16 Bits/Channel | `—` | Sets 16 bits per channel. |  |
 | 32 Bits/Channel | `—` | Sets 32-bit floating-point channels. |  |
+| Color Table | `—` | Edits the palette of an indexed image, including its transparent entry. Loads and saves ACT palettes. |  |
 
 ## Adjustments
 
@@ -110,7 +111,6 @@ These commands appear in the menu but are greyed out for now. They are listed he
 
 - **Image ▸ Mode ▸ Duotone**
 - **Image ▸ Mode ▸ Multichannel**
-- **Image ▸ Mode ▸ Color Table**
 - **Image ▸ Trap…**
 
 <!-- pictura-commands

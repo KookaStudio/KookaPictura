@@ -98,9 +98,10 @@ pub use lens_correction::{apply_lens_correction, lens_correction_slots, smart_so
 pub use matting::{defringe, remove_matte, MatteBackground, MattingError};
 pub use mode::{
     can_convert_depth, can_convert_mode, convert_bit_depth, convert_mode,
-    convert_mode_with_profiles, convert_to_bitmap, convert_to_indexed, document_bit_depth,
-    document_color_mode, indexed_exact_available, save_view, BitmapMethod, HalftoneScreen,
-    HalftoneShape,
+    convert_mode_with_profiles, convert_to_bitmap, convert_to_indexed,
+    convert_to_indexed_with_forced, document_bit_depth, document_color_mode, indexed_color_table,
+    indexed_color_table_minimum, indexed_exact_available, indexed_exact_fits,
+    replace_indexed_color_table, save_view, BitmapMethod, HalftoneScreen, HalftoneShape,
 };
 pub use orient::{flip_document, oriented_plane_bytes, rotate_document};
 pub use pictura_raw::{

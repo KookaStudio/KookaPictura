@@ -301,7 +301,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       `crates/pictura-render/src/document_ops/layer_ops/transform.rs`.
 - [ ] Duotone conversion and its Options dialog (#553)
 - [x] Multichannel conversion (#554)
-- [ ] The Color Table, and Indexed transparency and Forced palette (#555)
+- [x] The Color Table, and Indexed transparency and Forced palette (#555)
 - [x] Bitmap Halftone Screen and Custom Pattern (#556)
 - [x] The HDR Conversion tone methods (#557)
 - [ ] Merge To HDR Pro (#558)
