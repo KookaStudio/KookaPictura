@@ -632,6 +632,22 @@ void PropertiesPanel::setView(PictureView* view)
     refresh();
 }
 
+void PropertiesPanel::scheduleThresholdSelectionRefresh()
+{
+    if (thresholdSelectionRefreshPending_ || !view_ || dirty_
+        || stack_->currentIndex() != AdjustmentPage || !controls_->hasThresholdHistogram()) {
+        return;
+    }
+    thresholdSelectionRefreshPending_ = true;
+    QTimer::singleShot(32, this, [this] {
+        thresholdSelectionRefreshPending_ = false;
+        if (view_ && !dirty_ && stack_->currentIndex() == AdjustmentPage
+            && path_ == activePath() && controls_->hasThresholdHistogram()) {
+            controls_->refreshThresholdHistogram(*view_, path_);
+        }
+    });
+}
+
 QString PropertiesPanel::activePath() const
 {
     if (!view_ || !view_->has_document()) {
@@ -795,6 +811,9 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
         preset_->setBlock(QString(), QByteArray());
     }
     controls_->setPage(page, dirty_);
+    if (view_ && !dirty_) {
+        controls_->refreshThresholdHistogram(*view_, path_);
+    }
     title_ = controls_->title();
     header_->setText(title_);
 }

@@ -17,6 +17,7 @@ pub(in crate::cxxqt_object) use image_size::image_size_fits_budget;
 mod imp;
 pub(in crate::cxxqt_object) mod jobs;
 mod new_document;
+mod threshold_histogram;
 
 use super::hdr_conversion::convert_depth_method;
 use super::image_hdr_toning::{hdr_toning_apply, hdr_toning_preview};
@@ -48,6 +49,9 @@ pub mod ffi {
 
         /// `block`'s descriptor page (the Properties panel's row format), or empty. `cmyk` reads the block as a CMYK document.
         fn image_adjustment_page(block: &[u8], cmyk: bool) -> QStringList;
+
+        /// Threshold's opening edit target (empty path) or the source below its adjustment layer.
+        fn image_adjustment_threshold_histogram(view: &PictureView, path: &QString) -> Vec<u32>;
 
         /// `block` with parameter `key` set to `value`, or empty when refused. `cmyk` reads the block as a CMYK document.
         fn image_adjustment_set(block: &[u8], key: &QString, value: f64, cmyk: bool) -> Vec<u8>;

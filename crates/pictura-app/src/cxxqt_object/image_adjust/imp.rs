@@ -50,10 +50,15 @@ pub(super) fn image_adjustment_default(
 
 pub(super) fn image_adjustment_page(block: &[u8], cmyk: bool) -> QStringList {
     from_block(block)
-        .as_ref()
-        .and_then(|data| pictura_render::adjustment_editor_in_mode(data, cmyk))
-        .map(|editor| page_rows(&editor))
+        .and_then(|data| {
+            let editor = pictura_render::adjustment_editor_in_mode(&data, cmyk)?;
+            Some(page_rows(&editor, data.key == *b"thrs"))
+        })
         .unwrap_or_default()
+}
+
+pub(super) fn image_adjustment_threshold_histogram(view: &PictureView, path: &QString) -> Vec<u32> {
+    super::threshold_histogram::threshold_bins(view.rust(), &path.to_string()).to_vec()
 }
 
 pub(super) fn image_adjustment_set(block: &[u8], key: &QString, value: f64, cmyk: bool) -> Vec<u8> {

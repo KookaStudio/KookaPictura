@@ -55,6 +55,7 @@ public:
 
     void setView(PictureView* view);
     void refresh();
+    void scheduleThresholdSelectionRefresh();
     // Commit a pending live edit before a footer command changes the layer.
     void flushPending() { commit(); }
     void setCommandRegistry(CommandRegistry* registry) { registry_ = registry; }
@@ -132,6 +133,7 @@ private:
     QString title_;
     QString kind_;
     bool dirty_ = false;
+    bool thresholdSelectionRefreshPending_ = false;
     std::function<QString()> presetNameProvider_;
     std::function<QString(const QStringList&)> presetPickProvider_;
 
