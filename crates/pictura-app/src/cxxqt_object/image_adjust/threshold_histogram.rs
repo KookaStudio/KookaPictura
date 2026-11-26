@@ -133,7 +133,7 @@ fn add_samples(
 fn sample_tiles(region: PsdRect) -> impl Iterator<Item = PsdRect> {
     const TILE: i32 = 128;
     const GRID: i32 = 4;
-    let axis = |origin, span: i32| {
+    let axis = |origin: i32, span: i32| {
         let cells = ((span - 1) / TILE + 1).min(GRID);
         (0..cells).map(move |i| {
             let low = origin + i * span / cells;
