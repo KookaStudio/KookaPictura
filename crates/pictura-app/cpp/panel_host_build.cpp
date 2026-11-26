@@ -144,6 +144,16 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state, const Prefe
             }
         }
     });
+    connect(channelsPanel_, &ChannelsPanel::channelTargetChanged, this, [this]() {
+        if (commands_) {
+            commands_->refresh();
+        }
+    });
+    connect(channelsPanel_, &ChannelsPanel::channelMaskChanged, this, [this](int) {
+        if (commands_) {
+            commands_->refresh();
+        }
+    });
     connect(channelsPanel_, &ChannelsPanel::saveOptionsRequested, this, [this]() {
         if (hooks_.saveSelectionOptions) {
             hooks_.saveSelectionOptions();

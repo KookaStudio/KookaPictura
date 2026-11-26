@@ -79,6 +79,7 @@ public:
 signals:
     // The visible working colour channels: bit 0 red, 1 green, 2 blue (0x7 all).
     void channelMaskChanged(int mask);
+    void channelTargetChanged();
     // Alt-clicking Save Selection asks the frame for the Save dialog.
     void saveOptionsRequested();
     // An alpha channel eye changed: the frame re-syncs the canvas view.

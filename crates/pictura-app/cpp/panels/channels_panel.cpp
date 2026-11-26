@@ -104,16 +104,20 @@ public:
         update();
     }
     QColor surface() const { return surface_; }
+    void setGutter(const QColor& color) { gutter_ = color; }
 
 protected:
     void paintEvent(QPaintEvent*) override
     {
         QPainter painter(this);
         painter.fillRect(rect(), surface_);
+        painter.fillRect(QRect(0, 0, 30, height()), gutter_);
+        painter.fillRect(QRect(29, 0, 1, height()), palette().color(QPalette::Base).darker(115));
     }
 
 private:
     QColor surface_;
+    QColor gutter_;
 };
 
 QToolButton* footerButton(QWidget* parent, const char* iconId, const QString& tip,
@@ -179,6 +183,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
         updateFooter();
         if (!syncing_) {
             applyChannelSolo(row);
+            emit channelTargetChanged();
         }
     });
     connect(load_, &QToolButton::clicked, this,
@@ -230,8 +235,12 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
 {
     auto* rowWidget = new ChannelRowWidget(list_);
     auto* rowLayout = new QHBoxLayout(rowWidget);
-    rowLayout->setContentsMargins(2, 2, 6, 2);
+    rowLayout->setContentsMargins(0, 2, 6, 2);
+    rowLayout->setSpacing(4);
     auto* eye = new QToolButton(rowWidget);
+    eye->setFixedWidth(30);
+    eye->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    eye->setIconSize(QSize(16, 16));
     eye->setCheckable(true);
     eye->setChecked(alpha < 0 || shownAlphas_.contains(alpha));
     eye->setAutoRaise(true);
@@ -263,7 +272,7 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
         toggle(index);
     });
     auto* item = new QListWidgetItem(list_);
-    item->setSizeHint(QSize(0, kThumbnailSize + 8));
+    item->setSizeHint(QSize(0, kThumbnailSize + 4));
     list_->setItemWidget(item, rowWidget);
     rows_.append(Row{name, shortcut, alpha>=0?RowKind::Alpha:(alpha==kMaskChannel?RowKind::LayerMask:kind), alpha, eye, thumb, rowWidget});
     styleRows();
@@ -558,7 +567,10 @@ void ChannelsPanel::styleRows()
         if (!widget) {
             continue;
         }
-        widget->setSurface(Theme::contrastShade(base, (i == current || (mode_ == QLatin1String("rgb") && current == 0 && i > 0 && i < liveRows_)) ? 3 : 1));
+        const bool selected = i == current
+            || (mode_ == QLatin1String("rgb") && current == 0 && i > 0 && i < liveRows_);
+        widget->setSurface(Theme::contrastShade(base, selected ? 3 : 1));
+        widget->setGutter(Theme::contrastShade(base, selected ? 3 : 2));
     }
 }
 

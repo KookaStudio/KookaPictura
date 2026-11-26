@@ -139,7 +139,7 @@ private slots:
     void modifierClickRecordsOneState();
     void clickChannelRowSelects();
     void clickChannelNameHitsRow();
-    void clickAlphaEyeSelectsRow();
+    void clickAlphaEyeKeepsSelectedRow();
     void alphaEyeShowsChannel();
     void alphaEyesShowMultiple();
     void alphaEyesAccumulateRedness();
@@ -210,6 +210,14 @@ void ChannelsPanelTest::rgbSelectionAndVisibility()
     panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
     QVERIFY(view_ && panel_);
     panel_->setView(view_);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* row = panel_->rowWidgetForTest(0);
+    auto* thumb = row->findChild<QLabel*>(QStringLiteral("channelsRowThumb"));
+    QVERIFY(thumb);
+    QCOMPARE(thumb->geometry().top(), 2);
+    QCOMPARE(row->height() - thumb->geometry().bottom() - 1, 2);
+    QCOMPARE(panel_->eyeForTest(0)->width(), 30);
     panel_->clickChannelForTest(1, Qt::NoModifier);
     QCOMPARE(panel_->currentChannelForTest(), 1);
     QCOMPARE(panel_->channelMask(), 1);
@@ -249,8 +257,8 @@ void ChannelsPanelTest::rgbAdjustmentAvailability()
         return window_->registry()->action(pictura::commandIdForPath(
             {QStringLiteral("Image"), QStringLiteral("Adjustments"), QString::fromUtf8(name)}));
     };
+    window_->registry()->refresh();
     const auto check = [&](bool composite) {
-        window_->registry()->refresh();
         for (const char* name : {"Exposure", "Vibrance", "Hue/Saturation", "Color Balance",
                                  "Black & White", "Photo Filter", "Channel Mixer", "Color Lookup",
                                  "Gradient Map", "Selective Color", "Desaturate", "Match Color"}) {
@@ -803,7 +811,7 @@ void ChannelsPanelTest::clickChannelNameHitsRow()
     QCOMPARE(panel_->currentChannelForTest(), 4);
 }
 
-void ChannelsPanelTest::clickAlphaEyeSelectsRow()
+void ChannelsPanelTest::clickAlphaEyeKeepsSelectedRow()
 {
     QVERIFY(window_->newDocument(QStringLiteral("EyeHit"), 16, 16, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
