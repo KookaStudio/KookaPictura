@@ -5,7 +5,7 @@ Pictura commit: 47d505216
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
-Coverage includes the #558 working-tree changes based on f730cfd2.
+Coverage includes the #558 HDR merge workflow.
 
 This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The current assessment includes the #577 worktree changes relative to the listed commit. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
@@ -13,12 +13,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 214 | 79 | 52 | 4 | 349 | 61.3% | 8 |
-| CS6 Standard, in scope | 214 | 79 | 46 | 2 | 341 | 62.8% | 8 |
-| CS6 Extended | 215 | 79 | 68 | 4 | 366 | 58.7% | 23 |
-| CS6 Extended, in scope | 215 | 79 | 47 | 2 | 343 | 62.7% | 23 |
-| CC 28.0 | 216 | 81 | 73 | 4 | 374 | 57.8% | 20 |
-| CC 28.0, in scope | 216 | 81 | 55 | 2 | 354 | 61.0% | 20 |
+| CS6 Standard | 214 | 80 | 52 | 4 | 350 | 61.1% | 8 |
+| CS6 Standard, in scope | 214 | 80 | 46 | 2 | 342 | 62.6% | 8 |
+| CS6 Extended | 215 | 80 | 68 | 4 | 367 | 58.6% | 23 |
+| CS6 Extended, in scope | 215 | 80 | 47 | 2 | 344 | 62.5% | 23 |
+| CC 28.0 | 216 | 82 | 73 | 4 | 375 | 57.6% | 20 |
+| CC 28.0, in scope | 216 | 82 | 55 | 2 | 355 | 60.8% | 20 |
 
 ## Baselines
 
@@ -431,7 +431,7 @@ Source list: File > Automate, Scripts, Actions, and plug-in capabilities.
 | P-AUT-20 | Cloud Documents | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
 | P-AUT-21 | Share for Review | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
 | P-AUT-22 | UXP plug-ins | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe ecosystem | non-goal:feasibility:76 |
-| P-AUT-23 | Merge To HDR Pro | Y | Y | Y | Partial | in-scope | crates/pictura-core/src/hdr_merge.rs; crates/pictura-app/cpp/merge_to_hdr_dialog.cpp | none | Approximate CPU merge and 32/16/8-bit output; native-depth inputs, persisted white point, and Adobe settings interchange remain | #558 |
+| P-AUT-23 | Merge To HDR Pro | Y | Y | Y | Partial | in-scope | crates/pictura-core/src/hdr_merge.rs; crates/pictura-app/cpp/merge_to_hdr_dialog.cpp | none | Approximate CPU merge and 32-bit float output; native-depth inputs, persisted white point, and Adobe settings interchange remain | #558 |
 
 ### Shell, panels & preferences
 

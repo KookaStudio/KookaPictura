@@ -224,8 +224,12 @@ mod tests {
 
         let jpeg = jpeg::embed(
             b"\xff\xd8\xff\xd9",
-            &RasterMetadata { exif: Some(tiff.clone()), ..RasterMetadata::default() },
-        ).unwrap();
+            &RasterMetadata {
+                exif: Some(tiff.clone()),
+                ..RasterMetadata::default()
+            },
+        )
+        .unwrap();
         assert_eq!(raster_ev100(&jpeg), Some(6.0));
         assert_eq!(raster_ev100(&tiff[..68]), None);
     }

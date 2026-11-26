@@ -28,9 +28,10 @@ pub(super) fn offset(
             }
         }
     }
-    candidates.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then_with(|| {
-        (a.1.abs() + a.2.abs(), a.2, a.1).cmp(&(b.1.abs() + b.2.abs(), b.2, b.1))
-    }));
+    candidates.sort_unstable_by(|a, b| {
+        b.0.total_cmp(&a.0)
+            .then_with(|| (a.1.abs() + a.2.abs(), a.2, a.1).cmp(&(b.1.abs() + b.2.abs(), b.2, b.1)))
+    });
     let mut best = None::<(f64, isize, isize)>;
     for &(_, dx, dy) in candidates.iter().take(12) {
         if let Some(score) = image.score(dx, dy) {
@@ -47,7 +48,10 @@ pub(super) fn offset(
     let mut peaks = vec![(dx, dy)];
     let mut competing = f64::NEG_INFINITY;
     for &(_, x, y) in &candidates {
-        if peaks.iter().any(|&(px, py)| (x - px).abs() <= 2 && (y - py).abs() <= 2) {
+        if peaks
+            .iter()
+            .any(|&(px, py)| (x - px).abs() <= 2 && (y - py).abs() <= 2)
+        {
             continue;
         }
         peaks.push((x, y));

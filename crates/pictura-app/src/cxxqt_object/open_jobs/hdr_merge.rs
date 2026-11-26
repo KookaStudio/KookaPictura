@@ -61,8 +61,16 @@ fn prepare(paths: &[String]) -> Result<Prepared, String> {
             .ok_or_else(|| format!("Cannot read {path}"))?;
         let header = pictura_codec::probe_image(&bytes, budget)
             .map_err(|error| format!("Cannot import {path}: {error}"))?;
-        if matches!(header.format, pictura_codec::ImageFormat::Png | pictura_codec::ImageFormat::Tiff | pictura_codec::ImageFormat::Jpeg) && header.bit_depth > 8 {
-            return Err(format!("HDR merge supports at most 8 bits per channel: {path}"));
+        if matches!(
+            header.format,
+            pictura_codec::ImageFormat::Png
+                | pictura_codec::ImageFormat::Tiff
+                | pictura_codec::ImageFormat::Jpeg
+        ) && header.bit_depth > 8
+        {
+            return Err(format!(
+                "HDR merge supports at most 8 bits per channel: {path}"
+            ));
         }
         let next_size = (header.width, header.height);
         if working.is_none() {
@@ -83,7 +91,11 @@ fn prepare(paths: &[String]) -> Result<Prepared, String> {
             return Err(format!("Decoded exposure dimensions changed: {path}"));
         }
         sources.push(super::convert_placed_rgba(
-            &bytes, rgba, width, height, pictura_codec::Policy::Convert,
+            &bytes,
+            rgba,
+            width,
+            height,
+            pictura_codec::Policy::Convert,
         ));
         ev100.push(pictura_codec::raster_ev100(&bytes).unwrap_or(f64::NAN));
     }
@@ -102,36 +114,63 @@ pub fn hdr_bracket_open(paths: &QStringList) -> Box<HdrBracket> {
 }
 
 pub fn hdr_bracket_error(bracket: &HdrBracket) -> QString {
-    bracket.0.as_ref().err().map_or_else(QString::default, |error| QString::from(error.as_str()))
+    bracket
+        .0
+        .as_ref()
+        .err()
+        .map_or_else(QString::default, |error| QString::from(error.as_str()))
 }
 
 fn estimate_exposures(sources: &[Vec<u8>], metadata: &[f64]) -> Vec<f64> {
-    let estimates: Vec<f64> = sources.iter().map(|source| {
-        let pixels = source.as_chunks::<4>().0;
-        let stride = pixels.len().div_ceil(4096).max(1);
-        let mut sum = 0.0;
-        let mut count = 0;
-        for pixel in pixels.iter().step_by(stride).filter(|pixel| pixel[3] != 0) {
-            let linear = |value: u8| {
-                let value = f64::from(value) / 255.0;
-                if value <= 0.04045 { value / 12.92 } else { ((value + 0.055) / 1.055).powf(2.4) }
-            };
-            sum += 0.2126 * linear(pixel[0]) + 0.7152 * linear(pixel[1]) + 0.0722 * linear(pixel[2]);
-            count += 1;
-        }
-        -((sum / f64::from(count.max(1))).max(1.0 / 65536.0)).log2()
-    }).collect();
+    let estimates: Vec<f64> = sources
+        .iter()
+        .map(|source| {
+            let pixels = source.as_chunks::<4>().0;
+            let stride = pixels.len().div_ceil(4096).max(1);
+            let mut sum = 0.0;
+            let mut count = 0;
+            for pixel in pixels.iter().step_by(stride).filter(|pixel| pixel[3] != 0) {
+                let linear = |value: u8| {
+                    let value = f64::from(value) / 255.0;
+                    if value <= 0.04045 {
+                        value / 12.92
+                    } else {
+                        ((value + 0.055) / 1.055).powf(2.4)
+                    }
+                };
+                sum += 0.2126 * linear(pixel[0])
+                    + 0.7152 * linear(pixel[1])
+                    + 0.0722 * linear(pixel[2]);
+                count += 1;
+            }
+            -((sum / f64::from(count.max(1))).max(1.0 / 65536.0)).log2()
+        })
+        .collect();
     let all_finite = metadata.iter().all(|value| value.is_finite());
     let reliable = !all_finite || median_exposure(metadata).is_some();
-    let anchor = reliable.then(|| metadata.iter().position(|value| value.is_finite())).flatten();
+    let anchor = reliable
+        .then(|| metadata.iter().position(|value| value.is_finite()))
+        .flatten();
     let offset = anchor.map_or_else(|| -estimates[0], |index| metadata[index] - estimates[index]);
-    metadata.iter().zip(estimates).map(|(&value, estimate)| {
-        if reliable && value.is_finite() { value } else { (estimate + offset).clamp(-64.0, 64.0) }
-    }).collect()
+    metadata
+        .iter()
+        .zip(estimates)
+        .map(|(&value, estimate)| {
+            if reliable && value.is_finite() {
+                value
+            } else {
+                (estimate + offset).clamp(-64.0, 64.0)
+            }
+        })
+        .collect()
 }
 
 pub fn hdr_bracket_exposures(bracket: &HdrBracket) -> Vec<f64> {
-    bracket.0.as_ref().map(|input| estimate_exposures(&input.sources, &input.ev100)).unwrap_or_default()
+    bracket
+        .0
+        .as_ref()
+        .map(|input| estimate_exposures(&input.sources, &input.ev100))
+        .unwrap_or_default()
 }
 
 pub fn hdr_bracket_base(exposures: &[f64]) -> i32 {
@@ -145,7 +184,9 @@ pub fn hdr_bracket_merge(
     ghost_base: i32,
     curve: &[f64],
 ) -> Box<HdrResult> {
-    Box::new(HdrResult(merge_prepared(bracket, ev100, align, ghost_base, curve)))
+    Box::new(HdrResult(merge_prepared(
+        bracket, ev100, align, ghost_base, curve,
+    )))
 }
 
 fn merge_prepared(
@@ -169,10 +210,15 @@ fn merge_prepared(
                 .ok_or_else(|| "Invalid Pictura response curve".to_owned())?,
         )
     };
-    let sources: Vec<_> = prepared.sources.iter().zip(ev100).map(|(rgba, &ev100)| Exposure {
-        rgba: rgba.as_chunks::<4>().0,
-        ev100,
-    }).collect();
+    let sources: Vec<_> = prepared
+        .sources
+        .iter()
+        .zip(ev100)
+        .map(|(rgba, &ev100)| Exposure {
+            rgba: rgba.as_chunks::<4>().0,
+            ev100,
+        })
+        .collect();
     let options = MergeOptions {
         align,
         ghost_base: usize::try_from(ghost_base).ok(),
@@ -180,31 +226,68 @@ fn merge_prepared(
     };
     merge(&sources, prepared.width, prepared.height, &options).map_err(|error| match error {
         MergeError::InvalidBracket => "Invalid HDR exposure bracket".to_owned(),
-        MergeError::InvalidExposure => "Supply distinct, finite EV100 values within 32 stops".to_owned(),
+        MergeError::InvalidExposure => {
+            "Supply distinct, finite EV100 values within 32 stops".to_owned()
+        }
         MergeError::Alignment(index) => format!("Could not align exposure {}", index + 1),
     })
 }
 
 pub fn hdr_bracket_install_stack(
-    mut view: Pin<&mut PictureView>, bracket: &HdrBracket, paths: &QStringList,
+    mut view: Pin<&mut PictureView>,
+    bracket: &HdrBracket,
+    paths: &QStringList,
 ) -> bool {
     let Ok(input) = &bracket.0 else { return false };
     let names = list_of_strings(paths);
-    if names.len() != input.sources.len() { return false; }
-    let Some(bytes) = (input.width as usize).checked_mul(input.height as usize).and_then(|n| n.checked_mul(4)) else { return false };
-    let mut doc = Document::from_rgba("Merge to HDR Pro", input.width, input.height, &vec![0; bytes]);
-    if let Some(layer) = doc.layers.last_mut() { layer.name = "Merge to HDR Pro".to_owned(); }
+    if names.len() != input.sources.len() {
+        return false;
+    }
+    let Some(bytes) = (input.width as usize)
+        .checked_mul(input.height as usize)
+        .and_then(|n| n.checked_mul(4))
+    else {
+        return false;
+    };
+    let mut doc = Document::from_rgba(
+        "Merge to HDR Pro",
+        input.width,
+        input.height,
+        &vec![0; bytes],
+    );
+    if let Some(layer) = doc.layers.last_mut() {
+        layer.name = "Merge to HDR Pro".to_owned();
+    }
     for (source, path) in input.sources.iter().zip(names) {
-        let name = Path::new(&path).file_name().and_then(|name| name.to_str()).unwrap_or("Exposure");
+        let name = Path::new(&path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("Exposure");
         let source_doc = Document::from_rgba(name, input.width, input.height, source);
-        let Some(layer) = source_doc.layers.last().cloned() else { return false };
-        if doc.layers.push(layer).is_err() { return false; }
+        let Some(layer) = source_doc.layers.last().cloned() else {
+            return false;
+        };
+        if doc.layers.push(layer).is_err() {
+            return false;
+        }
     }
     let count = input.width as usize * input.height as usize;
     let samples = Samples::F32(vec![0.0; count * 4].into());
-    if doc.source.set_native(Some(BitDepth::ThirtyTwo), Some(SourcePlanes {
-        depth: BitDepth::ThirtyTwo, width: input.width, height: input.height, samples,
-    })).is_err() { return false; }
+    if doc
+        .source
+        .set_native(
+            Some(BitDepth::ThirtyTwo),
+            Some(SourcePlanes {
+                depth: BitDepth::ThirtyTwo,
+                width: input.width,
+                height: input.height,
+                samples,
+            }),
+        )
+        .is_err()
+    {
+        return false;
+    }
     let target = LayerTarget::for_opened(&doc, Some("0".to_owned()));
     let history = super::history_for(&mut doc, &target, "Merge To HDR Pro");
     let mut rust = view.as_mut().rust_mut();
@@ -215,24 +298,43 @@ pub fn hdr_bracket_install_stack(
     true
 }
 
-pub fn hdr_result_tone(bracket: &HdrBracket, result: &HdrResult, controls: &[f64]) -> Box<HdrResult> {
+pub fn hdr_result_tone(
+    bracket: &HdrBracket,
+    result: &HdrResult,
+    controls: &[f64],
+) -> Box<HdrResult> {
     let tone = || -> Result<HdrMerge, String> {
         let input = bracket.0.as_ref().map_err(Clone::clone)?;
         let merged = result.0.as_ref().map_err(Clone::clone)?;
-        let [radius, strength, gamma, exposure, detail, shadow, highlight, vibrance, saturation, smooth, curve, method] = controls else {
+        let [radius, strength, gamma, exposure, detail, shadow, highlight, vibrance, saturation, smooth, curve, method] =
+            controls
+        else {
             return Err("Invalid toning controls".to_owned());
         };
         if controls.iter().any(|value| !value.is_finite()) || *gamma <= 0.0 {
             return Err("Invalid toning controls".to_owned());
         }
         let count = merged.planes[0].len();
-        let mut local: Vec<f64> = (0..count).map(|i| {
-            0.2126 * f64::from(merged.planes[0][i]) + 0.7152 * f64::from(merged.planes[1][i]) + 0.0722 * f64::from(merged.planes[2][i])
-        }).collect();
-        pictura_core::blur::approx_gaussian(&mut local, input.width as usize, input.height as usize, radius * if *smooth > 0.5 { 1.5 } else { 1.0 });
+        let mut local: Vec<f64> = (0..count)
+            .map(|i| {
+                0.2126 * f64::from(merged.planes[0][i])
+                    + 0.7152 * f64::from(merged.planes[1][i])
+                    + 0.0722 * f64::from(merged.planes[2][i])
+            })
+            .collect();
+        pictura_core::blur::approx_gaussian(
+            &mut local,
+            input.width as usize,
+            input.height as usize,
+            radius * if *smooth > 0.5 { 1.5 } else { 1.0 },
+        );
         let mut planes = merged.planes.clone();
         for i in 0..count {
-            let rgb = [f64::from(merged.planes[0][i]), f64::from(merged.planes[1][i]), f64::from(merged.planes[2][i])];
+            let rgb = [
+                f64::from(merged.planes[0][i]),
+                f64::from(merged.planes[1][i]),
+                f64::from(merged.planes[2][i]),
+            ];
             let lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]).max(0.0);
             let base = local[i].max(0.0);
             let ratio = (lum + 0.0001) / (base + 0.0001);
@@ -259,17 +361,28 @@ pub fn hdr_result_tone(bracket: &HdrBracket, result: &HdrResult, controls: &[f64
                 };
             }
         }
-        Ok(HdrMerge { planes, response: merged.response })
+        Ok(HdrMerge {
+            planes,
+            response: merged.response,
+        })
     };
     Box::new(HdrResult(tone()))
 }
 
 pub fn hdr_result_error(result: &HdrResult) -> QString {
-    result.0.as_ref().err().map_or_else(QString::default, |error| QString::from(error.as_str()))
+    result
+        .0
+        .as_ref()
+        .err()
+        .map_or_else(QString::default, |error| QString::from(error.as_str()))
 }
 
 pub fn hdr_result_curve(result: &HdrResult) -> Vec<f64> {
-    result.0.as_ref().map(|merged| merged.response.exponents().to_vec()).unwrap_or_default()
+    result
+        .0
+        .as_ref()
+        .map(|merged| merged.response.exponents().to_vec())
+        .unwrap_or_default()
 }
 
 pub fn hdr_result_preview(bracket: &HdrBracket, result: &HdrResult, ev: f64) -> QImage {
@@ -310,10 +423,22 @@ fn merged_document(width: u32, height: u32, merge: HdrMerge) -> Option<Document>
         .into_iter()
         .zip(merge.planes.map(|plane| Samples::F32(plane.into())))
         .collect();
-    layer.source_channels = Some(SourceChannels::new(BitDepth::ThirtyTwo, layer.rect, channels));
-    doc.source.set_native(Some(BitDepth::ThirtyTwo), Some(SourcePlanes {
-        depth: BitDepth::ThirtyTwo, width, height, samples,
-    })).ok()?;
+    layer.source_channels = Some(SourceChannels::new(
+        BitDepth::ThirtyTwo,
+        layer.rect,
+        channels,
+    ));
+    doc.source
+        .set_native(
+            Some(BitDepth::ThirtyTwo),
+            Some(SourcePlanes {
+                depth: BitDepth::ThirtyTwo,
+                width,
+                height,
+                samples,
+            }),
+        )
+        .ok()?;
     Some(doc)
 }
 
@@ -339,7 +464,9 @@ pub fn hdr_result_install(
     rust.path = None;
     rust.source_format = "psd".to_owned();
     drop(rust);
-    view.as_mut().edit("Merge To HDR Pro", |_| crate::cxxqt_object::edit::Edit::Full);
+    view.as_mut().edit("Merge To HDR Pro", |_| {
+        crate::cxxqt_object::edit::Edit::Full
+    });
     true
 }
 
@@ -349,17 +476,27 @@ mod tests {
 
     #[test]
     fn estimated_exposures_preserve_metadata() {
-        let sources = vec![vec![32, 32, 32, 255], vec![128, 128, 128, 255], vec![224, 224, 224, 255]];
+        let sources = vec![
+            vec![32, 32, 32, 255],
+            vec![128, 128, 128, 255],
+            vec![224, 224, 224, 255],
+        ];
         let values = estimate_exposures(&sources, &[f64::NAN, 8.0, f64::NAN]);
         assert_eq!(values[1], 8.0);
         assert!(values[0] > values[1] && values[1] > values[2]);
-        assert_eq!(values, estimate_exposures(&sources, &[f64::NAN, 8.0, f64::NAN]));
+        assert_eq!(
+            values,
+            estimate_exposures(&sources, &[f64::NAN, 8.0, f64::NAN])
+        );
     }
 
     #[test]
     fn tone_keeps_float_highlights_and_alpha() {
         let bracket = HdrBracket(Ok(Prepared {
-            sources: vec![], ev100: vec![], width: 1, height: 1,
+            sources: vec![],
+            ev100: vec![],
+            width: 1,
+            height: 1,
             _memory: governor().reserve(1, "test HDR toning").unwrap(),
         }));
         let result = HdrResult(Ok(HdrMerge {
@@ -371,7 +508,15 @@ mod tests {
         let toned = toned.0.as_ref().unwrap();
         assert!(toned.planes[0][0] > 1.0);
         assert_eq!(toned.planes[3][0], 0.5);
-        let doc = merged_document(1, 1, HdrMerge { planes: toned.planes.clone(), response: toned.response }).unwrap();
+        let doc = merged_document(
+            1,
+            1,
+            HdrMerge {
+                planes: toned.planes.clone(),
+                response: toned.response,
+            },
+        )
+        .unwrap();
         let layer = doc.layers.last().unwrap();
         assert_eq!(layer.name, "Background");
         assert!(layer.background);
@@ -385,14 +530,27 @@ mod tests {
         };
         let mut doc = merged_document(1, 1, merged).unwrap();
         pictura_render::convert_depth_exposure_gamma(
-            &mut doc, BitDepth::Sixteen,
-            pictura_render::ExposureGamma { exposure_ev: 0.0, gamma: 1.0 },
-        ).unwrap();
+            &mut doc,
+            BitDepth::Sixteen,
+            pictura_render::ExposureGamma {
+                exposure_ev: 0.0,
+                gamma: 1.0,
+            },
+        )
+        .unwrap();
         let bytes = pictura_codec::write_psd(&doc).unwrap();
         let reopened = pictura_codec::read_psd(&bytes).unwrap();
-        let native = reopened.layers.last().unwrap().source_channels.as_ref().unwrap();
+        let native = reopened
+            .layers
+            .last()
+            .unwrap()
+            .source_channels
+            .as_ref()
+            .unwrap();
         let red = &native.planes.iter().find(|(id, _)| *id == 0).unwrap().1;
-        let Samples::U16(red) = red else { panic!("expected 16-bit layer") };
+        let Samples::U16(red) = red else {
+            panic!("expected 16-bit layer")
+        };
         assert!((i32::from(red[0]) - 19726).abs() <= 1);
     }
 
@@ -403,7 +561,10 @@ mod tests {
             response: ResponseCurve::new([1.0; 3]).unwrap(),
         };
         let doc = merged_document(1, 1, merged).unwrap();
-        for bytes in [pictura_codec::write_psd(&doc).unwrap(), pictura_codec::write_psb(&doc).unwrap()] {
+        for bytes in [
+            pictura_codec::write_psd(&doc).unwrap(),
+            pictura_codec::write_psb(&doc).unwrap(),
+        ] {
             let reopened = pictura_codec::read_psd(&bytes).unwrap();
             let layer = reopened.layers.last().unwrap();
             let native = layer.source_channels.as_ref().unwrap();

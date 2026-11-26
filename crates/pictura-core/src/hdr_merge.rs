@@ -24,9 +24,8 @@ impl ResponseCurve {
     }
 
     fn tables(self) -> [[f64; 256]; 3] {
-        self.0.map(|exponent| {
-            std::array::from_fn(|value| linearize(value as u8).powf(exponent))
-        })
+        self.0
+            .map(|exponent| std::array::from_fn(|value| linearize(value as u8).powf(exponent)))
     }
 }
 
@@ -78,9 +77,11 @@ pub fn valid_bracket_ev(values: &[f64]) -> bool {
     if values.len() < 3 || values.iter().any(|v| !v.is_finite()) {
         return false;
     }
-    let (lo, hi) = values.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
-        (lo.min(v), hi.max(v))
-    });
+    let (lo, hi) = values
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
+            (lo.min(v), hi.max(v))
+        });
     (0.01..=32.0).contains(&(hi - lo))
 }
 
@@ -107,7 +108,9 @@ pub fn merge(
         .ok_or(MergeError::InvalidBracket)?;
     if exposures.len() < 3
         || exposures.iter().any(|input| input.rgba.len() != size)
-        || options.ghost_base.is_some_and(|base| base >= exposures.len())
+        || options
+            .ghost_base
+            .is_some_and(|base| base >= exposures.len())
     {
         return Err(MergeError::InvalidBracket);
     }
@@ -248,15 +251,25 @@ fn fuse_pixel(
     let mut min_luma = f64::INFINITY;
     let mut max_luma = 0.0f64;
     for (index, source) in sources.iter().enumerate() {
-        let Some(code) = source.pixel(x, y, width, height) else { continue };
+        let Some(code) = source.pixel(x, y, width, height) else {
+            continue;
+        };
         let current = sample(code, source.scale, tables);
-        if index == base { base_sample = Some(current); }
+        if index == base {
+            base_sample = Some(current);
+        }
         let distance = (current.scale / sources[base].scale).log2().abs();
-        if nearest.is_none_or(|previous| distance < (previous.scale / sources[base].scale).log2().abs()) {
+        if nearest
+            .is_none_or(|previous| distance < (previous.scale / sources[base].scale).log2().abs())
+        {
             nearest = Some(current);
         }
-        if darkest.is_none_or(|previous| current.scale < previous.scale) { darkest = Some(current); }
-        if brightest.is_none_or(|previous| current.scale > previous.scale) { brightest = Some(current); }
+        if darkest.is_none_or(|previous| current.scale < previous.scale) {
+            darkest = Some(current);
+        }
+        if brightest.is_none_or(|previous| current.scale > previous.scale) {
+            brightest = Some(current);
+        }
         for c in 0..3 {
             all_highlights[c] &= code[c] == 255;
             all_shadows[c] &= code[c] == 0;
@@ -271,12 +284,22 @@ fn fuse_pixel(
             max_luma = max_luma.max(current.luma);
         }
     }
-    let Some(nearest) = nearest else { return [0.0; 4] };
+    let Some(nearest) = nearest else {
+        return [0.0; 4];
+    };
     let ghost = ghost_base.is_some() && max_luma > 1.35 * min_luma + 0.02;
     let mut output = [0.0_f32; 4];
     for c in 0..3 {
-        let fallback = if all_highlights[c] { darkest } else if all_shadows[c] { brightest } else { Some(nearest) };
-        output[c] = if ghost && base_sample.is_some_and(|sample| sample.code[c] > 0 && sample.code[c] < 255) {
+        let fallback = if all_highlights[c] {
+            darkest
+        } else if all_shadows[c] {
+            brightest
+        } else {
+            Some(nearest)
+        };
+        output[c] = if ghost
+            && base_sample.is_some_and(|sample| sample.code[c] > 0 && sample.code[c] < 255)
+        {
             base_sample.unwrap().rgba[c] as f32
         } else if weights[c] > 0.0 {
             (sums[c] / weights[c]) as f32
@@ -284,13 +307,14 @@ fn fuse_pixel(
             fallback.unwrap_or(nearest).rgba[c] as f32
         };
     }
-    output[3] = if ghost && base_sample.is_some_and(|sample| sample.weights.iter().any(|&w| w > 0.0)) {
-        base_sample.unwrap().rgba[3] as f32
-    } else if alpha_weight > 0.0 {
-        (alpha_sum / alpha_weight) as f32
-    } else {
-        nearest.rgba[3] as f32
-    };
+    output[3] =
+        if ghost && base_sample.is_some_and(|sample| sample.weights.iter().any(|&w| w > 0.0)) {
+            base_sample.unwrap().rgba[3] as f32
+        } else if alpha_weight > 0.0 {
+            (alpha_sum / alpha_weight) as f32
+        } else {
+            nearest.rgba[3] as f32
+        };
     output
 }
 
