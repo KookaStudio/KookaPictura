@@ -4,6 +4,24 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Fujifilm RAF and X-Trans, #1473** (OpenSpec change `vendor-raw-raf`;
+  `codec/vendor-raw-containers`, `codec/raw-demosaic`,
+  `codec/camera-matrices`, `document/raw-open` modified). `dng/raf.rs` reads
+  the big-endian header's JPEG, directory and sensor sections; the sensor
+  section is a TIFF whose `0xF000` points at the raw directory. Uncompressed
+  only, by owner decision: 16-bit words (row length `0xF005` 0), 12-bit
+  LSB-first, 14-bit MSB-first over LE words; compressed refused (#1620),
+  SuperCCD/EXR refused (#1621). `0x0131` reversed is the X-Trans CFA at the
+  plane origin (proven: the X100S RAF equals its Adobe DNG sample for sample,
+  `raf_matches_its_dng_when_present`); Bayer is RGGB at the origin.
+  `DemosaicMethod::Ahd` routes 6×6 X-Trans to `demosaic/xtrans.rs`, an
+  edge-directed method of our own (exact on flat fields and ramps; ~1 s for
+  26 MP). 10 bodies have camera-JPEG fits under 21/17 (presets `0xF00C`);
+  X-E1 and X100S samples failed the fit (#1622). The develop lifts a RAF by
+  `-RawExposureBias` (`0x9650`, -1.72 EV on the DR200 X100 sample); the
+  dialog reads RAF shooting data from the camera JPEG's Exif (`raw_exif`)
+  and every raw's size readout is the cropped, oriented size. Samples:
+  `~/Downloads/PHOTOSHOP/RAW/FujiFilm/pixls` (raw.pixls.us).
 - **Layer grow cost, #1609** (OpenSpec change `tile-aware-layer-grow`,
   capability `document/layer-grow-cost`). Long strokes on a 21000² document
   spent 93 % of their time growing the layer: `padded_plane` copied every
