@@ -444,6 +444,11 @@ void ChannelsPanel::toggle(int index)
         }
         return;
     }
+    if (!shownAlphas_.isEmpty()) {
+        shownAlphas_.clear();
+        updateAlphaEyes();
+        emit alphaVisibilityChanged();
+    }
     int nextMask = mask_;
     if (index == 0) {
         // The composite eye shows every channel.

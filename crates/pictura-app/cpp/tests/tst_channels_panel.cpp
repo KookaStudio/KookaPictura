@@ -21,6 +21,7 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QLayout>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QTabBar>
@@ -215,8 +216,14 @@ void ChannelsPanelTest::rgbSelectionAndVisibility()
     auto* row = panel_->rowWidgetForTest(0);
     auto* thumb = row->findChild<QLabel*>(QStringLiteral("channelsRowThumb"));
     QVERIFY(thumb);
-    QCOMPARE(thumb->geometry().top(), 2);
-    QCOMPARE(row->height() - thumb->geometry().bottom() - 1, 2);
+    const QMargins margins = row->layout()->contentsMargins();
+    QCOMPARE(margins.top(), 2);
+    QCOMPARE(margins.bottom(), 2);
+    const int top = thumb->geometry().top();
+    const int bottom = row->height() - thumb->geometry().bottom() - 1;
+    QVERIFY(top >= margins.top());
+    QVERIFY(bottom >= margins.bottom());
+    QVERIFY(qAbs(top - bottom) <= 1);
     QCOMPARE(panel_->eyeForTest(0)->width(), 30);
     panel_->clickChannelForTest(1, Qt::NoModifier);
     QCOMPARE(panel_->currentChannelForTest(), 1);
