@@ -300,11 +300,19 @@ fn curves_cmyk_channels_round_trip() {
     }
     let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         adjustment: Some(block),
-        rect: pictura_core::PsdRect { top: 0, left: 0, bottom: 2, right: 2 },
+        rect: pictura_core::PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 2,
+        },
         ..Default::default()
     });
     let mut doc = pictura_core::Document::new(
-        2, 2, pictura_core::ColorMode::Rgb, pictura_core::BitDepth::Eight,
+        2,
+        2,
+        pictura_core::ColorMode::Rgb,
+        pictura_core::BitDepth::Eight,
     );
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     let bytes = pictura_codec::write_psd(&doc).unwrap();

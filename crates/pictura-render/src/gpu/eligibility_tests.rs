@@ -609,9 +609,8 @@ fn curves_non_rgb_cpu_fallback() {
     let block = crate::encode_curves(&[(0, 0), (255, 255)], None, None, None);
     for mode in [ColorMode::Rgb, ColorMode::Cmyk, ColorMode::Lab] {
         let mut doc = Document::new(2, 2, mode, BitDepth::Eight);
-        doc.layers = pictura_core::LayerStack::from_layers(vec![adjustment(
-            block.key, block.data.to_vec(),
-        )]);
+        doc.layers =
+            pictura_core::LayerStack::from_layers(vec![adjustment(block.key, block.data.to_vec())]);
         match mode {
             ColorMode::Rgb => assert!(plan(&doc).is_ok()),
             _ => assert!(matches!(plan(&doc), Err(GpuError::UnsupportedAdjustment))),

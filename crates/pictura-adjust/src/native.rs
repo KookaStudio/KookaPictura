@@ -353,7 +353,11 @@ fn curve(points: &[(u8, u8)]) -> Result<Curve, AdjustError> {
             "curve inputs must be strictly increasing".into(),
         ));
     }
-    let ms = if points.len() == 256 { Vec::new() } else { monotone_tangents(&xs, &ys) };
+    let ms = if points.len() == 256 {
+        Vec::new()
+    } else {
+        monotone_tangents(&xs, &ys)
+    };
     Ok(Curve { xs, ys, ms })
 }
 
@@ -401,7 +405,10 @@ pub(crate) fn curve_map(
     let active = |points: &[(u8, u8)]| {
         if points == [(0, 0), (255, 255)]
             || (points.len() == 256
-                && points.iter().enumerate().all(|(i, &(x, y))| i == usize::from(x) && x == y))
+                && points
+                    .iter()
+                    .enumerate()
+                    .all(|(i, &(x, y))| i == usize::from(x) && x == y))
         {
             Ok(None)
         } else {
@@ -414,7 +421,9 @@ pub(crate) fn curve_map(
     let blue = p.blue.as_deref().map(active).transpose()?.flatten();
     let black = p.black.as_deref().map(active).transpose()?.flatten();
     if composite.is_none()
-        && red.is_none() && green.is_none() && blue.is_none()
+        && red.is_none()
+        && green.is_none()
+        && blue.is_none()
         && (black.is_none() || mode != ColorBalanceMode::Cmyk)
     {
         return Ok(None);

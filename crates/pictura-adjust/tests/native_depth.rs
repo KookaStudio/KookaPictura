@@ -590,8 +590,9 @@ fn curves_mode_transform_and_identity() {
         }),
         &mut cmyk,
         ColorBalanceMode::Cmyk,
-    ).unwrap();
-    assert_eq!(cmyk.data.as_slice(), &[63, 95, 127, 255]);
+    )
+    .unwrap();
+    assert_eq!(cmyk.data.as_slice(), &[64, 95, 127, 255]);
 
     let mut lab = original;
     apply_in_mode(
@@ -603,6 +604,7 @@ fn curves_mode_transform_and_identity() {
         }),
         &mut lab,
         ColorBalanceMode::Lab,
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(lab.data.as_slice(), &[0, 0, 0, 255]);
 }

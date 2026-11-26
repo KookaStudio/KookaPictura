@@ -10,6 +10,7 @@
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QTimer>
 #include <QtCore/QtMath>
+#include <QtGui/QPalette>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QGridLayout>
@@ -385,7 +386,7 @@ void CurvesControls::refreshGraph()
     QVector<QPair<QColor, QString>> curves;
     if (source_ && channel() == 0 && overlays_->isChecked()) {
         const QList<QColor> colors = mode_ == QLatin1String("cmyk")
-            ? QList<QColor>{Qt::cyan, Qt::magenta, Qt::yellow, Qt::gray}
+            ? QList<QColor>{Qt::cyan, Qt::magenta, Qt::yellow, palette().color(QPalette::Mid)}
             : QList<QColor>{Qt::red, Qt::green, Qt::blue};
         if (mode_ == QLatin1String("rgb") || mode_ == QLatin1String("cmyk")) {
             for (int i = 0; i < colors.size(); ++i) {

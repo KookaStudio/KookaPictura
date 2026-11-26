@@ -657,7 +657,10 @@ fn curves_trailer_fallback_and_source_preservation() {
     let extended = encode_curves_params(&dense, Some(&source));
     let bytes = extended.data.as_slice();
     assert!(bytes.windows(14).any(|window| window == b"opaque-content"));
-    assert_eq!(decode_adjustment(&extended), Some(Adjustment::Curves(dense.clone())));
+    assert_eq!(
+        decode_adjustment(&extended),
+        Some(Adjustment::Curves(dense.clone()))
+    );
 
     let legacy_end = bytes.len() - 7 - 258;
     let legacy = decode_adjustment(&block(b"curv", bytes[..legacy_end].to_vec()));
@@ -675,15 +678,22 @@ fn curves_trailer_fallback_and_source_preservation() {
     duplicate.extend_from_slice(b"PkCv");
     assert_eq!(decode_adjustment(&block(b"curv", duplicate)), legacy);
 
-    let mut standard = encode_curves(&[(0, 0), (255, 255)], None, None, None).data.to_vec();
+    let mut standard = encode_curves(&[(0, 0), (255, 255)], None, None, None)
+        .data
+        .to_vec();
     standard.extend_from_slice(b"Crv \0\x04\0\0\0\x01\0\x02\0\0\0\0\0\xff\0\xff");
     standard.extend_from_slice(b"unrelated");
     let edited = encode_curves_params(&dense, Some(&block(b"curv", standard)));
     assert!(!edited.data.windows(4).any(|bytes| bytes == b"Crv "));
     assert!(edited.data.windows(9).any(|bytes| bytes == b"unrelated"));
-    assert_eq!(decode_adjustment(&edited), Some(Adjustment::Curves(dense.clone())));
+    assert_eq!(
+        decode_adjustment(&edited),
+        Some(Adjustment::Curves(dense.clone()))
+    );
 
-    let mut truncated = encode_curves(&[(0, 0), (255, 255)], None, None, None).data.to_vec();
+    let mut truncated = encode_curves(&[(0, 0), (255, 255)], None, None, None)
+        .data
+        .to_vec();
     truncated.extend_from_slice(b"Crv \0\x04\0\0\0\x01\0\x02");
     let edited = encode_curves_params(&dense, Some(&block(b"curv", truncated)));
     assert!(edited.data.windows(4).any(|bytes| bytes == b"Crv "));

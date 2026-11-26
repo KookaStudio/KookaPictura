@@ -80,9 +80,11 @@ pub(crate) fn decode_curves_using(d: &[u8], alloc: &mut ContentAlloc) -> Option<
     }
     let mut channels = [None, None, None, None, None];
     channels[..4].swap_with_slice(&mut curves);
-    if let Some(tables) = d.get(at..).and_then(trailer).and_then(|(_, version, body)| {
-        (version == 1).then(|| read_trailer(body, alloc)).flatten()
-    }) {
+    if let Some(tables) = d
+        .get(at..)
+        .and_then(trailer)
+        .and_then(|(_, version, body)| (version == 1).then(|| read_trailer(body, alloc)).flatten())
+    {
         for (channel, table) in channels.iter_mut().zip(tables) {
             if table.is_some() {
                 *channel = table;
@@ -190,13 +192,15 @@ pub fn encode_curves_params(p: &CurvesParams, source: Option<&AdjustmentData>) -
         p.blue.as_deref(),
         p.black.as_deref(),
     ];
-    let fallback = channels.map(|curve| curve.map(|points| {
-        if points.len() == 256 {
-            (0..14).map(|i| points[(i * 255 + 6) / 13]).collect()
-        } else {
-            points.to_vec()
-        }
-    }));
+    let fallback = channels.map(|curve| {
+        curve.map(|points| {
+            if points.len() == 256 {
+                (0..14).map(|i| points[(i * 255 + 6) / 13]).collect()
+            } else {
+                points.to_vec()
+            }
+        })
+    });
     let base = encode_curves(
         fallback[0].as_deref().unwrap_or_default(),
         fallback[1].as_deref(),
@@ -226,7 +230,10 @@ pub fn encode_curves_params(p: &CurvesParams, source: Option<&AdjustmentData>) -
         data.extend_from_slice(&(length as u16).to_be_bytes());
         data.extend_from_slice(FOOTER_MAGIC);
     }
-    AdjustmentData { key: base.key, data: data.into() }
+    AdjustmentData {
+        key: base.key,
+        data: data.into(),
+    }
 }
 
 fn write_curve(data: &mut Vec<u8>, points: &[(u8, u8)]) {

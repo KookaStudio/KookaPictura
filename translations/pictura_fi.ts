@@ -180,6 +180,10 @@ Näytönohjaimen ajuri: %5</translation>
         <translation>32-bittisen esikatselun asetukset…</translation>
     </message>
     <message>
+        <source>Curves Display Options…</source>
+        <translation>Käyrien näyttöasetukset…</translation>
+    </message>
+    <message>
         <source>100%</source>
         <translation>100%</translation>
     </message>
