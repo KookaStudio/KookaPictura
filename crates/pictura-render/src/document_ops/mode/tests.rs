@@ -266,7 +266,7 @@ fn bitmap_conversion_clears_display_info() {
 fn bitmap_dithers_keep_the_mean_tone() {
     let gray = vec![64u8; 64 * 64];
     for method in [BitmapMethod::Pattern, BitmapMethod::Diffusion] {
-        let whites = flat::bitmap_whites(&gray, 64, method);
+        let whites = flat::bitmap_whites(&gray, 64, method, 72.0);
         let share = whites.iter().filter(|&&w| w).count() as f64 / whites.len() as f64;
         assert!(
             (share - 0.25).abs() < 0.03,
@@ -1104,7 +1104,12 @@ fn bitmap_custom_pattern_tiles_from_canvas_origin() {
     let mut doc = bitmap_gray_doc(5, 7, &[128; 35]);
     convert_to_bitmap(&mut doc, BitmapMethod::CustomPattern(Some(&pattern))).unwrap();
     let tile = [[255, 0], [0, 255], [255, 255]];
-    for (y, row) in doc.composite.data[..35].as_chunks::<5>().0.iter().enumerate() {
+    for (y, row) in doc.composite.data[..35]
+        .as_chunks::<5>()
+        .0
+        .iter()
+        .enumerate()
+    {
         for (x, &white) in row.iter().enumerate() {
             assert_eq!(white, tile[y % 3][x % 2]);
         }
