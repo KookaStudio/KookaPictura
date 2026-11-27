@@ -79,6 +79,7 @@ public:
 signals:
     // The visible working colour channels: bit 0 red, 1 green, 2 blue (0x7 all).
     void channelMaskChanged(int mask);
+    void channelTargetChanged();
     // Alt-clicking Save Selection asks the frame for the Save dialog.
     void saveOptionsRequested();
     // An alpha channel eye changed: the frame re-syncs the canvas view.
@@ -105,6 +106,8 @@ private:
     void rebuild(const QString& mode, const QStringList& alphaNames, bool storedPlates);
     void addRow(const QString& name, const QString& shortcut, int alpha, RowKind kind=RowKind::Color);
     void refreshThumbnails();
+    void selectRow(int index);
+    void setRgbVisibility(int mask);
     void toggle(int index);
     void toggleAlpha(int alpha);
     void updateAlphaEyes();

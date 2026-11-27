@@ -104,16 +104,20 @@ public:
         update();
     }
     QColor surface() const { return surface_; }
+    void setGutter(const QColor& color) { gutter_ = color; }
 
 protected:
     void paintEvent(QPaintEvent*) override
     {
         QPainter painter(this);
         painter.fillRect(rect(), surface_);
+        painter.fillRect(QRect(0, 0, 30, height()), gutter_);
+        painter.fillRect(QRect(29, 0, 1, height()), palette().color(QPalette::Base).darker(115));
     }
 
 private:
     QColor surface_;
+    QColor gutter_;
 };
 
 QToolButton* footerButton(QWidget* parent, const char* iconId, const QString& tip,
@@ -179,6 +183,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
         updateFooter();
         if (!syncing_) {
             applyChannelSolo(row);
+            emit channelTargetChanged();
         }
     });
     connect(load_, &QToolButton::clicked, this,
@@ -230,8 +235,12 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
 {
     auto* rowWidget = new ChannelRowWidget(list_);
     auto* rowLayout = new QHBoxLayout(rowWidget);
-    rowLayout->setContentsMargins(2, 1, 6, 1);
+    rowLayout->setContentsMargins(0, 2, 6, 2);
+    rowLayout->setSpacing(4);
     auto* eye = new QToolButton(rowWidget);
+    eye->setFixedWidth(30);
+    eye->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    eye->setIconSize(QSize(16, 16));
     eye->setCheckable(true);
     eye->setChecked(alpha < 0 || shownAlphas_.contains(alpha));
     eye->setAutoRaise(true);
@@ -260,11 +269,10 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
 
     const int index = rows_.size();
     connect(eye, &QToolButton::clicked, this, [this, index]() {
-        list_->setCurrentRow(index);
         toggle(index);
     });
     auto* item = new QListWidgetItem(list_);
-    item->setSizeHint(QSize(0, kThumbnailSize + 8));
+    item->setSizeHint(QSize(0, kThumbnailSize + 4));
     list_->setItemWidget(item, rowWidget);
     rows_.append(Row{name, shortcut, alpha>=0?RowKind::Alpha:(alpha==kMaskChannel?RowKind::LayerMask:kind), alpha, eye, thumb, rowWidget});
     styleRows();
@@ -441,22 +449,46 @@ void ChannelsPanel::toggle(int index)
         updateAlphaEyes();
         emit alphaVisibilityChanged();
     }
+    int nextMask = mask_;
     if (index == 0) {
         // The composite eye shows every channel.
-        mask_ = 0x7;
+        nextMask = 0x7;
     } else {
         const int bit = 1 << (index - 1);
         // The last visible channel stays visible.
         if (mask_ != bit) {
-            mask_ ^= bit;
+            nextMask ^= bit;
         }
     }
+    setRgbVisibility(nextMask);
+}
+
+void ChannelsPanel::setRgbVisibility(int mask)
+{
+    mask_ = mask;
     for (int i = 0; i < liveRows_; ++i) {
         const bool on = i == 0 ? mask_ == 0x7 : (mask_ & (1 << (i - 1))) != 0;
         rows_[i].eye->setChecked(on);
         applyEyeIcon(rows_[i].eye);
     }
     emit channelMaskChanged(mask_);
+}
+
+void ChannelsPanel::selectRow(int index)
+{
+    list_->setCurrentRow(index);
+    if (index < 0 || index >= liveRows_) {
+        return;
+    }
+    if (index == 0) {
+        setRgbVisibility(0x7);
+    } else {
+        const int bit = 1 << (index - 1);
+        if (mask_ == 0x7 || !(mask_ & bit)) {
+            setRgbVisibility(bit);
+        }
+    }
+    styleRows();
 }
 
 void ChannelsPanel::toggleAlpha(int alpha)
@@ -540,7 +572,10 @@ void ChannelsPanel::styleRows()
         if (!widget) {
             continue;
         }
-        widget->setSurface(Theme::contrastShade(base, i == current ? 3 : 1));
+        const bool selected = i == current
+            || (mode_ == QLatin1String("rgb") && current == 0 && i > 0 && i < liveRows_);
+        widget->setSurface(Theme::contrastShade(base, selected ? 3 : 1));
+        widget->setGutter(Theme::contrastShade(base, selected ? 3 : 2));
     }
 }
 
@@ -638,7 +673,11 @@ bool ChannelsPanel::eventFilter(QObject* watched, QEvent* event)
             dragRow_ = rowAt(pos);
             dragStart_ = pos;
             if (mouse->button() == Qt::LeftButton && dragRow_ >= 0) {
-                list_->setCurrentRow(dragRow_);
+                if (mouse->modifiers() & Qt::ControlModifier) {
+                    list_->setCurrentRow(dragRow_);
+                } else {
+                    selectRow(dragRow_);
+                }
             }
             if (mouse->button() == Qt::LeftButton && (mouse->modifiers() & Qt::ControlModifier)) {
                 loadRowSelection(dragRow_, mouse->modifiers());

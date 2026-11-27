@@ -17,6 +17,7 @@
 #include "adjustment_catalogue.h"
 #include "adjustment_dialog.h"
 #include "panels/properties_panel.h"
+#include "panels/channels_panel.h"
 #include "api/document_api.h"
 #include "fill_layer_editor.h"
 #include "hdr_toning_dialog.h"
@@ -35,6 +36,21 @@ void MenuRegistrar::wireImageAdjustments()
         PictureView* view = activeView();
         return view && filter_target_ready(*view) && !filter_target_smart(*view);
     };
+    const auto compositeRgb = [this]() {
+        PictureView* view = activeView();
+        if (!view || document_api::documentMode(*view) != QLatin1String("rgb")) {
+            return true;
+        }
+        const ChannelsPanel* panel = panels_ ? panels_->channelsPanel() : nullptr;
+        return !panel || (panel->currentRow() == 0 && panel->channelMask() == 0x7);
+    };
+    const QStringList compositeOnly{
+        QStringLiteral("Exposure"), QStringLiteral("Vibrance"),
+        QStringLiteral("Hue/Saturation"), QStringLiteral("Color Balance"),
+        QStringLiteral("Black & White"), QStringLiteral("Photo Filter"),
+        QStringLiteral("Channel Mixer"), QStringLiteral("Color Lookup"),
+        QStringLiteral("Gradient Map"), QStringLiteral("Selective Color"),
+        QStringLiteral("Desaturate")};
     for (const AdjustmentKind& entry : adjustmentCatalogue()) {
         if (entry.image.isEmpty()) {
             continue;
@@ -47,7 +63,11 @@ void MenuRegistrar::wireImageAdjustments()
                                : commandIdForPath({QStringLiteral("Image"),
                                                    QStringLiteral("Adjustments"), entry.title});
         commands_->setImplemented(id, true);
-        commands_->setEnabledProvider(id, ready);
+        const bool needsComposite = entry.image != QLatin1String("root")
+                                    && compositeOnly.contains(entry.title);
+        commands_->setEnabledProvider(id, [ready, compositeRgb, needsComposite]() {
+            return ready() && (!needsComposite || compositeRgb());
+        });
         if (entry.image != QLatin1String("dialog")) {
             commands_->setHandler(id, [this, kind]() {
                 PictureView* view = activeView();
@@ -166,10 +186,11 @@ void MenuRegistrar::wireImageAdjustments()
                 refresh();
             }
         });
-        commands_->setEnabledProvider(id, [this]() {
+        commands_->setEnabledProvider(id, [this, compositeRgb]() {
             PictureView* view = activeView();
             return view && filter_target_ready(*view) && !filter_target_smart(*view)
-                && document_api::documentMode(*view) == QStringLiteral("rgb");
+                && document_api::documentMode(*view) == QStringLiteral("rgb")
+                && compositeRgb();
         });
     }
 }

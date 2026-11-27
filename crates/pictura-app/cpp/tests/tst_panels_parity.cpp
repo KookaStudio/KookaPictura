@@ -548,7 +548,13 @@ void PanelsParityTest::channelRowsUseLayerSurfaces()
 
     const QColor base = panel->palette().color(QPalette::Window);
     QCOMPARE(panel->rowSurfaceForTest(0).rgba(), pictura::Theme::shade(base, 3).rgba());
-    QCOMPARE(panel->rowSurfaceForTest(1).rgba(), pictura::Theme::shade(base, 1).rgba());
+    QCOMPARE(panel->rowSurfaceForTest(1).rgba(), pictura::Theme::shade(base, 3).rgba());
+
+    auto* list = panel->findChild<QListView*>(QStringLiteral("channelList"));
+    QVERIFY(list);
+    list->setCurrentIndex(list->model()->index(1, 0));
+    QCOMPARE(panel->rowSurfaceForTest(1).rgba(), pictura::Theme::shade(base, 3).rgba());
+    QCOMPARE(panel->rowSurfaceForTest(0).rgba(), pictura::Theme::shade(base, 1).rgba());
 }
 
 void PanelsParityTest::channelRowsFollowLightFamily()
@@ -566,8 +572,14 @@ void PanelsParityTest::channelRowsFollowLightFamily()
     QVERIFY2(base.lightness() > 180, "the panel carries the light window");
 
     QCOMPARE(panel->rowSurfaceForTest(0).rgba(), pictura::Theme::contrastShade(base, 3).rgba());
-    QCOMPARE(panel->rowSurfaceForTest(1).rgba(), pictura::Theme::contrastShade(base, 1).rgba());
-    QVERIFY2(panel->rowSurfaceForTest(0).lightness() < panel->rowSurfaceForTest(1).lightness(),
+    QCOMPARE(panel->rowSurfaceForTest(1).rgba(), pictura::Theme::contrastShade(base, 3).rgba());
+
+    auto* list = panel->findChild<QListView*>(QStringLiteral("channelList"));
+    QVERIFY(list);
+    list->setCurrentIndex(list->model()->index(1, 0));
+    QCOMPARE(panel->rowSurfaceForTest(1).rgba(), pictura::Theme::contrastShade(base, 3).rgba());
+    QCOMPARE(panel->rowSurfaceForTest(0).rgba(), pictura::Theme::contrastShade(base, 1).rgba());
+    QVERIFY2(panel->rowSurfaceForTest(1).lightness() < panel->rowSurfaceForTest(0).lightness(),
              "the selected channel row steps darker than the rest");
     QVERIFY2(panel->rowTextColorForTest(0).lightness() < 96
                  && panel->rowTextColorForTest(1).lightness() < 96,
