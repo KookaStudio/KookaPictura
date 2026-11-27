@@ -13,4 +13,4 @@
 
 ## 3. Deferred verification
 
-- [ ] 3.1 Run the planned Qt tests and repository verification gates when execution is authorized.
+- [x] 3.1 Run the planned Qt tests and scoped repository gates. Mac Docker verified source `7173211dae9a0d4449fafe550b9bab5c8b0a40bd`; the two Qt suites passed in 4.02 seconds and the packaged headless self-test reported 466 passed, 0 failed, and 1 skipped.
