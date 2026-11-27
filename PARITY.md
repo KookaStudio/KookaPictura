@@ -121,7 +121,7 @@ Source list: named Layer-menu and Layers-panel capabilities.
 | P-LAY-07 | Blend modes and Pass Through | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | members:27/27 | — |
 | P-LAY-08 | Layer styles | Y | Y | Y | Partial | in-scope | crates/pictura-render/src | none | members:10/10; Bevel Contour and gradient editor ship, Bevel Texture remains | #606 |
 | P-LAY-09 | Advanced Blending engine | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
-| P-LAY-10 | Advanced Blending dialog controls | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/layer_style_pages.cpp | none | Blend If tracked separately | #695 |
+| P-LAY-10 | Advanced Blending dialog controls | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/layer_style_pages.cpp | automated:tst_layer_style::advancedBlendingFlags | Blend If tracked separately | #695 |
 | P-LAY-11 | Adjustment layers | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-LAY-12 | Fill layers | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-LAY-13 | Shape layers | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
