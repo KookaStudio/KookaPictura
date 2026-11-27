@@ -210,7 +210,7 @@ pub(super) fn moving_layer_image(
 
 /// [`moving_layer_image`]'s straight sRGB pixels, which a lazy Move commit
 /// also paints into the stale display tiles.
-pub(super) fn moving_layer_pixels(
+pub(in crate::cxxqt_object) fn moving_layer_pixels(
     doc: &pictura_core::Document,
     path: &str,
     region: PsdRect,

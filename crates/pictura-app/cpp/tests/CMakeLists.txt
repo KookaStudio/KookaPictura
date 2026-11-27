@@ -172,6 +172,7 @@ set(PICTURA_QT_TEST_DRIVER_paint
     tst_brush_outline
 )
 set(PICTURA_QT_TEST_DRIVER_transform
+    tst_content_aware_scale
     tst_transform_api
     tst_transform_options
     tst_transform_controls

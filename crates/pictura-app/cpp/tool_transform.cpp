@@ -6,6 +6,10 @@
 #include "memory_refusal.h"
 #include "transform_commit.h"
 
+#include <QtCore/QCoreApplication>
+#include <QtCore/QPointer>
+#include <QtCore/QTimer>
+
 #include "api/layers_api.h"
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
@@ -86,7 +90,7 @@ bool ToolController::transformSelectionTarget() const
 bool ToolController::setTransformMode(const QString& mode)
 {
     PictureView* v = view();
-    if (!v || !transform_set_mode(*v, mode)) {
+    if (!v || content_aware_active(*v) || !transform_set_mode(*v, mode)) {
         return false;
     }
     updateTransformOverlay(v);
@@ -127,6 +131,10 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
     if (!v) {
         return false;
     }
+    const bool contentAware = mode == QStringLiteral("content-aware");
+    if (contentAware && v->transform_session_active()) {
+        return false;
+    }
     if (transformControlsSession() && !controls) {
         // A user command takes the Move tool's controls box over as a modal
         // session (the same path would otherwise be a begin no-op).
@@ -135,8 +143,8 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
             v->cancel_transform();
         }
     }
-    const bool ok = mode.isEmpty() ? v->begin_free_transform(path)
-                                   : v->begin_transform_mode(path, mode);
+    const bool ok = contentAware ? content_aware_begin(*v, path)
+        : mode.isEmpty() ? v->begin_free_transform(path) : v->begin_transform_mode(path, mode);
     if (!ok) {
         if (!v->transform_session_active()) {
             resetTransformUi();
@@ -168,6 +176,29 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
             canvas_->setFocus();
         }
     }
+    if (contentAware) {
+        auto* timer = new QTimer(this);
+        const QPointer<PictureView> target(v);
+        timer->setInterval(25);
+        connect(timer, &QTimer::timeout, this, [this, target, timer]() {
+            if (target && target != view() && content_aware_active(*target)) {
+                target->cancel_transform();
+            }
+            if (!target || target != view() || !content_aware_active(*target)) {
+                timer->stop();
+                timer->deleteLater();
+                return;
+            }
+            if (content_aware_poll(*target)) {
+                updateTransformOverlay(target);
+                emit transformChanged();
+                if (!content_aware_ready(*target) && !content_aware_pending(*target)) {
+                    refused(QCoreApplication::translate("PicturaUi", "Content-Aware Scale preview could not be computed."));
+                }
+            }
+        });
+        timer->start();
+    }
     emit transformChanged();
     return true;
 }
@@ -193,6 +224,15 @@ void ToolController::updateTransformOverlay(PictureView* v)
         return;
     }
     canvas_->setTransformQuad(transform_api::quad(*v).corners);
+    if (content_aware_active(*v)) {
+        content_aware_request(*v);
+        canvas_->setTransformPivot(QPointF(transform_pivot_x(*v), transform_pivot_y(*v)),
+                                   transform_show_pivot(*v));
+        canvas_->updateTransformPreviewLayer(v->move_preview_layer(),
+                                              QPointF(v->move_preview_x(), v->move_preview_y()));
+        canvas_->setTransformPreview(1.0, 1.0, 0.0, 0.0, 0.0);
+        return;
+    }
     const bool warping = transform_warp_active(*v);
     const bool warpStored = transform_warp_stored(*v);
     // Warp mode has no reference point: the grid replaces the box.
@@ -245,7 +285,7 @@ bool ToolController::resolvePendingTransform()
     switch (transformPrompt_ ? transformPrompt_() : TransformDecision::DontApply) {
     case TransformDecision::Apply:
         commitFreeTransform();
-        return true;
+        return !transformPending();
     case TransformDecision::DontApply:
         cancelFreeTransform();
         return true;
@@ -375,6 +415,17 @@ void ToolController::commitFreeTransform()
 {
     PictureView* v = view();
     if (!v || !v->transform_session_active()) {
+        return;
+    }
+    if (content_aware_active(*v)) {
+        content_aware_request(*v);
+        if (!content_aware_ready(*v)) {
+            return;
+        }
+        const bool committed = content_aware_commit(*v);
+        if (committed) {
+            resetTransformUi(true);
+        }
         return;
     }
     transform_set_controls(*v, false);
@@ -592,7 +643,7 @@ bool ToolController::setTransformHeight(double pct, bool link)
 bool ToolController::setTransformAngle(double degrees)
 {
     PictureView* v = view();
-    if (!v || !transform_set_angle(*v, degrees)) {
+    if (!v || content_aware_active(*v) || !transform_set_angle(*v, degrees)) {
         return false;
     }
     updateTransformOverlay(v);
@@ -603,7 +654,7 @@ bool ToolController::setTransformAngle(double degrees)
 bool ToolController::setTransformSkew(double hDegrees, double vDegrees)
 {
     PictureView* v = view();
-    if (!v || !transform_set_skew(*v, hDegrees, vDegrees)) {
+    if (!v || content_aware_active(*v) || !transform_set_skew(*v, hDegrees, vDegrees)) {
         return false;
     }
     updateTransformOverlay(v);
@@ -632,7 +683,7 @@ bool ToolController::beginWarp(const QString& path)
 bool ToolController::enterTransformWarp()
 {
     PictureView* v = view();
-    if (!v || !transform_enter_warp(*v)) {
+    if (!v || content_aware_active(*v) || !transform_enter_warp(*v)) {
         return false;
     }
     updateTransformOverlay(v);

@@ -26,6 +26,22 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        fn content_aware_active(view: &PictureView) -> bool;
+        fn content_aware_can_begin(view: &PictureView, path: &QString) -> bool;
+        fn content_aware_begin(view: Pin<&mut PictureView>, path: &QString) -> bool;
+        fn content_aware_request(view: Pin<&mut PictureView>);
+        fn content_aware_poll(view: Pin<&mut PictureView>) -> bool;
+        fn content_aware_ready(view: &PictureView) -> bool;
+        fn content_aware_pending(view: &PictureView) -> bool;
+        fn content_aware_amount(view: &PictureView) -> i32;
+        fn content_aware_protect(view: &PictureView) -> i32;
+        fn content_aware_set_options(view: Pin<&mut PictureView>, amount: i32, protect: i32);
+        fn content_aware_commit(view: Pin<&mut PictureView>) -> bool;
+        fn content_aware_test_hold(view: &PictureView, hold: bool);
+        fn content_aware_test_release(view: &PictureView, id: u64);
+        fn content_aware_test_started(view: &PictureView, id: u64) -> bool;
+        fn content_aware_test_finished(view: &PictureView, id: u64) -> bool;
+        fn content_aware_test_generation(view: &PictureView) -> u64;
         /// The active session's mode name ("free", "skew", "distort",
         /// "perspective"), or empty without a session.
         fn transform_session_mode(view: &PictureView) -> QString;

@@ -315,3 +315,49 @@ fn a_working_set_beyond_ram_is_a_memory_refusal() {
     assert!(memory_gate::edit_refused_for_memory());
     assert!(!memory_gate::edit_refused_for_scratch_full());
 }
+
+#[test]
+fn content_aware_cancel_restores_hidden_border_samples() {
+    let rect = PsdRect { left: 0, top: 0, right: 3, bottom: 1 };
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
+        name: "hidden".into(), rect,
+        channels: vec![
+            Channel { id: 0, data: vec![197, 100, 211].into() },
+            Channel { id: 1, data: vec![20, 100, 30].into() },
+            Channel { id: 2, data: vec![40, 100, 50].into() },
+            Channel { id: -1, data: vec![0, 255, 0].into() },
+        ],
+        ..Default::default()
+    });
+    let mut doc = Document::new(3, 1, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let original = doc.clone();
+    let mut rust = PictureViewRust::default();
+    rust.session.doc.set(Some(doc));
+    let target = crate::layer_target::LayerTarget::only("0");
+    assert!(rust.session.record(&target, "Open"));
+    let mut session = rust.prepare_transform_kind("0", TransformMode::Scale, true).unwrap();
+    assert_ne!(rust.session.doc.as_ref().unwrap(), &original);
+    session.content_aware = Some(super::super::content_aware::ContentAwareState::new(
+        rust.session.doc.as_ref().unwrap().clone(), original.clone()));
+    rust.restore_transform_begin(session);
+    assert_eq!(rust.session.doc.as_ref().unwrap(), &original);
+
+    let session = rust.prepare_transform_kind("0", TransformMode::Scale, true).unwrap();
+    let source = rust.session.doc.as_mut().unwrap();
+    let dest = PsdRect { left: 1, top: 0, right: 3, bottom: 1 };
+    assert!(pictura_render::content_aware_scale(
+        source, &session.path, dest,
+        pictura_render::ContentAwareOptions { amount: 100, protect: None },
+        &std::sync::atomic::AtomicBool::new(false),
+    ));
+    let committed = source.clone();
+    assert!(rust.session.record(&target, "Content-Aware Scale"));
+    let undone = rust.session.history.undo().expect("undo");
+    assert_eq!(undone.doc, original);
+    let channels = undone.doc.layers[0].channels();
+    let red = &channels.iter().find(|c| c.id == 0).unwrap().data;
+    assert_eq!(red.iter().copied().collect::<Vec<_>>(), vec![197, 100, 211]);
+    let redone = rust.session.history.redo().expect("redo");
+    assert_eq!(redone.doc, committed);
+}

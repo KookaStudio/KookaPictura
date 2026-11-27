@@ -446,6 +446,9 @@ impl qobject::PictureView {
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
         record: bool,
     ) -> Edit {
+        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) {
+            return Edit::None;
+        }
         self.as_mut().settle_pending_composite();
         if self.rust().pending_vector_place.is_some() {
             self.as_mut().cancel_transform();

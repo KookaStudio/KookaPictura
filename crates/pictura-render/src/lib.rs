@@ -220,6 +220,7 @@ pub mod metrics;
 pub use gpu_filter::{apply_filter_active, filter_gpu_available};
 
 pub mod document_ops;
+pub use document_ops::{content_aware_scale, ContentAwareOptions};
 pub use document_ops::{
     add_gradient_fill, add_group, add_group_full, add_group_in, add_layer, add_layer_full,
     add_layer_in, add_layer_mask, add_layer_mask_converting_background, add_raster_layer_from_rgba,

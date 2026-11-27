@@ -599,7 +599,8 @@ impl PictureViewRust {
     /// controls gesture does not lock while it is in progress (`transform_controls`
     /// is true); once it is promoted to pending it locks like a modal transform.
     pub(in crate::cxxqt_object) fn modal_transform_blocks_edit(&self) -> bool {
-        self.lifted_transform_is_live() && !self.transform_controls
+        (self.lifted_transform_is_live() || self.session.live.transform().is_some_and(|s| s.content_aware.is_some()))
+            && !self.transform_controls
     }
 
     /// Fill and Stroke refuse any pending transform, lifted or not, matching

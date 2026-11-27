@@ -8,6 +8,7 @@
 // gesture; a released changed gesture becomes pending and locks like the rest.
 
 #include "frame_includes.h"
+#include "api/transform_bridge.h"
 #include "panels/layers_panel.h"
 
 namespace pictura {
@@ -65,6 +66,12 @@ void PicturaMainWindow::installTransformLock()
         }
         if (locksDocumentEdit(spec)) {
             return true;
+        }
+        if (PictureView* view = activeView(); view && content_aware_active(*view)) {
+            if ((!spec.path.isEmpty() && spec.path.first() == QLatin1String("Select"))
+                || spec.id == QLatin1String("edit.undo") || spec.id == QLatin1String("edit.redo")) {
+                return true;
+            }
         }
         // A pending selection-border transform owns the mask: nothing in the
         // Select menu may rewrite it under the session.

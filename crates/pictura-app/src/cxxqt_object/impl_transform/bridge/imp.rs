@@ -1,4 +1,9 @@
 use super::*;
+pub(super) use super::super::content_aware::{content_aware_active, content_aware_can_begin,
+    content_aware_begin, content_aware_request, content_aware_poll, content_aware_ready, content_aware_pending,
+    content_aware_amount, content_aware_protect, content_aware_set_options, content_aware_commit,
+    content_aware_test_hold, content_aware_test_release, content_aware_test_started,
+    content_aware_test_finished, content_aware_test_generation};
 
 use super::super::super::document_session::{TransformMode, TransformSession, TransformTarget};
 use super::super::super::helpers::memory_gate;
@@ -364,6 +369,7 @@ pub(super) fn set_scale_axis(
         let Some(session) = rust.session.live.transform_mut() else {
             return false;
         };
+        if session.content_aware.is_some() && pct <= 0.0 { return false; }
         if session.mode.is_projective() {
             // W/H are readouts in a projective mode; angle/H/V edit the quad.
             return false;
@@ -400,6 +406,7 @@ pub(super) fn transform_set_angle(mut view: Pin<&mut PictureView>, degrees: f64)
         let Some(session) = rust.session.live.transform_mut() else {
             return false;
         };
+        if session.content_aware.is_some() { return false; }
         if session.mode.is_projective() {
             let delta = degrees.to_radians() - derived_readouts(session).2.to_radians();
             let quad = session_quad(session);
@@ -432,6 +439,7 @@ pub(super) fn transform_set_skew(
         let Some(session) = rust.session.live.transform_mut() else {
             return false;
         };
+        if session.content_aware.is_some() { return false; }
         if session.mode.is_projective() {
             let (_, _, _, h, v) = derived_readouts(session);
             let quad = session_quad(session);
@@ -458,6 +466,7 @@ pub(super) fn transform_set_skew(
 }
 
 pub(super) fn transform_set_interpolation(mut view: Pin<&mut PictureView>, id: &QString) -> bool {
+    if content_aware_active(view.as_ref().get_ref()) { return false; }
     let Some(interpolation) = Interpolation::from_id(&id.to_string()) else {
         return false;
     };
@@ -725,6 +734,7 @@ impl TransformOp {
 }
 
 pub(super) fn transform_apply(mut view: Pin<&mut PictureView>, op: &QString) -> bool {
+    if content_aware_active(view.as_ref().get_ref()) { return false; }
     let Some(op) = TransformOp::parse(&op.to_string()) else {
         return false;
     };
