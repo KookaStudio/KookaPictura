@@ -40,6 +40,7 @@ mod filter_effects;
 mod ghostscript;
 mod global_light;
 mod guide_resources;
+pub mod hdr_preview;
 mod icc;
 mod icc_convert;
 pub mod illustrator;

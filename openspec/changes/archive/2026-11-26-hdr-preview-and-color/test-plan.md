@@ -1,0 +1,13 @@
+# Test plan
+
+| Scenario | Steps | Expected result | Coverage |
+| --- | --- | --- | --- |
+| [preview-options] | Preview a layered HDR fixture with above-white RGB and partial alpha using both methods, then cancel. | The mapped composite reflects the unclipped native sample; native samples remain identical and cancel restores opening options. | tst_hdr_preview::optionsPreviewAndCancel |
+| [preview-persistence] | Accept nondefault options, set a view offset, and reopen as PSD and PSB. | Accepted options return without the view offset and native scene samples remain intact. | tst_hdr_preview::optionsSurviveFileRoundTrip, tst_hdr_preview::mergedSourceAndLayerEdit |
+| [tiff-metadata] | Write and read the Pictura preview resource in TIFF alongside unrelated resources. | The settings and unrelated resources survive; no HDR pixel round-trip claim is made. | pictura_codec::tiff_preview_resource_round_trip |
+| [adobe-compatibility] | Once the encoding is established, exchange preview settings with Photoshop in both directions for PSD, PSB and TIFF. | Each application applies the other's settings; until then interoperability remains open. | manual: requires Photoshop and a lawfully established encoding, neither available as an automated oracle |
+| [view-offset] | Switch to the HDR footer readout, move the slider, and double-click it. | Only the current view changes and double-click resets. | tst_hdr_preview::statusExposureResets, tst_hdr_preview::secondWindowHasIndependentExposure |
+| [hdr-picker] | Set foreground and background RGB above white through both picker entry points, reopen, then reject an edit. | Float fields retain the accepted values through Cancel. | tst_hdr_preview::pickerRetainsSceneColor |
+| [color-state] | Choose distinct HDR foreground/background values; swap, reset, sample with the eyedropper, and change a color through an 8-bit control. Reopen after each operation. | Swap preserves both float values in their new positions; reset and 8-bit changes replace the corresponding float values without reviving stale colors. | tst_hdr_preview::colorMutationsStayInSync, tst_hdr_preview::maskTransitionsPreserveSceneColor |
+| [lossy-swatch] | Add an unrepresentable HDR color to Swatches, first cancel the warning and then confirm it. | Cancel adds nothing; confirmation adds the disclosed converted color. | tst_hdr_preview::lossySwatchRequiresConfirmation |
+| [float-info] | Read a partially transparent layered HDR composite with a channel above white before and after adjusting exposure. | The expected unclipped float composite remains consistent. | tst_hdr_preview::infoReadsNativeSamples, tst_hdr_preview::mergedSourceAndLayerEdit |

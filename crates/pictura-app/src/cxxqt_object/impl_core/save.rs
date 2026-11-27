@@ -138,7 +138,7 @@ impl qobject::PictureView {
             rust.save_embed_profile
                 .unwrap_or_else(|| super::super::color_management::save_embed_default(rust, native))
         };
-        let dirty = self.rust().session.dirty;
+        let dirty = self.rust().session.dirty && !self.rust().hdr_merged_current;
         let gpu_compute = self.rust().gpu_compute;
         let options = self.rust().save_raster_options.unwrap_or_default();
         let keeps_working = format == "JPG";
@@ -256,7 +256,7 @@ impl qobject::PictureView {
         } else {
             false
         };
-        let dirty = self.rust().session.dirty;
+        let dirty = self.rust().session.dirty && !self.rust().hdr_merged_current;
         let mut rust = self.as_mut().rust_mut();
         let Some(doc_ref) = rust.session.doc.as_ref() else {
             return false;
@@ -466,7 +466,7 @@ pub(in crate::cxxqt_object) fn save_composite(
 /// sRGB composite is quantized with the remembered palette settings.
 pub(in crate::cxxqt_object) fn write_gif(rust: &mut PictureViewRust, path: &str) -> bool {
     let gpu_compute = rust.gpu_compute;
-    let dirty = rust.session.dirty;
+    let dirty = rust.session.dirty && !rust.hdr_merged_current;
     let options = rust.save_gif_options.unwrap_or_default();
     let unreadable_before = pictura_core::memory::eviction::unreadable_reads();
     let bytes = {

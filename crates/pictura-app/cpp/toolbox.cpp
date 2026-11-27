@@ -254,9 +254,7 @@ QRect ForegroundBackgroundWidget::swapRect() const
 void ForegroundBackgroundWidget::swapForegroundBackground()
 {
     if (state_) {
-        const QColor fg = state_->foreground();
-        state_->setForeground(state_->background());
-        state_->setBackground(fg);
+        state_->swapColors();
     }
     ++swapCount_;
     update();
@@ -341,19 +339,9 @@ void ForegroundBackgroundWidget::mousePressEvent(QMouseEvent* event)
         return;
     }
     if (foregroundRect().contains(pos)) {
-        state_->setForegroundActive(true);
-        const QColor picked = ColorPickerDialog::getColor(state_->foreground(), this,
-                                                          tr("Foreground Color"));
-        if (picked.isValid()) {
-            state_->setForeground(picked);
-        }
+        state_->openColorPicker(true, this, tr("Foreground Color"));
     } else if (backgroundRect().contains(pos)) {
-        state_->setForegroundActive(false);
-        const QColor picked = ColorPickerDialog::getColor(state_->background(), this,
-                                                          tr("Background Color"));
-        if (picked.isValid()) {
-            state_->setBackground(picked);
-        }
+        state_->openColorPicker(false, this, tr("Background Color"));
     } else {
         event->ignore();
         return;

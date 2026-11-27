@@ -246,6 +246,7 @@ set(PICTURA_QT_TEST_DRIVER_ui
     tst_shared_widgets
     tst_value_input_enter
     tst_info_panel
+    tst_hdr_preview
     tst_histogram_panel
     tst_swatches_panel
     tst_preset_manager

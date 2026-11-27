@@ -91,7 +91,9 @@ pub use pyramid_level::{PyramidLevel, SMALLEST_SIDE, TILE};
 pub use view_pyramid::{Planes, ViewPyramid};
 
 mod composite_native;
+mod hdr_scene;
 pub use composite_native::{refresh_native_composite, restore_native_composite};
+pub use hdr_scene::{hdr_scene_region, supports_hdr_scene};
 pub use pictura_adjust::render_pictura_raw_rgb16;
 pub use pictura_adjust::{
     match_color_stats, replace_color_mask, replace_color_result, replace_color_shift_for,

@@ -17,18 +17,20 @@ ColorState::ColorState(QObject* parent)
 
 void ColorState::setForeground(const QColor& color)
 {
-    if (!color.isValid() || color == foreground_) {
+    if (!color.isValid() || (color == foreground_ && !hdrForeground_)) {
         return;
     }
+    hdrForeground_.reset();
     foreground_ = color;
     emit foregroundChanged(foreground_);
 }
 
 void ColorState::setBackground(const QColor& color)
 {
-    if (!color.isValid() || color == background_) {
+    if (!color.isValid() || (color == background_ && !hdrBackground_)) {
         return;
     }
+    hdrBackground_.reset();
     background_ = color;
     emit backgroundChanged(background_);
 }
@@ -90,23 +92,13 @@ ColorPanel::ColorPanel(ColorState* state, QWidget* parent)
 
     connect(fgSwatch_, &QPushButton::clicked, this, [this] {
         if (state_) {
-            state_->setForegroundActive(true);
-        }
-        const QColor start = state_ ? state_->foreground() : QColor(Qt::black);
-        const QColor picked = ColorPickerDialog::getColor(start, this, tr("Foreground Color"));
-        if (state_ && picked.isValid()) {
-            state_->setForeground(picked);
+            state_->openColorPicker(true, this, tr("Foreground Color"));
         }
         syncControls();
     });
     connect(bgSwatch_, &QPushButton::clicked, this, [this] {
         if (state_) {
-            state_->setForegroundActive(false);
-        }
-        const QColor start = state_ ? state_->background() : QColor(Qt::white);
-        const QColor picked = ColorPickerDialog::getColor(start, this, tr("Background Color"));
-        if (state_ && picked.isValid()) {
-            state_->setBackground(picked);
+            state_->openColorPicker(false, this, tr("Background Color"));
         }
         syncControls();
     });

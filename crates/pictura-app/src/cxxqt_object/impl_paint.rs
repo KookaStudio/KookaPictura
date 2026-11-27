@@ -459,7 +459,11 @@ fn layer_backend(
     // raster budget. Below it the exact CPU raster is a few hundred
     // microseconds, while seeding the GPU costs a full-frame upload (~65 ms at
     // 4000²), so a small brush stays on the CPU path.
-    let level = preview_level(cfg.diameter as i32, doc.width, doc.height);
+    let level = if pictura_render::supports_hdr_scene(doc) {
+        None
+    } else {
+        preview_level(cfg.diameter as i32, doc.width, doc.height)
+    };
     // The GPU dab shader has no paper grain, wet-edge curve, or per-sample
     // pressure; such a stroke stays on the CPU oracle (or its preview) so the
     // committed pixels match.

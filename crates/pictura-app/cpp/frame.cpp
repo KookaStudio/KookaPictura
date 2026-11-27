@@ -233,10 +233,10 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck,
         if (tools_) {
             tools_->setMaskActive(mask);
         }
-        const QColor foreground = state->foreground();
-        const QColor background = state->background();
-        state->setForeground(otherForeground_);
-        state->setBackground(otherBackground_);
+        const auto foreground = state->sceneColor(true);
+        const auto background = state->sceneColor(false);
+        state->setSceneColor(true, otherForeground_);
+        state->setSceneColor(false, otherBackground_);
         otherForeground_ = foreground;
         otherBackground_ = background;
     });
@@ -1018,6 +1018,7 @@ void PicturaMainWindow::updateStatus()
         sizeLabel_->setVisible(showReadouts);
         sizeLabel_->setText(statusReadoutText(statusReadout_, activeView(), efficiency_));
     }
+    updateHdrStatus(showReadouts);
     if (backendLabel_) {
         backendLabel_->setVisible(showReadouts);
         PictureView* view = activeView();

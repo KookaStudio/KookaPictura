@@ -14,6 +14,8 @@ class QShowEvent;
 class QSplitter;
 class QStackedWidget;
 class QStatusBar;
+class QSlider;
+class QActionGroup;
 class QTabWidget;
 class QTemporaryDir;
 class QTimer;

@@ -1,6 +1,7 @@
 #pragma once
 #include <QtCore/QPointer>
 #include <QtGui/QColor>
+#include <array>
 namespace pictura {
 class PictureView;
 struct QuickMaskUiState {
@@ -12,6 +13,6 @@ struct QuickMaskUiState {
     QPointer<PictureView> colorView;
     bool colorsActive = false;
     bool returnMask = false;
-    QColor returnForeground, returnBackground;
+    std::array<double, 3> returnForeground{}, returnBackground{};
 };
 } // namespace pictura

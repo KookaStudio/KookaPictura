@@ -33,6 +33,7 @@ described in detail below.
 | 100% | `Ctrl+1` | Shows the picture at 100%. |  |
 | 200% | `—` | Shows the picture at 200%. |  |
 | Print Size | `—` | Shows the picture at its print size. |  |
+| 32-Bit Preview Options… | `—` | Adjusts how a 32-bit RGB or grayscale document is displayed using Exposure and Gamma or Highlight Compression. The scene values stay intact. |  |
 | Free Pan | `—` | Turns the current tool into a pan while held. |  |
 | Snap Canvas To Workspace | `—` | Snaps the canvas to the workspace edge. |  |
 | Rulers | `Ctrl+R` | Shows or hides the rulers. |  |
@@ -173,6 +174,7 @@ view.fitOnScreen
 view.actualPixels
 view.200
 view.print.size
+view.hdr.preview
 view.freePan
 view.snapCanvasToWorkspace
 view.screenMode.standard

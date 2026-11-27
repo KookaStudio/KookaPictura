@@ -190,6 +190,10 @@ free	gpu_probe	gpu_probe	api/engine_bridge.h	pictura_app/src/app_runtime_bridge.
 free	gpu_probe_child	gpu_probe_child	api/engine_bridge.h	pictura_app/src/app_runtime_bridge.cxxqt.h
 free	gpu_set_backend	gpu_set_backend	api/engine_bridge.h	pictura_app/src/app_runtime_bridge.cxxqt.h
 free	gpu_set_safe_mode	gpu_set_safe_mode	api/engine_bridge.h	pictura_app/src/app_runtime_bridge.cxxqt.h
+free	hdr_canvas_image	hdr_canvas_image	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
+free	hdr_preview_options	hdr_preview_options	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
+free	hdr_scene_pixel	hdr_scene_pixel	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
+free	hdr_swatch_argb	hdr_swatch_argb	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
 free	history_log_close	history_log_close	api/engine_bridge.h	pictura_app/src/app_runtime_bridge.cxxqt.h
 free	history_log_configure	history_log_configure	api/engine_bridge.h	pictura_app/src/app_runtime_bridge.cxxqt.h
 free	history_log_document	history_log_document	api/engine_bridge.h	pictura_app/src/app_runtime_bridge.cxxqt.h
@@ -252,6 +256,7 @@ free	save_format_flags	save_format_flags	api/engine_bridge.h	pictura_app/src/cxx
 free	save_format_id_for_source_name	save_format_id_for_source_name	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
 free	save_format_id_for_suffix	save_format_id_for_suffix	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
 free	set_color_settings	set_color_settings	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
+free	set_hdr_preview_options	set_hdr_preview_options	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
 free	set_open_policy_override	set_open_policy_override	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
 free	set_picker_choice	set_picker_choice	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
 free	set_save_embed_profile	set_save_embed_profile	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h

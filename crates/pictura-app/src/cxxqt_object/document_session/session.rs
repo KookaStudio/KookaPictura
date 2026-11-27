@@ -721,6 +721,8 @@ impl PictureViewRust {
         self.cancel_active_sessions_report_only();
         self.clear_document_scoped_state();
         self.session.install(doc, history, pdf_password);
+        self.hdr_merged_current = false;
+        self.hdr_merged_history_ids.clear();
         self.session.vanishing_planes = self
             .session
             .doc
