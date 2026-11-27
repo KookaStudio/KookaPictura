@@ -20,7 +20,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   Automatic, On, and Off. Automatic follows the animation hint exposed by the
   Qt style, and On overrides it. Flick requires GPU compute and sends only the
   applied pan delta to visible peers when Scroll All Windows or Shift is active.
-  The focused Qt suite and native smoke are pending.
+  See the archived test plan for automated coverage and native smoke steps.
 
 - **Olympus-compressed ORF, #1535** (OpenSpec change
   `vendor-raw-orf-compressed`; `codec/vendor-raw-containers` modified).
