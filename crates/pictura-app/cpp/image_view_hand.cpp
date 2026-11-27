@@ -269,6 +269,7 @@ bool ImageView::event(QEvent* event)
     case QEvent::FocusOut:
     case QEvent::WindowDeactivate:
         cancelHandNavigation();
+        emit pointerGestureFocusLost();
         break;
     case QEvent::UngrabMouse:
         if (birdsEye_ || birdHandPan_) {

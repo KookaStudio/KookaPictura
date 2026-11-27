@@ -892,14 +892,6 @@ void ImageView::wheelEvent(QWheelEvent* event)
     event->accept();
 }
 
-bool ImageView::event(QEvent* event)
-{
-    if (event->type() == QEvent::FocusOut || event->type() == QEvent::WindowDeactivate) {
-        emit pointerGestureFocusLost();
-    }
-    return QWidget::event(event);
-}
-
 void ImageView::mousePressEvent(QMouseEvent* event)
 {
     const FrameViewportTiming timing(*this);
