@@ -8,6 +8,6 @@ fn present_oracle_with_wrong_answer_fails() {
         .output()
         .expect("run the present oracle");
     assert!(output.status.success(), "{output:?}");
-    let diff = compare(b"right", &output.stdout, 0).expect("equal-length buffers");
+    let diff = compare(b"right\n", &output.stdout, 0).expect("equal-length buffers");
     assert!(diff.is_empty(), "oracle mismatch: {diff:?}");
 }

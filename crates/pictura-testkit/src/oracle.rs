@@ -167,6 +167,9 @@ fn test_name() -> String {
 fn binary_id() -> &'static str {
     static ID: OnceLock<String> = OnceLock::new();
     ID.get_or_init(|| {
+        if let Ok(id) = std::env::var("NEXTEST_BINARY_ID") {
+            return id;
+        }
         let package = env!("CARGO_PKG_NAME");
         let normalized = package.replace('-', "_");
         let stem = std::env::current_exe()
@@ -530,6 +533,7 @@ mod tests {
         let script = "console.log(process.pid, process.argv.slice(1).join('|'))";
         let first = Command::new("node")
             .args(["-e", script, "first", "a"])
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
             .output()
             .unwrap();
         let second = Command::new("node")

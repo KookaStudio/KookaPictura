@@ -110,10 +110,8 @@ function main() {
     if (!cwdSizeData) return 0;
     const cwdSize = cwdSizeData.readBigUInt64LE(0);
     const cwd = cwdSize === (1n << 64n) - 1n ? null : (() => {
-      const sizeData = readExactInput(8);
-      const size = Number(sizeData.readBigUInt64LE(0));
-      if (size > MAX_FIELD) throw new Error('oracle request field is too large');
-      return readExactInput(size).toString();
+      if (cwdSize > BigInt(MAX_FIELD)) throw new Error('oracle request field is too large');
+      return readExactInput(Number(cwdSize)).toString();
     })();
     const countData = readExactInput(8);
     const count = Number(countData.readBigUInt64LE(0));
