@@ -12,4 +12,4 @@
 
 ## 3. Verification
 
-- [ ] 3.1 Run the Rust and Qt suites and repository gates in the scheduled build phase.
+- [x] 3.1 Run the Rust and Qt suites and repository gates in the scheduled build phase.
