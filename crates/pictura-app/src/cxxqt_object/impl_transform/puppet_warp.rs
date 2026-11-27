@@ -9,7 +9,9 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QImage;
 use pictura_core::memory::{governor, Reservation};
-use pictura_core::{BitDepth, Channel, ColorMode, Layer, LayerKind, LockFlags, PixelBuffer, PsdRect};
+use pictura_core::{
+    BitDepth, Channel, ColorMode, Layer, LayerKind, LockFlags, PixelBuffer, PsdRect,
+};
 use pictura_ops::puppet_warp::{Mesh, Pin as MeshPin, MAX_PIXELS};
 
 #[cxx_qt::bridge]
@@ -101,7 +103,10 @@ fn target(rust: &PictureViewRust) -> Option<(Binding, &Layer)> {
     let doc = rust.session.doc.as_ref()?;
     if doc.source.depth().unwrap_or(doc.depth) != BitDepth::Eight
         || !matches!(doc.mode, ColorMode::Rgb | ColorMode::Grayscale)
-        || !matches!(doc.source.mode().unwrap_or(doc.mode), ColorMode::Rgb | ColorMode::Grayscale)
+        || !matches!(
+            doc.source.mode().unwrap_or(doc.mode),
+            ColorMode::Rgb | ColorMode::Grayscale
+        )
     {
         return None;
     }
@@ -115,7 +120,11 @@ fn target(rust: &PictureViewRust) -> Option<(Binding, &Layer)> {
     {
         return None;
     }
-    if layer.source_channels.as_ref().is_some_and(|store| store.depth != BitDepth::Eight) {
+    if layer
+        .source_channels
+        .as_ref()
+        .is_some_and(|store| store.depth != BitDepth::Eight)
+    {
         return None;
     }
     let mask_target = rust.mask_edit_target.as_deref() == Some(path);
@@ -123,7 +132,10 @@ fn target(rust: &PictureViewRust) -> Option<(Binding, &Layer)> {
         let mask = layer.mask.as_ref()?;
         if layer.raw_channels().iter().any(|channel| channel.id == -3)
             || layer.channels().iter().any(|channel| channel.id == -3)
-            || layer.source_channels.as_ref().is_some_and(|store| store.planes.iter().any(|(id, _)| *id == -3))
+            || layer
+                .source_channels
+                .as_ref()
+                .is_some_and(|store| store.planes.iter().any(|(id, _)| *id == -3))
         {
             return None;
         }
@@ -146,10 +158,18 @@ fn target(rust: &PictureViewRust) -> Option<(Binding, &Layer)> {
         if layer.raw_channels().iter().any(|c| !valid_id(c.id))
             || layer.channels().iter().any(|c| !valid_id(c.id))
             || (0..colors).any(|id| {
-                layer.channels().iter().filter(|c| c.id == id && c.data.len() == n).count() != 1
+                layer
+                    .channels()
+                    .iter()
+                    .filter(|c| c.id == id && c.data.len() == n)
+                    .count()
+                    != 1
             })
             || layer.channels().iter().filter(|c| c.id == -1).count() > 1
-            || layer.channels().iter().any(|c| c.id == -1 && c.data.len() != n)
+            || layer
+                .channels()
+                .iter()
+                .any(|c| c.id == -1 && c.data.len() != n)
         {
             return None;
         }
@@ -159,7 +179,10 @@ fn target(rust: &PictureViewRust) -> Option<(Binding, &Layer)> {
         let mask = layer.mask.as_ref()?;
         if layer.raw_channels().iter().any(|channel| channel.id == -3)
             || layer.channels().iter().any(|channel| channel.id == -3)
-            || layer.source_channels.as_ref().is_some_and(|store| store.planes.iter().any(|(id, _)| *id == -3))
+            || layer
+                .source_channels
+                .as_ref()
+                .is_some_and(|store| store.planes.iter().any(|(id, _)| *id == -3))
         {
             return None;
         }
@@ -196,13 +219,20 @@ pub fn puppet_warp_available(view: &PictureView) -> bool {
     target(view.rust()).is_some()
 }
 
-fn pad_to_rect(source: &PixelBuffer, source_rect: PsdRect, rect: PsdRect, fill: u8) -> Option<PixelBuffer> {
+fn pad_to_rect(
+    source: &PixelBuffer,
+    source_rect: PsdRect,
+    rect: PsdRect,
+    fill: u8,
+) -> Option<PixelBuffer> {
     let (width, height) = dimensions(rect)?;
     let x = usize::try_from(source_rect.left.checked_sub(rect.left)?).ok()?;
     let y = usize::try_from(source_rect.top.checked_sub(rect.top)?).ok()?;
     let source_width = source.width as usize;
     let source_height = source.height as usize;
-    if x.checked_add(source_width)? > width as usize || y.checked_add(source_height)? > height as usize {
+    if x.checked_add(source_width)? > width as usize
+        || y.checked_add(source_height)? > height as usize
+    {
         return None;
     }
     let mut padded = PixelBuffer::new(width, height, source.channels);
@@ -255,7 +285,11 @@ fn snapshot(view: &PictureView) -> Option<Snapshot> {
     let memory = governor().reserve(bytes, "Puppet Warp source").ok()?;
     let (pixels, linked_mask) = source_pixels(&binding, layer)?;
     let linked_mask_density = binding.linked_mask_default.and_then(|_| {
-        layer.mask.as_ref().filter(|mask| !mask.disabled).map(|mask| mask.density)
+        layer
+            .mask
+            .as_ref()
+            .filter(|mask| !mask.disabled)
+            .map(|mask| mask.density)
     });
     Some(Snapshot {
         owner: std::ptr::from_ref(view).addr(),
@@ -305,8 +339,18 @@ fn solved(
         return None;
     }
     let snap = session.snapshot.as_ref()?;
-    let pins = pins.chunks_exact(PIN_FIELDS).map(parse_pin).collect::<Option<Vec<_>>>()?;
-    let mesh = Mesh::solve(snap.pixels.width, snap.pixels.height, &pins, mode, density, expansion)?;
+    let pins = pins
+        .chunks_exact(PIN_FIELDS)
+        .map(parse_pin)
+        .collect::<Option<Vec<_>>>()?;
+    let mesh = Mesh::solve(
+        snap.pixels.width,
+        snap.pixels.height,
+        &pins,
+        mode,
+        density,
+        expansion,
+    )?;
     let bounds = mesh.bounds();
     let (w, h) = dimensions(bounds)?;
     let origin = [f64::from(bounds.left), f64::from(bounds.top)];
@@ -324,11 +368,18 @@ pub fn puppet_warp_configure(
     expansion: i32,
 ) -> i32 {
     session.mesh = solved(session, pins, mode, density, expansion);
-    session.mesh.as_ref().map_or(0, |mesh| if mesh.is_identity() { 1 } else { 2 })
+    session
+        .mesh
+        .as_ref()
+        .map_or(0, |mesh| if mesh.is_identity() { 1 } else { 2 })
 }
 
 pub fn puppet_warp_pin_angle(session: &PuppetWarpSession, ordinal: u32) -> f64 {
-    session.mesh.as_ref().and_then(|mesh| mesh.pin_angle(ordinal)).unwrap_or(0.0)
+    session
+        .mesh
+        .as_ref()
+        .and_then(|mesh| mesh.pin_angle(ordinal))
+        .unwrap_or(0.0)
 }
 
 pub fn puppet_warp_bounds(session: &PuppetWarpSession) -> Vec<i32> {
@@ -348,7 +399,11 @@ pub fn puppet_warp_hit(session: &PuppetWarpSession, x: f64, y: f64) -> Vec<f64> 
     let Some(snap) = session.snapshot.as_ref() else {
         return Vec::new();
     };
-    let Some([u, v]) = session.mesh.as_ref().and_then(|mesh| mesh.source_at([x, y])) else {
+    let Some([u, v]) = session
+        .mesh
+        .as_ref()
+        .and_then(|mesh| mesh.source_at([x, y]))
+    else {
         return Vec::new();
     };
     if (0.0..f64::from(snap.pixels.width)).contains(&u)
@@ -386,9 +441,11 @@ pub fn puppet_warp_render(
             return None;
         }
         let _held = governor().reserve(n * 16, "Puppet Warp preview").ok()?;
-        let mut result = mesh.raster(&snap.pixels, snap.binding.mask_default, [x, y], scale, w, h)?;
+        let mut result =
+            mesh.raster(&snap.pixels, snap.binding.mask_default, [x, y], scale, w, h)?;
         if let (Some(mask), Some(density)) = (&snap.linked_mask, snap.linked_mask_density) {
-            let warped_mask = mesh.raster(mask, snap.binding.linked_mask_default, [x, y], scale, w, h)?;
+            let warped_mask =
+                mesh.raster(mask, snap.binding.linked_mask_default, [x, y], scale, w, h)?;
             apply_preview_mask(&mut result, &warped_mask, density);
         }
         Some(buffer_to_image(&result))
@@ -428,7 +485,10 @@ fn replace(layer: &mut Layer, rect: PsdRect, pixels: PixelBuffer, mask: bool) {
             for i in 0..pixels.channels as usize {
                 let id = if i as i16 == colors { -1 } else { i as i16 };
                 let data = pixels.data.as_slice()[i * count..(i + 1) * count].to_vec();
-                parts.channels.push(Channel { id, data: data.into() });
+                parts.channels.push(Channel {
+                    id,
+                    data: data.into(),
+                });
             }
         }
     });
@@ -439,9 +499,8 @@ pub fn puppet_warp_commit(mut view: Pin<&mut PictureView>, session: &PuppetWarpS
         return false;
     };
     view.as_mut().settle_pending_composite();
-    let valid = |rust: &PictureViewRust| {
-        target(rust).is_some_and(|(binding, _)| binding == snap.binding)
-    };
+    let valid =
+        |rust: &PictureViewRust| target(rust).is_some_and(|(binding, _)| binding == snap.binding);
     if std::ptr::from_ref(&*view).addr() != snap.owner || !valid(view.rust()) {
         return false;
     }
@@ -455,23 +514,29 @@ pub fn puppet_warp_commit(mut view: Pin<&mut PictureView>, session: &PuppetWarpS
     let Some(rect) = offset(bounds, snap.binding.rect) else {
         return false;
     };
-    let Ok(_held) = governor().reserve(u64::from(w) * u64::from(h) * 16, "Puppet Warp apply") else {
+    let Ok(_held) = governor().reserve(u64::from(w) * u64::from(h) * 16, "Puppet Warp apply")
+    else {
         return false;
     };
     let origin = [f64::from(bounds.left), f64::from(bounds.top)];
-    let Some(result) = mesh.raster(&snap.pixels, snap.binding.mask_default, origin, 1.0, w, h) else {
+    let Some(result) = mesh.raster(&snap.pixels, snap.binding.mask_default, origin, 1.0, w, h)
+    else {
         return false;
     };
     let linked_result = if let Some(mask) = &snap.linked_mask {
-        let Some(result) = mesh.raster(mask, snap.binding.linked_mask_default, origin, 1.0, w, h) else {
+        let Some(result) = mesh.raster(mask, snap.binding.linked_mask_default, origin, 1.0, w, h)
+        else {
             return false;
         };
         Some(result)
     } else {
         None
     };
-    if rect == snap.binding.rect && result.data == snap.pixels.data
-        && linked_result.as_ref().zip(snap.linked_mask.as_ref())
+    if rect == snap.binding.rect
+        && result.data == snap.pixels.data
+        && linked_result
+            .as_ref()
+            .zip(snap.linked_mask.as_ref())
             .is_none_or(|(result, original)| result.data == original.data)
     {
         return true;
@@ -480,9 +545,12 @@ pub fn puppet_warp_commit(mut view: Pin<&mut PictureView>, session: &PuppetWarpS
         if !valid(rust) {
             return Edit::None;
         }
-        let Some(layer) = rust.session.doc.as_mut().and_then(|doc| {
-            pictura_render::resolve_path_mut(doc, &snap.binding.path)
-        }) else {
+        let Some(layer) = rust
+            .session
+            .doc
+            .as_mut()
+            .and_then(|doc| pictura_render::resolve_path_mut(doc, &snap.binding.path))
+        else {
             return Edit::None;
         };
         let mask = snap.binding.mask_default.is_some();
@@ -512,17 +580,42 @@ mod tests {
 
     #[test]
     fn linked_mask_union_pads_each_surface() {
-        let color_rect = PsdRect { left: 0, top: 0, right: 2, bottom: 1 };
-        let mask_rect = PsdRect { left: 1, top: 0, right: 3, bottom: 1 };
-        let union = PsdRect { left: 0, top: 0, right: 3, bottom: 1 };
+        let color_rect = PsdRect {
+            left: 0,
+            top: 0,
+            right: 2,
+            bottom: 1,
+        };
+        let mask_rect = PsdRect {
+            left: 1,
+            top: 0,
+            right: 3,
+            bottom: 1,
+        };
+        let union = PsdRect {
+            left: 0,
+            top: 0,
+            right: 3,
+            bottom: 1,
+        };
         let mut color = PixelBuffer::new(2, 1, 2);
         color.data.copy_from_slice(&[10, 20, 255, 255]);
         let mut mask = PixelBuffer::new(2, 1, 1);
         mask.data.copy_from_slice(&[30, 40]);
-        assert_eq!(pad_to_rect(&color, color_rect, union, 0).unwrap().data.as_slice(),
-                   &[10, 20, 0, 255, 255, 0]);
-        assert_eq!(pad_to_rect(&mask, mask_rect, union, 255).unwrap().data.as_slice(),
-                   &[255, 30, 40]);
+        assert_eq!(
+            pad_to_rect(&color, color_rect, union, 0)
+                .unwrap()
+                .data
+                .as_slice(),
+            &[10, 20, 0, 255, 255, 0]
+        );
+        assert_eq!(
+            pad_to_rect(&mask, mask_rect, union, 255)
+                .unwrap()
+                .data
+                .as_slice(),
+            &[255, 30, 40]
+        );
     }
 
     #[test]
@@ -541,11 +634,18 @@ mod tests {
         let mut layer = pixel_layer("px", 16, 16, (40, 120, 200));
         let rect = layer.rect;
         layer.source_channels = Some(SourceChannels::new(
-            BitDepth::Eight, rect, vec![(0, Samples::U8(vec![7; 256].into())),
-                (-2, Samples::U8(vec![17; 256].into()))],
+            BitDepth::Eight,
+            rect,
+            vec![
+                (0, Samples::U8(vec![7; 256].into())),
+                (-2, Samples::U8(vec![17; 256].into())),
+            ],
         ));
         layer.mask = Some(LayerMask {
-            rect, default_color: 255, data: Some(vec![255; 256].into()), ..Default::default()
+            rect,
+            default_color: 255,
+            data: Some(vec![255; 256].into()),
+            ..Default::default()
         });
         doc.layers = LayerStack::from_layers(vec![layer]);
         let mut rust = PictureViewRust {
