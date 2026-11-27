@@ -1,6 +1,6 @@
-use pictura_testkit::oracle;
 use pictura_codec::{read_psd, write_psb, write_psd};
 use pictura_core::{Document, PsdRect};
+use pictura_testkit::oracle;
 
 const COVERAGE: [u8; 6] = [0, 64, 255, 192, 128, 32];
 

@@ -174,7 +174,9 @@ fn binary_id() -> &'static str {
             .and_then(|path| path.file_stem().map(OsStr::to_owned))
             .and_then(|stem| stem.into_string().ok())
             .unwrap_or_else(|| normalized.clone());
-        let target = stem.rsplit_once('-').map_or(stem.as_str(), |(base, _)| base);
+        let target = stem
+            .rsplit_once('-')
+            .map_or(stem.as_str(), |(base, _)| base);
         if target == normalized {
             package.to_string()
         } else {
@@ -193,16 +195,11 @@ macro_rules! require_oracle {
     };
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum Program {
+    #[default]
     Python,
     Node,
-}
-
-impl Default for Program {
-    fn default() -> Self {
-        Self::Python
-    }
 }
 
 impl Program {
@@ -366,12 +363,14 @@ impl Worker {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()?;
-        let stdin = child.stdin.take().ok_or_else(|| {
-            io::Error::other("oracle worker has no stdin")
-        })?;
-        let stdout = child.stdout.take().ok_or_else(|| {
-            io::Error::other("oracle worker has no stdout")
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| io::Error::other("oracle worker has no stdin"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| io::Error::other("oracle worker has no stdout"))?;
         Ok(Self {
             child,
             stdin,
@@ -427,7 +426,9 @@ fn os_bytes(value: &OsStr) -> io::Result<Vec<u8>> {
         value
             .to_str()
             .map(|text| text.as_bytes().to_vec())
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "non-Unicode oracle argument"))
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "non-Unicode oracle argument")
+            })
     }
 }
 

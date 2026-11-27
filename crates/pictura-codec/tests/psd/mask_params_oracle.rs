@@ -5,11 +5,11 @@
 //! The psd-tools check needs `python3` with `psd-tools`; it self-skips with a
 //! message otherwise.
 
-use pictura_testkit::oracle;
 use pictura_codec::{read_psd, write_psd};
 use pictura_core::{
     Channel, Document, FillContent, Layer, LayerBlock, LayerMask, LayerParts, PsdRect, RawChannel,
 };
+use pictura_testkit::oracle;
 
 const SCRIPT: &str = r#"
 import sys
