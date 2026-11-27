@@ -98,19 +98,6 @@ void ImageView::setCanvasColor(const QColor& color)
     update();
 }
 
-void ImageView::setPanEnabled(bool enabled)
-{
-    // A transient Space pan owns pan state while held: a tool-state refresh that
-    // recomputes pan-enabled must not drop it mid-hold.
-    if (spacePan_ && !enabled) {
-        return;
-    }
-    panEnabled_ = enabled;
-    if (!enabled) {
-        panning_ = false;
-    }
-}
-
 void ImageView::setFreePan(bool enabled)
 {
     if (freePan_ == enabled) {
@@ -1102,13 +1089,6 @@ void ImageView::resizeEvent(QResizeEvent* event)
     QWidget::resizeEvent(event);
 }
 
-void ImageView::leaveEvent(QEvent* event)
-{
-    clearBrushOutline();
-    emit mouseLeft();
-    QWidget::leaveEvent(event);
-}
-
 void ImageView::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
@@ -1161,13 +1141,6 @@ void ImageView::keyReleaseEvent(QKeyEvent* event)
         emit modifierKeyChanged(int(event->modifiers()) & ~flag);
     }
     QWidget::keyReleaseEvent(event);
-}
-
-void ImageView::hideEvent(QHideEvent* event)
-{
-    cancelHandNavigation();
-    QWidget::hideEvent(event);
-    updateAntsTimer();
 }
 
 void ImageView::setBrushOutline(double diameter, const QPointF& imagePos)

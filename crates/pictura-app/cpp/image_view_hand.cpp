@@ -281,4 +281,34 @@ bool ImageView::event(QEvent* event)
     return QWidget::event(event);
 }
 
+void ImageView::setPanEnabled(bool enabled)
+{
+    // A transient Space pan owns pan state while held: a tool-state refresh that
+    // recomputes pan-enabled must not drop it mid-hold.
+    if (spacePan_ && !enabled) {
+        return;
+    }
+    panEnabled_ = enabled;
+    if (!enabled) {
+        panning_ = false;
+    }
+}
+
+
+void ImageView::hideEvent(QHideEvent* event)
+{
+    cancelHandNavigation();
+    QWidget::hideEvent(event);
+    updateAntsTimer();
+}
+
+
+void ImageView::leaveEvent(QEvent* event)
+{
+    clearBrushOutline();
+    emit mouseLeft();
+    QWidget::leaveEvent(event);
+}
+
+
 } // namespace pictura

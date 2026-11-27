@@ -745,7 +745,6 @@ void ToolController::unbindCanvas()
     // A floating or tiled canvas stays visible once it is no longer active; it
     // must not keep the blank cursor a brush ring stood in for.
     canvas_->unsetCursor();
-    // Release the outgoing handler’s canvas state before unbinding.
     if (ToolHandler* h = registry_.forTool(active_)) {
         h->onDeactivate(*this);
     }
