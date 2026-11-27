@@ -318,11 +318,14 @@ void CloneSourceOverlayTest::autoHide()
     QVERIFY(hover != pressed);
     t.f.canvas->mouseReleased(QPointF(40, 20));
     t.move(QPointF(40, 20));
-    QVERIFY(t.pixel(QPointF(44, 26)) != pressed);
+    QVERIFY2(t.pixel(QPointF(44, 26)) == hover, "preview did not return after release");
+    const int history = t.f.view->history_index();
     t.f.canvas->mousePressed(QPointF(40, 20), Qt::LeftButton, 0);
-    QTest::keyClick(t.f.canvas, Qt::Key_Escape);
+    t.f.view->cancel_paint();
+    t.f.tools->onSessionCancelled();
     t.move(QPointF(40, 20));
-    QVERIFY(t.pixel(QPointF(44, 26)) != pressed);
+    QVERIFY2(t.pixel(QPointF(44, 26)) == hover, "preview did not return after cancellation");
+    QCOMPARE(t.f.view->history_index(), history);
 }
 
 void CloneSourceOverlayTest::brushClipping()
