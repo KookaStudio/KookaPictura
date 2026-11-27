@@ -6,5 +6,5 @@
 
 ## 2. Verification
 
-- [ ] 2.1 Run the focused Qt suite, formatting and repository gates in the scheduled build phase.
+- [x] 2.1 Run the focused Qt suite, formatting and repository gates in the scheduled build phase.
 - [ ] 2.2 Smoke test native keyboard, pointer, GPU and reduced-motion behavior.
