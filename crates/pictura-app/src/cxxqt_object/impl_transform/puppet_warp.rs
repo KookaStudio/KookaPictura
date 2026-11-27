@@ -315,15 +315,15 @@ pub fn puppet_warp_size(session: &PuppetWarpSession) -> Vec<i32> {
     })
 }
 
-fn parse_pin(pin: &[f64]) -> Option<MeshPin> {
-    let ordinal = pin[5];
+fn parse_pin(pin: &[f64; PIN_FIELDS]) -> Option<MeshPin> {
+    let &[rest_x, rest_y, target_x, target_y, angle, ordinal] = pin;
     if !(0.0..=f64::from(u32::MAX)).contains(&ordinal) || ordinal.fract() != 0.0 {
         return None;
     }
     Some(MeshPin {
-        rest: [pin[0], pin[1]],
-        target: [pin[2], pin[3]],
-        angle: (!pin[4].is_nan()).then_some(pin[4]),
+        rest: [rest_x, rest_y],
+        target: [target_x, target_y],
+        angle: (!angle.is_nan()).then_some(angle),
         ordinal: ordinal as u32,
     })
 }
@@ -335,14 +335,12 @@ fn solved(
     density: i32,
     expansion: i32,
 ) -> Option<Mesh> {
-    if pins.len() > 32 * PIN_FIELDS || !pins.len().is_multiple_of(PIN_FIELDS) {
+    let (pins, trailing) = pins.as_chunks::<PIN_FIELDS>();
+    if pins.len() > 32 || !trailing.is_empty() {
         return None;
     }
     let snap = session.snapshot.as_ref()?;
-    let pins = pins
-        .chunks_exact(PIN_FIELDS)
-        .map(parse_pin)
-        .collect::<Option<Vec<_>>>()?;
+    let pins = pins.iter().map(parse_pin).collect::<Option<Vec<_>>>()?;
     let mesh = Mesh::solve(
         snap.pixels.width,
         snap.pixels.height,
