@@ -533,7 +533,7 @@ mod tests {
             right: 1,
             bottom: 1,
         };
-        doc.layers.push(pictura_codec::layer_from_parts(LayerParts {
+        let layer = pictura_codec::layer_from_parts(LayerParts {
             name: "gray".into(),
             rect: area,
             channels: vec![
@@ -547,7 +547,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        }));
+        });
+        doc.layers.push(layer).unwrap();
         let result = render(doc, one_pixel_request(None), area, &AtomicBool::new(false)).unwrap();
         assert_eq!(result.data, vec![64, 64, 64, 128]);
     }
