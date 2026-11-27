@@ -34,7 +34,15 @@ use quick::{combine_selection, combine_selection_boxed};
 
 impl qobject::PictureView {
     pub fn select_all(mut self: Pin<&mut Self>) {
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) { return; }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return;
+        }
         let dims = self
             .rust()
             .session
@@ -56,7 +64,15 @@ impl qobject::PictureView {
     }
 
     pub fn deselect(mut self: Pin<&mut Self>) {
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) { return; }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return;
+        }
         {
             let mut rust = self.as_mut().rust_mut();
             if let Some(prev) = rust.session.take_selection() {
@@ -69,7 +85,15 @@ impl qobject::PictureView {
     /// Restore the last deselected selection. Refuses (no history) without a
     /// stored selection or when its dimensions no longer match the document.
     pub fn reselect(mut self: Pin<&mut Self>) -> bool {
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) { return false; }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return false;
+        }
         let restored = {
             let rust = self.rust();
             let Some(doc) = rust.session.doc.as_ref() else {
@@ -93,7 +117,15 @@ impl qobject::PictureView {
     }
 
     pub fn invert_selection(mut self: Pin<&mut Self>) -> bool {
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) { return false; }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return false;
+        }
         let inverted = self
             .rust()
             .session
@@ -350,7 +382,15 @@ impl qobject::PictureView {
     /// `feather` radius >0 (clamped to 250). Zero/unknown amounts refuse
     /// (no history).
     pub fn modify_selection(mut self: Pin<&mut Self>, op: &QString, amount: f64) -> bool {
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) { return false; }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return false;
+        }
         if !amount.is_finite() {
             return false;
         }
@@ -390,7 +430,15 @@ impl qobject::PictureView {
     }
 
     pub fn grow_selection(mut self: Pin<&mut Self>, tolerance: i32) -> bool {
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) { return false; }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return false;
+        }
         let grown = {
             let rust = self.rust();
             let (Some(doc), Some(sel)) =
@@ -414,7 +462,15 @@ impl qobject::PictureView {
     }
 
     pub fn similar_selection(mut self: Pin<&mut Self>, tolerance: i32) -> bool {
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) { return false; }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return false;
+        }
         let matched = {
             let rust = self.rust();
             let (Some(doc), Some(sel)) =
@@ -700,7 +756,15 @@ impl qobject::PictureView {
         (shape, boxed): (Selection, Option<ShapeBox>),
         mode: CombineMode,
     ) -> bool {
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) { return false; }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return false;
+        }
         {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {
@@ -719,7 +783,15 @@ impl qobject::PictureView {
         mode: CombineMode,
         label: &str,
     ) -> bool {
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some()) { return false; }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return false;
+        }
         if self.rust().session.read_only() {
             return false;
         }

@@ -220,7 +220,6 @@ pub mod metrics;
 pub use gpu_filter::{apply_filter_active, filter_gpu_available};
 
 pub mod document_ops;
-pub use document_ops::{content_aware_scale, ContentAwareOptions};
 pub use document_ops::{
     add_gradient_fill, add_group, add_group_full, add_group_in, add_layer, add_layer_full,
     add_layer_in, add_layer_mask, add_layer_mask_converting_background, add_raster_layer_from_rgba,
@@ -301,6 +300,7 @@ pub use document_ops::{
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use document_ops::{apply_smart_filter, replace_smart_filter_at, smart_filter_record};
+pub use document_ops::{content_aware_scale, ContentAwareOptions};
 
 mod text_render;
 mod type_decor;

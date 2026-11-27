@@ -29,7 +29,8 @@ mod view_preview;
 
 use preview::{build_transform_preview, transform_preview_above, transform_preview_bytes};
 pub(in crate::cxxqt_object) use preview::{
-    moving_layer_pixels, rendered_transform_group, set_transform_preview_pixels_for_test, transform_preview_layer_at,
+    moving_layer_pixels, rendered_transform_group, set_transform_preview_pixels_for_test,
+    transform_preview_layer_at,
 };
 use selection::{lift_coverage, lifts_selection};
 pub(in crate::cxxqt_object) use view_preview::{MoveView, MoveViewPixels};
@@ -102,7 +103,12 @@ impl qobject::PictureView {
         {
             return false;
         }
-        if self.rust().session.live.transform().is_some_and(|s| s.content_aware.is_some())
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
             || (content_aware && self.rust().session.live.transform().is_some())
         {
             return false;
@@ -133,13 +139,21 @@ impl qobject::PictureView {
             .live
             .transform()
             .is_some_and(|session| session.lifted.is_some());
-        let original = if content_aware { self.rust().session.doc.as_ref().cloned() } else { None };
+        let original = if content_aware {
+            self.rust().session.doc.as_ref().cloned()
+        } else {
+            None
+        };
         let prepared = if content_aware {
-            self.as_mut().rust_mut().prepare_transform_kind(&path, mode, true)
+            self.as_mut()
+                .rust_mut()
+                .prepare_transform_kind(&path, mode, true)
         } else {
             self.as_mut().rust_mut().prepare_transform(&path, mode)
         };
-        let Some(mut session) = prepared else { return false; };
+        let Some(mut session) = prepared else {
+            return false;
+        };
         let bounded = session.lifted.is_none();
         let members: Vec<String> = session
             .members
@@ -156,8 +170,13 @@ impl qobject::PictureView {
             return false;
         }
         if content_aware {
-            let Some(doc) = self.rust().session.doc.as_ref() else { return false; };
-            session.content_aware = Some(super::content_aware::ContentAwareState::new(doc.clone(), original.expect("content-aware original")));
+            let Some(doc) = self.rust().session.doc.as_ref() else {
+                return false;
+            };
+            session.content_aware = Some(super::content_aware::ContentAwareState::new(
+                doc.clone(),
+                original.expect("content-aware original"),
+            ));
             session.history_label = "Content-Aware Scale".into();
         }
         {
@@ -552,7 +571,11 @@ impl PictureViewRust {
         } else {
             let group = {
                 let doc = self.session.doc.as_ref()?;
-                if content_aware { vec![path.clone()] } else { transform_group(self, doc, &path) }
+                if content_aware {
+                    vec![path.clone()]
+                } else {
+                    transform_group(self, doc, &path)
+                }
             };
             for member in group {
                 // The box hugs each layer's visible pixels, not its (often
@@ -564,13 +587,19 @@ impl PictureViewRust {
                     .as_ref()
                     .and_then(|doc| pictura_render::resolve_path(doc, &member))
                     .map(|layer| layer.rect);
-                let may_trim = !content_aware || self.session.doc.as_ref().and_then(|doc|
-                    pictura_render::resolve_path(doc, &member)).is_some_and(|layer| layer.source_channels.is_none());
-                let trimmed = may_trim && self
-                    .session
-                    .doc
-                    .as_mut()
-                    .is_some_and(|doc| pictura_render::trim_to_content(doc, &member));
+                let may_trim = !content_aware
+                    || self
+                        .session
+                        .doc
+                        .as_ref()
+                        .and_then(|doc| pictura_render::resolve_path(doc, &member))
+                        .is_some_and(|layer| layer.source_channels.is_none());
+                let trimmed = may_trim
+                    && self
+                        .session
+                        .doc
+                        .as_mut()
+                        .is_some_and(|doc| pictura_render::trim_to_content(doc, &member));
                 if trimmed {
                     if let Some(rect) = before {
                         untrimmed.push((member.clone(), rect));

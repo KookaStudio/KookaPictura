@@ -446,7 +446,9 @@ pub(super) fn edit_warp(
 }
 
 pub(super) fn transform_enter_warp(mut view: Pin<&mut PictureView>) -> bool {
-    if super::super::content_aware::content_aware_active(view.as_ref().get_ref()) { return false; }
+    if super::super::content_aware::content_aware_active(view.as_ref().get_ref()) {
+        return false;
+    }
     let created = {
         let mut rust = view.as_mut().rust_mut();
         let Some(session) = rust.session.live.transform_mut() else {

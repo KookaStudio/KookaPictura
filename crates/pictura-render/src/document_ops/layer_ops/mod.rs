@@ -94,11 +94,11 @@ pub use clipboard::{
     clear_layer, copy_layer, copy_merged, copy_merged_region, coverage_bounds, paste_clip,
     plane_has_coverage, Clip, PasteMode,
 };
-pub use content_aware::{content_aware_scale, ContentAwareOptions};
 pub use clipping::{
     can_create_clipping_mask, can_release_clipping_mask, clipping_release_paths,
     create_clipping_mask, release_clipping_mask,
 };
+pub use content_aware::{content_aware_scale, ContentAwareOptions};
 pub(crate) use create::insert_node;
 pub use create::{
     add_gradient_fill, add_group, add_group_full, add_group_in, add_layer, add_layer_full,

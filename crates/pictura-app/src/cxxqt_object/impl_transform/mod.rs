@@ -1,6 +1,6 @@
 mod bridge;
-mod convex;
 pub(in crate::cxxqt_object) mod content_aware;
+mod convex;
 mod dispatch;
 mod distort;
 mod geometry;
