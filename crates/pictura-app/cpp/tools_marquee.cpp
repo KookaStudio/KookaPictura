@@ -88,7 +88,7 @@ void ToolController::refreshCursor(Qt::KeyboardModifiers mods)
         if (mods.testFlag(Qt::AltModifier) && active_ == ToolId::CloneStamp) {
             return canvas_->setCursor(Qt::CrossCursor);
         }
-        if (mods.testFlag(Qt::AltModifier) && active_ != ToolId::Eraser) {
+        if (temporarySampling_ || (mods.testFlag(Qt::AltModifier) && active_ != ToolId::Eraser)) {
             const ToolInfo& info = toolInfo(ToolId::Eyedropper);
             const QCursor c =
                 cursor(toolCursorId(ToolId::Eyedropper, mods), info.hotspotX, info.hotspotY);

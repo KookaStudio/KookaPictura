@@ -22,6 +22,7 @@ struct ToolServices {
     virtual PictureView* view() const = 0;
     virtual ImageView* canvas() const = 0;
     virtual void sampledForeground(const QColor& color) = 0;
+    virtual void sampledBackground(const QColor& color) = 0;
 
     virtual QColor foreground() const = 0;
     virtual QColor background() const = 0;

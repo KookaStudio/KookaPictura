@@ -357,6 +357,7 @@ public:
     // ToolServices: the shared services a handler receives.
     PictureView* view() const override;
     void sampledForeground(const QColor& color) override;
+    void sampledBackground(const QColor& color) override;
     bool dragging() const override { return dragging_; }
     void setDragging(bool dragging) override { dragging_ = dragging; }
     bool dragCommitted() const override { return dragCommitted_; }
@@ -713,6 +714,8 @@ private:
     // True while a press with an armed `canvasSampler_` has the left button
     // down, so `handleMoved` samples on every move and `handleReleased` ends it.
     bool canvasSampling_ = false;
+    bool temporarySampling_ = false;
+    bool temporaryEyedropperTool() const;
     CanvasBrushHandler canvasBrush_;
     // True while an armed `canvasBrush_` has the left button down.
     bool canvasBrushDragging_ = false;

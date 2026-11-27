@@ -53,6 +53,12 @@ bool ToolController::cancelSingleLineMarquee()
 
 bool ToolController::handleEscape()
 {
+    if (temporarySampling_) {
+        temporarySampling_ = false;
+        registry_.forTool(ToolId::Eyedropper)->onSessionCancelled(*this);
+        refreshCursor();
+        return true;
+    }
     if (isSingleLineMarquee(active_)) {
         return cancelSingleLineMarquee();
     }

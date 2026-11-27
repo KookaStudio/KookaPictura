@@ -357,6 +357,8 @@ void ToolController::setActiveTool(ToolId id)
         return;
     }
     cancelSingleLineMarquee();
+    temporarySampling_ = false;
+    registry_.forTool(ToolId::Eyedropper)->onSessionCancelled(*this);
     // Drop the outgoing handler's per-tool state (in-progress polygon, warm
     // preview) before the switch, while the old tool is still active.
     if (ToolHandler* old = registry_.forTool(active_)) {
@@ -462,8 +464,10 @@ void ToolController::notifyToolSessionChanged()
 void ToolController::onSessionCancelled()
 {
     cancelSingleLineMarquee();
+    temporarySampling_ = false;
     resetTransformUi();
     registry_.forEach([this](ToolHandler& handler) { handler.onSessionCancelled(*this); });
+    refreshCursor();
 }
 
 void ToolController::applyCropOptions(bool classic, bool deletePixels, double ratio, int grid)
@@ -600,6 +604,18 @@ PictureView* ToolController::view() const
 void ToolController::sampledForeground(const QColor& color)
 {
     emit foregroundSampled(color);
+}
+
+void ToolController::sampledBackground(const QColor& color)
+{
+    setBackground(color);
+}
+
+bool ToolController::temporaryEyedropperTool() const
+{
+    return active_ == ToolId::Brush || active_ == ToolId::Pencil
+        || active_ == ToolId::ColorReplacement || active_ == ToolId::PatternStamp
+        || active_ == ToolId::HistoryBrush || active_ == ToolId::ArtHistoryBrush;
 }
 
 SelectionMode ToolController::resolveSelectionMode(Qt::KeyboardModifiers mods,
@@ -762,6 +778,8 @@ void ToolController::unbindCanvas()
         boundView_->cancel_transform();
     }
     boundView_ = nullptr;
+    temporarySampling_ = false;
+    registry_.forTool(ToolId::Eyedropper)->onSessionCancelled(*this);
     guideDrag_ = -1;
     guideHover_ = false;
     canvas_->clearOverlay();
@@ -890,7 +908,8 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
     const Qt::KeyboardModifiers mods = Qt::KeyboardModifiers(modifiers);
     if(v && quick_mask_active(*v)) {
         if(active_==ToolId::Move || (isSelectionTool(active_) && mods.testFlag(Qt::ControlModifier))) return;
-        if(isBrushTool(active_) && active_!=ToolId::Brush && active_!=ToolId::Pencil && active_!=ToolId::Eraser) return;
+        if(isBrushTool(active_) && active_!=ToolId::Brush && active_!=ToolId::Pencil && active_!=ToolId::Eraser
+           && !(temporaryEyedropperTool() && mods.testFlag(Qt::AltModifier))) return;
     }
     // The idle controls box: a handle starts its session for this gesture;
     // anywhere else is an ordinary Move drag, the box hidden until release.
@@ -916,6 +935,13 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
     }
     if (active_ == ToolId::Hand && canvas_ && canvas_->panEnabled()) {
         canvas_->beginPan(canvas_->imageToWidget(imagePos));
+        return;
+    }
+    if (temporaryEyedropperTool() && mods.testFlag(Qt::AltModifier)
+        && !dragging_ && !sliceEditingBlocked()) {
+        temporarySampling_ = true;
+        registry_.forTool(ToolId::Eyedropper)->onPress(*this, imagePos, Qt::NoModifier);
+        refreshCursor(mods);
         return;
     }
     ToolHandler* handler = registry_.forTool(active_);
@@ -958,6 +984,10 @@ void ToolController::handleMoved(const QPointF& imagePos)
             canvasSampler_(imagePos, QGuiApplication::queryKeyboardModifiers());
         }
         refreshCursor();
+        return;
+    }
+    if (temporarySampling_) {
+        registry_.forTool(ToolId::Eyedropper)->onMove(*this, imagePos, Qt::NoModifier);
         return;
     }
     if (transformSessionActive()) {
@@ -1049,6 +1079,12 @@ void ToolController::handleModifiers(int modifiers)
 void ToolController::handleReleased(const QPointF& imagePos)
 {
     if (ignoreRelease_ || ignoreSingleLineRelease()) {
+        return;
+    }
+    if (temporarySampling_) {
+        temporarySampling_ = false;
+        registry_.forTool(ToolId::Eyedropper)->onRelease(*this, imagePos, Qt::NoModifier);
+        refreshCursor();
         return;
     }
     if (canvasBrush_) {

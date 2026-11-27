@@ -26,8 +26,24 @@ public:
         addOptions(options_.get());
     }
 
-    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
+        dragging_ = false;
+        if (mods.testFlag(Qt::ShiftModifier)) {
+            PictureView* v = ctx.view();
+            const int x = qRound(imagePos.x());
+            const int y = qRound(imagePos.y());
+            if (v && v->has_document() && x >= 0 && y >= 0
+                && x < v->document_width() && y < v->document_height()) {
+                if (add_marker(*v, 0, x, y) < 0) {
+                    ctx.refused(QObject::tr("Color Sampler: all four samplers are placed."));
+                } else {
+                    ctx.refreshAnnotations();
+                }
+            }
+            return true;
+        }
+        background_ = mods.testFlag(Qt::AltModifier);
         dragging_ = true;
         // A fresh press always samples, even at the pixel of the last gesture.
         lastSample_ = QPoint(-1, -1);
@@ -122,12 +138,17 @@ private:
         const quint32 argb = sample_argb_scoped(*v, point.x(), point.y(), options.sampleSize,
                                                 options.scope);
         if (argb != 0) {
-            ctx.sampledForeground(QColor::fromRgb(argb));
+            if (background_) {
+                ctx.sampledBackground(QColor::fromRgb(argb));
+            } else {
+                ctx.sampledForeground(QColor::fromRgb(argb));
+            }
         }
     }
 
     std::shared_ptr<EyedropperGroup> options_;
     bool dragging_ = false;
+    bool background_ = false;
     QPoint lastSample_{-1, -1};
 };
 
