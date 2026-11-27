@@ -122,6 +122,30 @@ fn local(
 }
 
 #[test]
+fn factory_shadow_recovery_preserves_deep_blacks() {
+    use pictura_adjust::apply_native;
+    use pictura_core::Samples;
+
+    let factory = local(35.0, 0.0, pictura_adjust::ShadowsHighlightsOptions::FACTORY);
+    let strip = [0u8, 2, 30, 48];
+    let mut bytes = buf3(&strip.map(|value| [value; 3]));
+    apply(&factory, &mut bytes).unwrap();
+    assert_eq!(px3(&bytes, 0), [0; 3]);
+    assert!((2..=4).contains(&px3(&bytes, 1)[0]));
+    assert!(px3(&bytes, 2)[0] > strip[2]);
+
+    let native_plane = strip.map(|value| u16::from(value) * 257);
+    let mut native = Samples::U16(native_plane.repeat(3).into());
+    apply_native(&factory, &mut native, strip.len(), 1, 3).unwrap();
+    let Samples::U16(values) = native else {
+        unreachable!()
+    };
+    assert_eq!(values[0], 0);
+    assert!((native_plane[1]..=4 * 257).contains(&values[1]));
+    assert!(values[2] > native_plane[2]);
+}
+
+#[test]
 fn local_surround_changes_equal_pixels() {
     let mut pixels = [[10; 3]; 41];
     pixels[21..].fill([115; 3]);
@@ -149,7 +173,7 @@ fn advanced_tones_and_clips() {
         apply(&local(50.0, 0.0, options), &mut output).unwrap();
         output
     });
-    assert!(px3(&by_width[0], 0)[0] > 0);
+    assert_eq!(px3(&by_width[0], 0), [0; 3]);
     assert_eq!(px3(&by_width[0], 1), [40; 3]);
     assert!(px3(&by_width[1], 1)[0] > 40);
     assert_eq!(px3(&by_width[1], 2), [150; 3]);

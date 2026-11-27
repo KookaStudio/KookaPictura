@@ -110,8 +110,18 @@ pub(in crate::cxxqt_object) fn page_rows(
             p.key, p.label, p.value, p.default
         );
         push(match &p.kind {
-            ParamKind::Slider { min, max, decimals } => {
-                format!("slider\t{head}\t{min}\t{max}\t{decimals}")
+            ParamKind::Slider {
+                min,
+                max,
+                decimals,
+                unit,
+            } => {
+                let mut row = format!("slider\t{head}\t{min}\t{max}\t{decimals}");
+                if !unit.is_empty() {
+                    row.push('\t');
+                    row.push_str(unit);
+                }
+                row
             }
             ParamKind::Check => format!("check\t{head}"),
             ParamKind::Color => format!("color\t{head}"),

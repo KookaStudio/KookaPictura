@@ -28,6 +28,7 @@ pub enum ParamKind {
         min: f64,
         max: f64,
         decimals: u8,
+        unit: &'static str,
     },
     Check,
     /// A menu whose index is the value.
@@ -110,21 +111,23 @@ fn slider(key: &str, label: &str, field: Field, (min, max): (f64, f64), default:
         key: key.into(),
         label: label.into(),
         field,
-        kind: ParamKind::Slider { min, max, decimals },
+        kind: ParamKind::Slider {
+            min,
+            max,
+            decimals,
+            unit: "",
+        },
         group: None,
         default,
     }
 }
 
 /// `spec` shown with `decimals` places instead of its field's default.
-fn with_decimals(spec: Spec, decimals: u8) -> Spec {
-    match spec.kind {
-        ParamKind::Slider { min, max, .. } => Spec {
-            kind: ParamKind::Slider { min, max, decimals },
-            ..spec
-        },
-        _ => spec,
+fn with_decimals(mut spec: Spec, places: u8) -> Spec {
+    if let ParamKind::Slider { decimals, .. } = &mut spec.kind {
+        *decimals = places;
     }
+    spec
 }
 
 fn check(key: &str, label: &str, field: Field, default: bool) -> Spec {
@@ -307,6 +310,16 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment, cmyk: bool) -> Option<
                         0.01,
                     ),
                 ]);
+            }
+            for spec in &mut specs {
+                if let ParamKind::Slider { unit, .. } = &mut spec.kind {
+                    *unit = match spec.key.as_str() {
+                        "shadowAmount" | "highlightAmount" | "shadowWidth" | "highlightWidth"
+                        | "blackClip" | "whiteClip" => "%",
+                        "shadowRadius" | "highlightRadius" => "px",
+                        _ => "",
+                    };
+                }
             }
             plain("Shadows/Highlights", specs)
         }

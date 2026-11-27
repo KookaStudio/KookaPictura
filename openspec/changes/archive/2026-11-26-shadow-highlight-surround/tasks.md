@@ -12,3 +12,8 @@
 
 - [x] 3.1 Add Rust and Qt regression coverage listed in test-plan.md.
 - [ ] 3.2 Run the deferred build, tests, and validation.
+
+## 4. Dark tones and visible units
+
+- [x] 4.1 Add Rust factory-default coverage at both depths and extend the Qt preview and unit coverage.
+- [x] 4.2 Anchor expanded shadow recovery at input black and show units beside the dialog fields.

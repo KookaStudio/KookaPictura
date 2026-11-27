@@ -64,7 +64,9 @@ pub(crate) fn apply<T: Sample>(
         let y = luminance[i];
         let lift = shadow_amount * weight(shadows[i], options.shadows_width);
         let pull = highlight_amount * weight(1.0 - highlights[i], options.highlights_width);
-        (y + lift * (1.0 - y)) * (1.0 - pull)
+        // A proportional toe preserves input black instead of adding a gray floor.
+        let lifted = y + lift * (2.0 * y * (1.0 - y));
+        lifted * (1.0 - pull)
     };
     let corrected = |i: usize| {
         let y = (tonal(i) + brightness).clamp(0.0, 1.0);

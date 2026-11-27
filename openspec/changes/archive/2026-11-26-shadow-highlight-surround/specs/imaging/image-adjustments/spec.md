@@ -6,8 +6,8 @@ The system SHALL use the full input layer luminance to compute independent smoot
 
 #### Scenario: Lifting shadows and pulling highlights
 
-- **WHEN** Shadows/Highlights with a positive shadow amount is applied to a buffer containing a dark pixel, or with a positive highlight amount to a bright pixel
-- **THEN** the dark pixel lightens or the bright pixel darkens respectively
+- **WHEN** Shadows/Highlights with a positive shadow amount is applied to a buffer containing a recoverable shadow pixel, or with a positive highlight amount to a bright pixel
+- **THEN** the shadow pixel lightens or the bright pixel darkens respectively
 
 #### Scenario: Neutral amounts are identity
 
@@ -18,6 +18,11 @@ The system SHALL use the full input layer luminance to compute independent smoot
 
 - **WHEN** either amount is non-finite or outside `0.0..=100.0`
 - **THEN** `apply` returns `AdjustError::InvalidParams` and does not panic
+
+#### Scenario: Factory shadow recovery preserves deep blacks
+
+- **WHEN** the expanded factory settings are applied to 8- or 16-bit input containing black, near-black, and recoverable shadow detail
+- **THEN** black stays black, near-black tones stay dark, and nearby shadow detail lightens
 
 #### Scenario: Matching pixels have different surrounds
 
@@ -46,6 +51,11 @@ The Image menu SHALL expose a destructive adjustment for supported pixel layers.
 
 - **WHEN** the user opens Shadows/Highlights in RGB or Grayscale and enables Show More Options
 - **THEN** the eight advanced controls become visible, with Brightness in Grayscale and Color Correction in RGB, and edits to either control reach preview and commit
+
+#### Scenario: Visible units
+
+- **WHEN** the user views the basic and expanded Shadows/Highlights controls
+- **THEN** both Amount and Tonal Width fields and both Clip fields show a percent sign to their right, both Radius fields show px, and Color Correction, Brightness, and Midtone Contrast are unitless
 
 #### Scenario: Preview and selected commit
 

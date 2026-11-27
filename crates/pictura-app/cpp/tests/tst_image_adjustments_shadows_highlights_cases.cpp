@@ -12,6 +12,19 @@ void ImageAdjustmentsTest::shadowsHighlightsAdvanced()
         const auto* slider = dialog.controlForTest(key);
         return slider ? slider->parentWidget()->findChild<QDoubleSpinBox*>() : nullptr;
     };
+    const auto verifyUnit = [&](const pictura::AdjustmentDialog& dialog, const char* key,
+                                const QString& expected) {
+        const auto* field = spinFor(dialog, QLatin1String(key));
+        QVERIFY(field && field->isVisible());
+        const auto* unit =
+            field->parentWidget()->findChild<QLabel*>(QStringLiteral("adjustmentUnit"));
+        if (expected.isEmpty()) {
+            QVERIFY(!unit);
+        } else {
+            QVERIFY(unit && unit->isVisible());
+            QCOMPARE(unit->text(), expected);
+        }
+    };
     auto dialog = makeDialog();
     auto* more = dialog->findChild<QCheckBox*>(QStringLiteral("shadowHighlightMoreOptions"));
     QVERIFY(more);
@@ -20,16 +33,23 @@ void ImageAdjustmentsTest::shadowsHighlightsAdvanced()
     auto* black = spinFor(*dialog, QStringLiteral("blackClip"));
     QVERIFY(black);
     QVERIFY(!more->isChecked() && !correction->isVisible());
-    QVERIFY(dialog->controlForTest(QStringLiteral("shadowAmount"))->isVisible());
-    QVERIFY(dialog->controlForTest(QStringLiteral("highlightAmount"))->isVisible());
+    verifyUnit(*dialog, "shadowAmount", QStringLiteral("%"));
+    verifyUnit(*dialog, "highlightAmount", QStringLiteral("%"));
     more->setChecked(true);
     QVERIFY(correction->isVisible());
     QVERIFY(!dialog->controlForTest(QStringLiteral("brightness")));
-    for (const char* key : {"shadowWidth", "shadowRadius", "highlightWidth", "highlightRadius",
-                            "midtoneContrast", "blackClip", "whiteClip"}) {
-        QWidget* control = dialog->controlForTest(QLatin1String(key));
-        QVERIFY(control && control->isVisible());
+    for (const char* key : {"shadowWidth", "highlightWidth", "blackClip", "whiteClip"}) {
+        verifyUnit(*dialog, key, QStringLiteral("%"));
     }
+    for (const char* key : {"shadowRadius", "highlightRadius"}) {
+        verifyUnit(*dialog, key, QStringLiteral("px"));
+    }
+    verifyUnit(*dialog, "colorCorrection", QString());
+    verifyUnit(*dialog, "midtoneContrast", QString());
+    QCOMPARE(black->value(), 0.01);
+    const auto* white = spinFor(*dialog, QStringLiteral("whiteClip"));
+    QVERIFY(white);
+    QCOMPARE(white->value(), 0.01);
     for (const double clip : {0.01, 0.02, 10.0, 0.01}) {
         black->setValue(clip);
         const QByteArray current = dialog->block();
@@ -67,6 +87,7 @@ void ImageAdjustmentsTest::shadowsHighlightsAdvanced()
     more->setChecked(true);
     auto* brightness = spinFor(*dialog, QStringLiteral("brightness"));
     QVERIFY(brightness && brightness->isVisible());
+    verifyUnit(*dialog, "brightness", QString());
     QVERIFY(!dialog->controlForTest(QStringLiteral("colorCorrection")));
     brightness->setValue(-30.0);
     waitForPreview(*view_);
@@ -82,7 +103,7 @@ void ImageAdjustmentsTest::shadowsHighlightsAdvanced()
 
 void ImageAdjustmentsTest::shadowsHighlightsSelection()
 {
-    QVERIFY(openRamp(25, 90));
+    QVERIFY(openRamp(0, 90));
     QVERIFY(view_->select_rect(0, 0, 10, 20, QStringLiteral("new"), 0.0));
     const QRgb inside = view_->composite_argb(5, 5);
     const QRgb outside = view_->composite_argb(15, 5);
@@ -91,12 +112,17 @@ void ImageAdjustmentsTest::shadowsHighlightsSelection()
                                                 block("shadows-highlights"), QRect());
     waitForPreview(*view_);
     const QRgb preview = view_->composite_argb(5, 5);
+    QCOMPARE(view_->composite_argb(0, 5), qRgb(0, 0, 0));
+    const int nearBlack = qGray(view_->composite_argb(1, 5));
+    QVERIFY(nearBlack >= 5 && nearBlack <= 9);
     QVERIFY(qGray(preview) > qGray(inside));
     QCOMPARE(view_->composite_argb(15, 5), outside);
     dialog->accept();
     QCOMPARE(dialog->result(), int(QDialog::Accepted));
     QCOMPARE(view_->history_count(), history + 1);
     QCOMPARE(view_->composite_argb(5, 5), preview);
+    QCOMPARE(view_->composite_argb(0, 5), qRgb(0, 0, 0));
+    QCOMPARE(qGray(view_->composite_argb(1, 5)), nearBlack);
     QCOMPARE(view_->composite_argb(15, 5), outside);
     QVERIFY(view_->undo());
     QCOMPARE(view_->composite_argb(5, 5), inside);
