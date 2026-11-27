@@ -867,6 +867,13 @@ void SelectionPreviewTest::zoomMarqueeStaysUnclipped()
     Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_zoom"));
     QVERIFY2(f.ok(), "selection fixture");
     window_->setActiveTool(pictura::ToolId::Zoom);
+    auto* zoom = f.tools->optionsFor<pictura::ZoomGroup>(pictura::ToolId::Zoom);
+    QVERIFY(zoom);
+    const auto savedOptions = zoom->get();
+    const auto restoreZoom = qScopeGuard([zoom, savedOptions] { zoom->set(savedOptions); });
+    auto marqueeOptions = savedOptions;
+    marqueeOptions.scrubby = false;
+    zoom->set(marqueeOptions);
 
     f.canvas->mousePressed(QPointF(50, 50), Qt::LeftButton, int(Qt::NoModifier));
     f.canvas->mouseMoved(QPointF(100, 100));

@@ -215,8 +215,8 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] Hand and Zoom multi-window options: Scroll All Windows, Zoom All
       Windows, Resize Windows To Fit, and the Zoom Resizes Windows preference
       (#500)
-- [ ] Hand and Zoom options: Scrubby and animated zoom (#533), plus Bird's Eye
-      View and Flick Panning (#534)
+- [x] Zoom options: Scrubby and animated zoom (#533)
+- [ ] Hand options: Bird's Eye View and Flick Panning (#534)
 - [ ] Ruler protractor and Straighten from the ruler (#535); eyedropper
       modifiers and Shift-click sampler (#536)
 - [ ] Clone Source overlay controls (#537)

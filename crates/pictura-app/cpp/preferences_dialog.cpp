@@ -146,6 +146,19 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     generalForm->addRow(tr("Theme"), themeFamily_);
     makeCheckbox(QStringLiteral("zoomResizesWindows"), tr("Zoom Resizes Windows"),
                  generalPage);
+    auto* animatedZoom = makeCheckbox(QStringLiteral("animatedZoom"), tr("Animated Zoom"),
+                                      generalPage);
+    animatedZoom->setChecked(loadPreferences().animatedZoom);
+    animatedZoom->setEnabled(animatedZoomAvailable());
+    if (!animatedZoomAvailable()) {
+        animatedZoom->setToolTip(tr("Timed zoom is unavailable for this canvas."));
+    }
+    connect(animatedZoom, &QCheckBox::toggled, this, [](bool on) {
+        const auto before = loadPreferences();
+        auto after = before;
+        after.animatedZoom = on;
+        savePreferences(before, after);
+    });
     addHistoryLogControls(generalForm, generalPage);
 
     pickerChoice_ = new QComboBox(generalPage);

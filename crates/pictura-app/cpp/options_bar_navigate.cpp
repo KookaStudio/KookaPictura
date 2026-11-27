@@ -42,6 +42,18 @@ QWidget* OptionsBar::buildZoomPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
+    auto* scrubby = new QCheckBox(QCoreApplication::translate("PicturaUi", "Scrubby Zoom"), page);
+    scrubby->setObjectName(QStringLiteral("optionsZoomScrubby"));
+    scrubby->setChecked(zoom_ && zoom_->get().scrubby);
+    layout->addWidget(scrubby);
+    if (zoom_) {
+        connect(scrubby, &QCheckBox::toggled, this, [this](bool on) {
+            ZoomOptions options = zoom_->get();
+            options.scrubby = on;
+            zoom_->set(options);
+        });
+    }
+
     auto* resize = new QCheckBox(QCoreApplication::translate("PicturaUi", "Resize Windows To Fit"), page);
     resize->setObjectName(QStringLiteral("optionsZoomResizeToFit"));
     resize->setChecked(zoom_ && zoom_->get().resizeToFit);

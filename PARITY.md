@@ -227,9 +227,9 @@ Source list: CS6 toolbox tools (73 catalogue entries) plus named brush-engine, b
 | P-TOOL-66 | Camera Pan (Extended) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-TOOL-67 | Camera Walk (Extended) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-TOOL-68 | Camera Zoom (Extended) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
-| P-TOOL-69 | Hand | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Scrubby zoom, animated zoom, Bird's Eye View, and Flick Panning remain | TOOL-9 |
+| P-TOOL-69 | Hand | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Bird's Eye View and Flick Panning remain | #534 |
 | P-TOOL-70 | Rotate View | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-TOOL-71 | Zoom | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Scrubby zoom, animated zoom, Bird's Eye View, and Flick Panning remain | TOOL-10 |
+| P-TOOL-71 | Zoom | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Bird's Eye View and Flick Panning remain; timed raster zoom approximates Adobe OpenGL behavior | #534 |
 | P-TOOL-72 | Single Row Marquee | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/tool_selection.cpp | none | Feather profile is approximate | — |
 | P-TOOL-73 | Single Column Marquee | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/tool_selection.cpp | none | Feather profile is approximate | — |
 | P-TOOL-74 | Brush engine | Y | Y | Y | Complete | in-scope | crates/pictura-paint/src | none | — | — |
