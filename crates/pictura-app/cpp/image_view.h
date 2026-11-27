@@ -51,6 +51,7 @@ struct SelectionContour;
 namespace pictura {
 
 class RenderingIndicator;
+enum class FlickPanningMode;
 
 /// A CPU-warped live projective preview: the warped image, its local
 /// destination origin (relative to the moving layer's document origin), and
@@ -248,6 +249,10 @@ public:
     // emitted. The owner restores the pan/cursor state on release.
     void setSpacePan(bool on);
     bool spacePanForTest() const { return spacePan_; }
+    bool armBirdsEye();
+    bool releaseBirdsEyeKey();
+    void cancelHandNavigation();
+    void setFlickPanning(FlickPanningMode mode, bool gpuAvailable);
     // Whether a pan drag is in progress (middle-button, Hand, or Space).
     bool isPanning() const { return panning_; }
 
@@ -952,6 +957,47 @@ private:
     bool snapToWorkspace_ = false;
     bool panning_ = false;
     bool spacePan_ = false;
+
+    struct BirdsEye {
+        double fitZoom;
+        QPointF fitOffset;
+        QPointF destination;
+    };
+    double birdsEyeZoom() const;
+    bool beginBirdsEye(const QMouseEvent& event);
+    void moveBirdsEye(const QPointF& pos);
+    bool releaseBirdsEyePointer(const QMouseEvent& event);
+    void cancelBirdsEye();
+    void paintBirdsEye(QPainter& painter, const BirdsEye& overview, double originalZoom);
+    std::optional<BirdsEye> birdsEye_;
+    bool birdKeyHeld_ = false;
+    bool birdKeyUsed_ = false;
+    bool birdPointerCaptured_ = false;
+    bool birdHandPan_ = false;
+
+    struct FlickSample {
+        QElapsedTimer clock;
+        bool eventClock = false;
+        qint64 anchorTime = 0;
+        qint64 lastMotion = 0;
+        QPointF anchor;
+        QPointF velocity;
+    };
+    bool flickAllowed() const;
+    void beginFlickSample(const QMouseEvent& event);
+    qint64 flickTime(const QMouseEvent& event) const;
+    void sampleFlick(const QMouseEvent& event);
+    void startFlick(const QMouseEvent& event);
+    void advanceFlick();
+    void stopFlick();
+    void applyPanDelta(const QPointF& delta);
+    std::optional<FlickSample> flickSample_;
+    FlickPanningMode flickMode_{};
+    bool flickGpu_ = false;
+    QTimer* flickTimer_ = nullptr;
+    QElapsedTimer flickFrameClock_;
+    Qt::KeyboardModifiers flickModifiers_ = Qt::NoModifier;
+    QPointF flickVelocity_;
     // A tablet press is down, so its synthesized mouse press keeps the
     // tablet pressure instead of resetting to the mouse's 1.0.
     bool tabletActive_ = false;

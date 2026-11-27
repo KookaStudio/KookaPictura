@@ -146,6 +146,16 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     generalForm->addRow(tr("Theme"), themeFamily_);
     makeCheckbox(QStringLiteral("zoomResizesWindows"), tr("Zoom Resizes Windows"),
                  generalPage);
+    flickPanning_ = new QComboBox(generalPage);
+    flickPanning_->setObjectName(QStringLiteral("preferencesFlickPanning"));
+    flickPanning_->addItem(tr("Automatic"));
+    flickPanning_->addItem(tr("On"));
+    flickPanning_->addItem(tr("Off"));
+    flickPanning_->setToolTip(tr("Automatic follows the system animation setting. On keeps "
+                                "flick panning enabled when system animations are off."));
+    generalForm->addRow(tr("Flick Panning"), flickPanning_);
+    connect(flickPanning_, &QComboBox::currentIndexChanged, this,
+            &PreferencesDialog::flickPanningChanged);
     addHistoryLogControls(generalForm, generalPage);
 
     pickerChoice_ = new QComboBox(generalPage);
@@ -480,6 +490,13 @@ void PreferencesDialog::setZoomResizesWindows(bool on)
     if (QCheckBox* box = checkbox(QStringLiteral("zoomResizesWindows"))) {
         box->setChecked(on);
     }
+}
+
+void PreferencesDialog::setFlickPanning(int mode, bool available)
+{
+    const QSignalBlocker block(flickPanning_);
+    flickPanning_->setCurrentIndex(mode >= 0 && mode < flickPanning_->count() ? mode : 0);
+    flickPanning_->setEnabled(available);
 }
 
 void PreferencesDialog::setAutoCollapseIconic(bool on)

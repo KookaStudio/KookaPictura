@@ -1,0 +1,15 @@
+# Test plan
+
+| Scenario | Steps | Expected result | Coverage |
+| --- | --- | --- | --- |
+| `hand_bird_relocate` | Hold H and drag across a zoomed, rotated tiled canvas, then release; inspect the preview and outline. | The entire document and viewport footprint appear, the destination changes, original zoom and rotation are restored, and no tool events or history edits occur. | `tst_hand_navigation::birdRelocates`, `tst_hand_navigation::birdPreviewOverlays` |
+| `hand_bird_cancel` | Arm overview; separately cancel with Escape, early H release, focus loss and interrupted input, then release the button. | View stays at the original location and the captured pointer release remains consumed. | `tst_hand_navigation::birdCancels`, `tst_hand_navigation::birdFallbackAndCapture` |
+| `hand_plain_pan` | Pan with selected Hand after H, Space and middle button. | Regular drag moves the view without an overview. | `tst_hand_navigation::ordinaryPan` |
+| `hand_bird_shortcuts` | Exercise accepted H, autorepeat, Crop consuming H, text and command ownership, and a remapped Hand shortcut. | Only an accepted initial plain H Hand shortcut arms; repeats and other owned or remapped shortcuts do not spuriously arm or cancel. | `tst_hand_navigation::birdShortcuts`, `tst_hand_navigation::birdFallbackAndCapture` |
+| `hand_flick_motion` | Flick quickly, then interrupt with another navigation action; check history and bounds. | Movement continues in the original direction up to the clamp, the next action stops it, and history is unchanged. | `tst_hand_navigation::flickContinues` |
+| `hand_flick_gates` | Drag on GPU-disabled or Off views, pause before release, and inject reduced motion in Automatic. | No further movement. | `tst_hand_navigation::flickGates` |
+| `hand_flick_override` | Inject reduced motion and select On on a GPU-capable view, then flick. | Motion continues after release. | `tst_hand_navigation::flickOverride` |
+| `hand_flick_preference` | Round-trip all three choices, including Automatic default, and open General on a CPU-only configuration. | Each stored value is preserved and the CPU-only control is disabled. | `tst_hand_navigation::preferencePersists` |
+| `hand_flick_peers` | Flick with multiple visible views with the option on, Shift held, and both off; exercise different source and peer bounds. | Peers receive only source-applied displacement when enabled, clamp independently, and stay still otherwise. | `tst_hand_navigation::flickPeers` |
+| Native keyboard and pointer | Hold H from a panel and use the overview, cancel it, then use ordinary Hand, Space and middle-button drags on a real desktop. | Input ownership and pointer capture behave correctly. | manual: native window focus and pointer grabs require a real desktop. |
+| Native flick and GPU | Flick with GPU navigation enabled and disabled, and change the desktop reduced-motion setting with Automatic and On selected. | Motion, interruption and preference availability match the desktop settings and GPU state. | manual: native GPU and desktop motion settings are unavailable in offscreen Qt. |

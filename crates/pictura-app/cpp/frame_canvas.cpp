@@ -97,6 +97,8 @@ void PicturaMainWindow::setupCanvas(DocWindow& window)
     }
     window.canvas->setCanvasColor(canvasColorForIndex(canvasColorIndex_));
     window.canvas->setFreePan(freePan_);
+    window.canvas->setFlickPanning(static_cast<FlickPanningMode>(flickPanning_),
+                                  gpuCompute_ && gpuAvailable_);
     window.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
     prepareCanvasGuides(window);
     applyCanvasViewState(window);
@@ -104,6 +106,19 @@ void PicturaMainWindow::setupCanvas(DocWindow& window)
     // Present from the view pyramid: the canvas crops a level instead of
     // scaling the full-resolution image.
     wireCanvasLevelProvider(view, window.canvas);
+}
+
+void PicturaMainWindow::applyFlickPanning()
+{
+    const bool available = gpuCompute_ && gpuAvailable_;
+    if (preferencesDialog_) {
+        preferencesDialog_->setFlickPanning(flickPanning_, available);
+    }
+    for (const DocEntry* entry : documents_->docs()) {
+        forEachCanvas(*entry, [this, available](ImageView* canvas) {
+            canvas->setFlickPanning(static_cast<FlickPanningMode>(flickPanning_), available);
+        });
+    }
 }
 
 // Connect a ready window's canvas to the frame. The canvas is the sender, so

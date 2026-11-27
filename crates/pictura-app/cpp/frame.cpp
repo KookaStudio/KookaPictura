@@ -320,6 +320,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck,
     openDocumentsAsTabs_ = prefs.openDocumentsAsTabs;
     floatingDocumentDocking_ = prefs.enableFloatingDocumentDocking;
     zoomResizesWindows_ = prefs.zoomResizesWindows;
+    flickPanning_ = prefs.flickPanning;
     applyShortcutOverrides(prefs);
     loadGuideSession(state, prefs);
     loadViewSession(state);

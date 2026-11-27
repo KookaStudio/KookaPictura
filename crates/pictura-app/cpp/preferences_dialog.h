@@ -57,6 +57,7 @@ public:
     void setFloatingDocumentDocking(bool on);
     // General: Zoom Resizes Windows.
     void setZoomResizesWindows(bool on);
+    void setFlickPanning(int mode, bool available);
     void setHistoryLogSettings(const HistoryLogSettings& settings);
     void setAutoCollapseIconic(bool on);
     void setAutoShowHidden(bool on);
@@ -123,6 +124,7 @@ signals:
     void openDocumentsAsTabsChanged(bool on);
     void floatingDocumentDockingChanged(bool on);
     void zoomResizesWindowsChanged(bool on);
+    void flickPanningChanged(int mode);
     void autoCollapseIconicChanged(bool on);
     void autoShowHiddenChanged(bool on);
     void brightnessLevelChanged(int level);
@@ -181,6 +183,7 @@ private:
     QLabel* languageStatus_ = nullptr;
     QPushButton* languageRestart_ = nullptr;
     QComboBox* pickerChoice_ = nullptr;
+    QComboBox* flickPanning_ = nullptr;
     QComboBox* imageInterpolation_ = nullptr;
     QComboBox* autoSaveMinutes_ = nullptr;
     QComboBox* nativeSaveCompatibility_ = nullptr;
