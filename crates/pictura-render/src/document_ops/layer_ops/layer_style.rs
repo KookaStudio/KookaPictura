@@ -11,7 +11,7 @@
 //! index in the field's option list; a flag is `0` or `1`.
 //!
 //! `blending.*` keys are the Blending Options page and write the layer record
-//! itself (mode, opacity, fill, knockout, the two group flags).
+//! itself (mode, opacity, fill, knockout, and advanced blending flags).
 //!
 //! ponytail: a layer carrying only a legacy `lrFX` block starts a fresh `lfx2`
 //! on its first edit, which then wins over the legacy set; the stroke is always
@@ -995,3 +995,7 @@ fn edit_styles(
 #[cfg(test)]
 #[path = "layer_style_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "layer_style_flag_tests.rs"]
+mod flag_tests;
