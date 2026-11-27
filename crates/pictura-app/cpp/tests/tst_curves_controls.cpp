@@ -9,6 +9,7 @@
 #include "levels_dialog.h"
 #include "panels/curve_widget.h"
 #include "panels/layers_panel.h"
+#include "panels/panel_column.h"
 #include "panels/properties_panel.h"
 #include "qt_test_support.h"
 #include "tools.h"
@@ -164,14 +165,26 @@ void CurvesControlsTest::curvesPropertiesLayout()
     QVERIFY(openPatch());
     auto* panel = addCurves();
     QVERIFY(panel);
-    window_->show();
+    const auto panelName = panel->objectName();
+    auto* column = window_->columnForPanel(panelName);
+    QVERIFY(column);
     const QSize minimum = panel->minimumSize();
     const QSize maximum = panel->maximumSize();
+    const bool panelWasOpen = column->isPanelVisible(panelName);
+    const bool railMode = column->railMode();
     const auto restore = qScopeGuard([&] {
         panel->setMinimumSize(minimum);
         panel->setMaximumSize(maximum);
+        column->showPanel(panelName, panelWasOpen);
+        column->setRailMode(railMode);
         window_->hide();
     });
+    window_->show();
+    window_->setScreenMode(pictura::PicturaMainWindow::ScreenMode::Standard);
+    window_->setPanelsHidden(false);
+    column->setRailMode(false);
+    QVERIFY(column->showPanel(panelName, true));
+    QTRY_VERIFY(panel->isVisible());
     auto* preset = panel->findChild<QWidget*>(QStringLiteral("propertiesPreset"));
     auto* channel = panel->findChild<QComboBox*>(QStringLiteral("adjustmentCurveChannel"));
     auto* autoButton = panel->findChild<QPushButton*>(QStringLiteral("propertiesAuto"));
@@ -180,6 +193,7 @@ void CurvesControlsTest::curvesPropertiesLayout()
     auto* input = panel->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveInput"));
     auto* output = panel->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveOutput"));
     QVERIFY(preset && channel && autoButton && plot && endpoints && input && output);
+    QTRY_VERIFY(preset->isVisible() && channel->isVisible() && plot->isVisible());
     const auto bounds = [panel](QWidget* widget) {
         return QRect(widget->mapTo(panel, QPoint()), widget->size());
     };
@@ -190,6 +204,7 @@ void CurvesControlsTest::curvesPropertiesLayout()
     int previousPlotWidth = 0;
     for (const int width : widths) {
         panel->setFixedWidth(width);
+        QTRY_COMPARE(panel->width(), width);
         QCoreApplication::processEvents();
         QVERIFY(bounds(preset).bottom() < bounds(channel).top());
         QVERIFY(bounds(channel).top() <= bounds(autoButton).center().y());
