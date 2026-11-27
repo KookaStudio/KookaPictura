@@ -673,6 +673,68 @@ pub(super) fn path_add_freeform_and_save(
     true
 }
 
+pub(super) fn path_add_magnetic(
+    mut view: Pin<&mut PictureView>,
+    points: &[f64],
+    fastenings: &[i32],
+    close: bool,
+    save: bool,
+    name: &QString,
+) -> bool {
+    let mut points: Vec<(f64, f64)> = points
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&[x, y]| (x, y))
+        .collect();
+    if close && points.len() > 2 && points.first() == points.last() {
+        points.pop();
+    }
+    if points.len() < 2 {
+        return false;
+    }
+    let mut bounds: Vec<usize> = fastenings
+        .iter()
+        .filter_map(|&i| usize::try_from(i).ok())
+        .filter(|&i| i < points.len())
+        .collect();
+    bounds.push(0);
+    bounds.push(points.len() - 1);
+    bounds.sort_unstable();
+    bounds.dedup();
+    let mut reduced = Vec::new();
+    for pair in bounds.windows(2) {
+        let part = pictura_core::path::simplify_freehand(&points[pair[0]..=pair[1]], 0.5);
+        if !reduced.is_empty() {
+            reduced.pop();
+        }
+        reduced.extend(part);
+    }
+    begin_drawing(view.as_mut());
+    let added = edit(view.as_mut(), |path| {
+        path.finish_editing();
+        for &(x, y) in &reduced {
+            path.append_corner(x, y);
+        }
+        if close {
+            path.close_active_subpath();
+        } else {
+            path.finish_editing();
+        }
+        true
+    }) == Some(true);
+    if added && save {
+        {
+            let mut rust = view.as_mut().rust_mut();
+            if rust.active_path == ActivePath::Work {
+                save_work_copy(&mut rust, &name.to_string());
+            }
+        }
+        commit(view, "Freeform Pen");
+    }
+    added
+}
+
 pub(super) fn path_hit_subpath(view: &PictureView, x: f64, y: f64, radius: f64) -> i32 {
     path(view)
         .and_then(|p| p.hit_subpath(x, y, radius.max(0.0)))

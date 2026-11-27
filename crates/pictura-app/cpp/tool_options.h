@@ -182,6 +182,11 @@ struct PenOptions {
     double curveFit = 2.0;
     bool showBoundingBox = false;
     int mode = 0;
+    bool magnetic = false;
+    int magneticWidth = 10;
+    int magneticContrast = 20;
+    int magneticFrequency = 60;
+    bool magneticPressure = false;
 };
 
 // The shape tools' options bar, shared by the six tools: Mode 0 Shape /
@@ -337,6 +342,9 @@ template <typename T> T clampOptions(T value) { return value; }
 inline PenOptions clampOptions(PenOptions options)
 {
     options.curveFit = std::clamp(options.curveFit, 0.5, 10.0);
+    options.magneticWidth = std::clamp(options.magneticWidth, 1, 256);
+    options.magneticContrast = std::clamp(options.magneticContrast, 1, 100);
+    options.magneticFrequency = std::clamp(options.magneticFrequency, 0, 100);
     options.mode = std::clamp(options.mode, 0, 2);
     return options;
 }

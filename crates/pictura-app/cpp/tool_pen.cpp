@@ -12,8 +12,12 @@
 #include "tools.h"
 
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QLineF>
+#include <QtCore/QElapsedTimer>
+#include <QtCore/QPointer>
+#include <QtWidgets/QApplication>
 
 #include <array>
 #include <memory>
@@ -108,6 +112,7 @@ public:
 
     void onDeactivate(ToolServices& ctx) override
     {
+        if (magneticActive_) cancelMagnetic(ctx);
         PictureView* v = ctx.view();
         // A drag cut short by a tool switch still lands as one state.
         if (v && v == pressView_) {
@@ -141,6 +146,7 @@ public:
 
     void onSessionCancelled(ToolServices& ctx) override
     {
+        if (magneticActive_) cancelMagnetic(ctx);
         if (PictureView* press = pressView_) {
             path_gesture_abort(*press);
         }
@@ -155,12 +161,23 @@ public:
         ctx_ = nullptr;
     }
 
-    void onDocumentRefreshed(ToolServices& ctx) override { refreshOverlay(ctx); }
-    void onOptionsChanged(ToolServices& ctx) override { refreshOverlay(ctx); }
+    void onDocumentRefreshed(ToolServices& ctx) override
+    {
+        if (magneticActive_ && magneticView_ != ctx.view()) cancelMagnetic(ctx);
+        refreshOverlay(ctx);
+    }
+    void onOptionsChanged(ToolServices& ctx) override
+    {
+        if (magneticActive_ && !pen_->get().magnetic) cancelMagnetic(ctx);
+        refreshOverlay(ctx);
+    }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         ctx_ = &ctx;
+        if (id_ == ToolId::FreeformPen && (magneticActive_ || pen_->get().magnetic)) {
+            return pressMagnetic(ctx, imagePos, mods);
+        }
         PictureView* v = ctx.view();
         reset();
         if (!v || !v->has_document()) {
@@ -221,6 +238,10 @@ public:
 
     void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
+        if (magneticActive_) {
+            moveMagnetic(ctx, imagePos, mods);
+            return;
+        }
         hover_ = imagePos;
         hovering_ = true;
         PictureView* v = ctx.view();
@@ -266,6 +287,12 @@ public:
 
     void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
+        if (magneticActive_) {
+            if (magneticAltDrag_) fastenMagnetic();
+            magneticPressed_ = magneticAltDrag_ = false;
+            refreshOverlay(ctx);
+            return;
+        }
         PictureView* v = ctx.view();
         PictureView* press = pressView_;
         const Gesture gesture = gesture_;
@@ -331,8 +358,27 @@ public:
     }
 
     // Enter and Esc end the subpath being drawn, leaving it open.
-    bool onFinishPath() override { return finishDrawing(); }
-    bool onEscape() override { return finishDrawing(); }
+    bool onFinishPath() override
+    {
+        if (magneticActive_ && ctx_) { finishMagnetic(*ctx_, false, false); return true; }
+        return finishDrawing();
+    }
+    bool onEscape() override
+    {
+        if (magneticActive_ && ctx_) { cancelMagnetic(*ctx_); return true; }
+        return finishDrawing();
+    }
+    bool onDeletePoint() override
+    {
+        if (!magneticActive_ || !ctx_) return false;
+        if (magneticFastenings_.size() <= 1) { cancelMagnetic(*ctx_); return true; }
+        magneticFastenings_.removeLast();
+        magneticPath_.resize(magneticFastenings_.last() + 1);
+        magneticPreview_.clear();
+        refreshOverlay(*ctx_);
+        return true;
+    }
+    bool gestureInProgress() const override { return magneticActive_; }
 
     // A live gesture is this tool session's one step: Edit Undo cancels the
     // gesture — restoring the pre-press path — before the document history.
@@ -341,6 +387,7 @@ public:
         if (!canToolUndo()) {
             return false;
         }
+        if (magneticActive_ && ctx_) { cancelMagnetic(*ctx_); return true; }
         path_gesture_abort(*pressView_);
         reset();
         if (ctx_) {
@@ -353,13 +400,146 @@ public:
 
     bool canToolUndo() const override
     {
-        return pressView_ != nullptr && gesture_ != Gesture::None;
+        return magneticActive_ || (pressView_ != nullptr && gesture_ != Gesture::None);
     }
 
     bool canToolRedo() const override { return false; }
 
 private:
     enum class Gesture { None, PlacingHandle, Freeform, ConvertHandle, ConvertNewHandles };
+
+    bool pressMagnetic(ToolServices& ctx, const QPointF& pos, Qt::KeyboardModifiers mods)
+    {
+        PictureView* v = ctx.view();
+        if (!v || !v->has_document()) return true;
+        if (!magneticActive_) {
+            if (!magnetic_pen_begin(*v, pen_->get().magneticContrast)) return true;
+            magneticView_ = v;
+            magneticActive_ = true;
+            magneticPath_ = {pos};
+            magneticFastenings_ = {0};
+            magneticLastPress_ = pos;
+            magneticClock_.start();
+            magneticPressed_ = true;
+            ctx.notifyToolSessionChanged();
+            refreshOverlay(ctx);
+            return true;
+        }
+        if (v != magneticView_) { cancelMagnetic(ctx); return true; }
+        const bool doubleClick = magneticClock_.isValid()
+            && magneticClock_.elapsed() <= QApplication::doubleClickInterval()
+            && QLineF(pos, magneticLastPress_).length() <= hitRadius(ctx);
+        if (doubleClick) {
+            finishMagnetic(ctx, true, mods.testFlag(Qt::AltModifier));
+            return true;
+        }
+        if (mods.testFlag(Qt::AltModifier)) {
+            magneticPreview_ = {pos};
+        } else {
+            traceMagnetic(ctx, pos);
+        }
+        fastenMagnetic();
+        magneticLastPress_ = pos;
+        magneticClock_.restart();
+        magneticPressed_ = true;
+        magneticAltDrag_ = false;
+        refreshOverlay(ctx);
+        return true;
+    }
+
+    void traceMagnetic(ToolServices& ctx, const QPointF& target)
+    {
+        magneticPreview_.clear();
+        if (!magneticView_ || magneticPath_.isEmpty()) return;
+        const auto options = pen_->get();
+        int width = options.magneticWidth;
+        if (options.magneticPressure && ctx.hasTabletPressure()) {
+            width = qMax(1, qRound(width * (1.0 - 0.9 * qBound(0.0, ctx.pressure(), 1.0))));
+        }
+        const QPoint from = magneticPath_.last().toPoint();
+        const QPoint to = target.toPoint();
+        const auto wire = magnetic_trace(*magneticView_, from.x(), from.y(), to.x(), to.y(), width);
+        for (std::size_t i = 2; i + 1 < wire.size(); i += 2) {
+            magneticPreview_.append(QPointF(wire[i], wire[i + 1]));
+        }
+    }
+
+    void moveMagnetic(ToolServices& ctx, const QPointF& pos, Qt::KeyboardModifiers mods)
+    {
+        if (magneticPressed_ && mods.testFlag(Qt::AltModifier)) {
+            magneticAltDrag_ = true;
+            magneticPreview_.append(pos);
+        } else {
+            traceMagnetic(ctx, pos);
+            const int frequency = pen_->get().magneticFrequency;
+            if (frequency > 0 && magneticPreview_.size() >= qMax(8, 108 - frequency)) {
+                fastenMagnetic();
+            }
+        }
+        refreshOverlay(ctx);
+    }
+
+    void fastenMagnetic()
+    {
+        magneticPath_ += magneticPreview_;
+        magneticPreview_.clear();
+        if (!magneticPath_.isEmpty() && magneticFastenings_.last() != magneticPath_.size() - 1) {
+            magneticFastenings_.append(int(magneticPath_.size()) - 1);
+        }
+    }
+
+    void cancelMagnetic(ToolServices& ctx)
+    {
+        if (magneticView_) magnetic_end(*magneticView_);
+        magneticActive_ = magneticPressed_ = magneticAltDrag_ = false;
+        magneticView_ = nullptr;
+        magneticPath_.clear();
+        magneticPreview_.clear();
+        magneticFastenings_.clear();
+        magneticClock_.invalidate();
+        ctx.notifyToolSessionChanged();
+        refreshOverlay(ctx);
+    }
+
+    void finishMagnetic(ToolServices& ctx, bool close, bool straight)
+    {
+        PictureView* v = magneticView_;
+        if (!v || v != ctx.view()) { cancelMagnetic(ctx); return; }
+        fastenMagnetic();
+        if (close && !straight && magneticPath_.size() > 1) {
+            traceMagnetic(ctx, magneticPath_.first());
+            magneticPath_ += magneticPreview_;
+            magneticPreview_.clear();
+        }
+        std::vector<double> flat;
+        for (const QPointF& p : magneticPath_) { flat.push_back(p.x()); flat.push_back(p.y()); }
+        std::vector<std::int32_t> fastenings;
+        for (int i : magneticFastenings_) fastenings.push_back(i);
+        magnetic_end(*v);
+        magneticView_ = nullptr;
+        magneticActive_ = false;
+        path_set_layer_target(*v, false);
+        path_gesture_begin(*v);
+        const auto mode = pen_->get().mode;
+        const int active = paths_active(*v);
+        const bool workTarget = active == -1 || active == -2;
+        const bool added = path_add_magnetic(*v, {flat.data(), flat.size()},
+            {fastenings.data(), fastenings.size()}, close, mode == 1 || !workTarget,
+            paths_next_name(*v));
+        bool landed = added;
+        if (added && workTarget && mode == 0) {
+            const QString created = shape_add_work_path_layer(*v, ctx.foreground().rgba(), "Freeform Pen");
+            landed = !created.isEmpty();
+            if (landed) ctx.notifyLayerCreated(created);
+        } else if (added && workTarget && mode == 2) {
+            landed = paths_stroke_magnetic(*v, ctx.foreground().rgba(), paint_ ? paint_->size() : 5,
+                paint_ ? paint_->hardness() : 100, paint_ ? paint_->opacity() : 100,
+                paint_ ? paint_->flow() : 100, paint_ ? paint_->spacing() : 25);
+        }
+        if (!landed) path_gesture_abort(*v);
+        path_gesture_end(*v);
+        cancelMagnetic(ctx);
+    }
 
     void pressPen(ToolServices& ctx, PictureView& v, const QPointF& pos,
                   Qt::KeyboardModifiers mods, double radius)
@@ -511,7 +691,12 @@ private:
             }
             overlay.activeAnchor = before - 1;
         }
-        if (gesture_ == Gesture::Freeform && trail_.size() > 1) {
+        if (magneticActive_ && !magneticPath_.isEmpty()) {
+            overlay.preview.moveTo(magneticPath_.first());
+            for (int i = 1; i < magneticPath_.size(); ++i) overlay.preview.lineTo(magneticPath_.at(i));
+            for (const QPointF& p : magneticPreview_) overlay.preview.lineTo(p);
+            for (int i : magneticFastenings_) overlay.anchors.append(magneticPath_.at(i));
+        } else if (gesture_ == Gesture::Freeform && trail_.size() > 1) {
             overlay.preview.moveTo(trail_.first());
             for (int i = 1; i < trail_.size(); ++i) {
                 overlay.preview.lineTo(trail_.at(i));
@@ -524,6 +709,15 @@ private:
         canvas->setPathOverlay(overlay);
     }
 
+    bool magneticActive_ = false;
+    bool magneticPressed_ = false;
+    bool magneticAltDrag_ = false;
+    QPointer<PictureView> magneticView_;
+    QList<QPointF> magneticPath_;
+    QList<QPointF> magneticPreview_;
+    QList<int> magneticFastenings_;
+    QPointF magneticLastPress_;
+    QElapsedTimer magneticClock_;
     const ToolId id_;
     ToolServices* ctx_ = nullptr;
     Gesture gesture_ = Gesture::None;

@@ -92,6 +92,11 @@ template <typename F> void fields(PenOptions& o, F&& f)
     f("curveFit", o.curveFit);
     f("showBoundingBox", o.showBoundingBox);
     f("mode", o.mode);
+    f("magnetic", o.magnetic);
+    f("magneticWidth", o.magneticWidth);
+    f("magneticContrast", o.magneticContrast);
+    f("magneticFrequency", o.magneticFrequency);
+    f("magneticPressure", o.magneticPressure);
 }
 
 template <typename F> void fields(ShapeOptions& o, F&& f)

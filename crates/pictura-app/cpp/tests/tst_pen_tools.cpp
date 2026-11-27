@@ -9,6 +9,9 @@
 #include "selftest_paint_fixture.h"
 
 #include "api/layers_bridge.h"
+#include "api/document_bridge.h"
+#include "api/selection_bridge.h"
+#include "api/paint_bridge.h"
 
 #include <QtGui/QKeyEvent>
 #include <QtWidgets/QCheckBox>
@@ -82,6 +85,19 @@ private slots:
     void penPixelsMode();
     void penAutoAddDelete();
     void freeformPenTool();
+    void magneticOptions();
+    void magneticPressure();
+    void magneticOpen();
+    void magneticCancel();
+    void magneticTrace();
+    void magneticFrequency();
+    void magneticDepth();
+    void magneticSwitch();
+    void magneticClose();
+    void magneticAlt();
+    void magneticModes();
+    void magneticQuickMask();
+    void magneticActivePaths();
     void anchorPointTools();
     void convertPointTool();
     void pathsPanelListsTheWorkPath();
@@ -378,6 +394,466 @@ void PenToolsTest::freeformPenTool()
     const int clicked = f.view->history_index();
     click(f, QPointF(70, 20));
     QCOMPARE(f.view->history_index(), clicked);
+}
+
+void PenToolsTest::magneticOptions()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_options"));
+    QVERIFY(f.ok());
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    group->set({});
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    auto* magnetic = visibleChild<QCheckBox>(frame, QStringLiteral("optionsFreeformPenMagnetic"));
+    QVERIFY(magnetic);
+    QVERIFY(!magnetic->isChecked());
+    magnetic->setChecked(true);
+    auto* width = visibleChild<pictura::NumericField>(frame, QStringLiteral("optionsMagneticPenWidth"));
+    auto* contrast = visibleChild<pictura::NumericField>(frame, QStringLiteral("optionsMagneticPenContrast"));
+    auto* frequency = visibleChild<pictura::NumericField>(frame, QStringLiteral("optionsMagneticPenFrequency"));
+    auto* pressure = visibleChild<QCheckBox>(frame, QStringLiteral("optionsMagneticPenPressure"));
+    QVERIFY(width && contrast && frequency && pressure);
+    QCOMPARE(width->value(), 10.0);
+    QCOMPARE(contrast->value(), 20.0);
+    QCOMPARE(frequency->value(), 60.0);
+    QVERIFY(!pressure->isChecked());
+    auto* edit = width->findChild<QLineEdit*>();
+    QVERIFY(edit);
+    edit->setFocus();
+    edit->selectAll();
+    QTest::keyClicks(edit, "256");
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(group->get().magneticWidth, 256);
+    QVERIFY(f.tools->applyBrushShortcut(Qt::Key_BracketRight, 0, false));
+    QCOMPARE(width->value(), 256.0);
+    QVERIFY(f.tools->applyBrushShortcut(Qt::Key_BracketLeft, 0, false));
+    QCOMPARE(width->value(), 255.0);
+    edit->selectAll();
+    QTest::keyClicks(edit, "1");
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(group->get().magneticWidth, 1);
+    QVERIFY(f.tools->applyBrushShortcut(Qt::Key_BracketLeft, 0, false));
+    QCOMPARE(width->value(), 1.0);
+    group->set({});
+}
+
+void PenToolsTest::magneticPressure()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    for (int y = 50; y < 100; ++y) {
+        for (int x = 0; x < 100; ++x) seed.setPixelColor(x, y, Qt::black);
+    }
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_pressure"));
+    QVERIFY(f.ok());
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 1;
+    options.magnetic = true;
+    options.magneticWidth = 20;
+    options.magneticFrequency = 0;
+    options.magneticPressure = true;
+    group->set(options);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    f.canvas->setFocus();
+    for (int i = 0; i < 3; ++i) {
+        click(f, QPointF(10, 40));
+        f.tools->setTabletPressureAvailable(i != 2);
+        f.tools->setPressure(i == 0 ? 0.0 : 1.0);
+        f.canvas->mouseMoved(QPointF(90, 40));
+        QTest::keyClick(f.canvas, Qt::Key_Return);
+    }
+    auto maximumY = [&](int subpath) {
+        double result = 0;
+        for (int i = 0; i < points(f, subpath); ++i) result = qMax(result, point(f, subpath, i).at(1));
+        return result;
+    };
+    QVERIFY(maximumY(0) >= 48);
+    QVERIFY(maximumY(1) <= 42);
+    QVERIFY(maximumY(2) >= 48);
+    f.tools->setTabletPressureAvailable(false);
+    group->set({});
+}
+
+void PenToolsTest::magneticOpen()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_open"));
+    QVERIFY(f.ok());
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 1;
+    options.magnetic = true;
+    group->set(options);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    const int before = f.view->history_index();
+    click(f, QPointF(10, 10));
+    f.canvas->mouseMoved(QPointF(50, 10));
+    QVERIFY(f.canvas->pathOverlayHasPreviewForTest());
+    f.canvas->setFocus();
+    QTest::keyClick(f.canvas, Qt::Key_Return);
+    QCOMPARE(f.view->history_index(), before + 1);
+    QCOMPARE(pictura::paths_saved_count(*f.view), 1);
+    QCOMPARE(pictura::path_subpath_count(*f.view), 1);
+    QVERIFY(!pictura::path_subpath_closed(*f.view, 0));
+    group->set({});
+}
+
+void PenToolsTest::magneticCancel()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_cancel"));
+    QVERIFY(f.ok());
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 1;
+    options.magnetic = true;
+    group->set(options);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    f.canvas->setFocus();
+    const int before = f.view->history_index();
+    for (int key : {Qt::Key_Escape, Qt::Key_Z}) {
+        click(f, QPointF(10, 10));
+        f.canvas->mouseMoved(QPointF(50, 10));
+        QVERIFY(f.canvas->pathOverlayHasPreviewForTest());
+        QTest::keyClick(f.canvas, Qt::Key(key), key == Qt::Key_Z ? Qt::ControlModifier : Qt::NoModifier);
+        QVERIFY(!f.canvas->pathOverlayHasPreviewForTest());
+        QCOMPARE(f.view->history_index(), before);
+        QCOMPARE(pictura::path_subpath_count(*f.view), 0);
+    }
+    group->set({});
+}
+
+void PenToolsTest::magneticTrace()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    for (int y = 50; y < 100; ++y) {
+        for (int x = 0; x < 100; ++x) seed.setPixelColor(x, y, Qt::black);
+    }
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_trace"));
+    QVERIFY(f.ok());
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 1;
+    options.magnetic = true;
+    options.magneticFrequency = 0;
+    group->set(options);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    click(f, QPointF(10, 45));
+    f.canvas->mouseMoved(QPointF(40, 45));
+    click(f, QPointF(40, 45));
+    f.canvas->mouseMoved(QPointF(70, 45));
+    click(f, QPointF(70, 45));
+    f.canvas->setFocus();
+    QTest::keyClick(f.canvas, Qt::Key_Delete);
+    QTest::keyClick(f.canvas, Qt::Key_Return);
+    QVERIFY(points(f, 0) >= 2);
+    bool retained = false;
+    bool snapped = false;
+    for (int i = 0; i < points(f, 0); ++i) {
+        const auto p = point(f, 0, i);
+        retained = retained || (std::abs(p.at(0) - 40) <= 2 && std::abs(p.at(1) - 45) <= 2);
+        snapped = snapped || p.at(1) >= 48;
+        QVERIFY(p.at(0) <= 42);
+    }
+    QVERIFY(retained);
+    QVERIFY(snapped);
+    group->set({});
+}
+
+void PenToolsTest::magneticFrequency()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(200, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_frequency"));
+    QVERIFY(f.ok());
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 1;
+    options.magnetic = true;
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    f.canvas->setFocus();
+    for (int frequency : {0, 100}) {
+        options.magneticFrequency = frequency;
+        group->set(options);
+        click(f, QPointF(10, frequency ? 60 : 20));
+        for (int x = 20; x <= 180; x += 10) f.canvas->mouseMoved(QPointF(x, frequency ? 60 : 20));
+        QTest::keyClick(f.canvas, Qt::Key_Return);
+    }
+    QVERIFY(points(f, 1) > points(f, 0));
+    group->set({});
+}
+
+void PenToolsTest::magneticDepth()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_depth"));
+    QVERIFY(f.ok());
+    QVERIFY(pictura::convert_image_depth(*f.view, 32));
+    QVERIFY(!pictura::magnetic_begin(*f.view, 20));
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 1;
+    options.magnetic = true;
+    group->set(options);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    click(f, QPointF(10, 10));
+    f.canvas->mouseMoved(QPointF(50, 10));
+    QVERIFY(f.canvas->pathOverlayHasPreviewForTest());
+    f.canvas->setFocus();
+    QTest::keyClick(f.canvas, Qt::Key_Return);
+    QCOMPARE(pictura::path_subpath_count(*f.view), 1);
+    group->set({});
+}
+
+void PenToolsTest::magneticSwitch()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_switch"));
+    QVERIFY(f.ok());
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 1;
+    options.magnetic = true;
+    group->set(options);
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    click(f, QPointF(10, 10));
+    f.canvas->mouseMoved(QPointF(50, 10));
+    QVERIFY(f.canvas->pathOverlayHasPreviewForTest());
+    frame.setActiveTool(pictura::ToolId::Move);
+    QVERIFY(!f.canvas->pathOverlayHasPreviewForTest());
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    click(f, QPointF(10, 20));
+    f.canvas->mouseMoved(QPointF(50, 20));
+    QVERIFY(f.canvas->pathOverlayHasPreviewForTest());
+    {
+        Fixture other(frame, seed, QStringLiteral("pictura_magnetic_pen_switch_other"));
+        QVERIFY(other.ok());
+        QVERIFY(!f.canvas->pathOverlayHasPreviewForTest());
+        click(other, QPointF(10, 30));
+        other.canvas->mouseMoved(QPointF(50, 30));
+        QVERIFY(other.canvas->pathOverlayHasPreviewForTest());
+    }
+    group->set({});
+}
+
+void PenToolsTest::magneticClose()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    for (int y = 20; y <= 80; ++y) {
+        for (int x = 20; x <= 80; ++x) seed.setPixelColor(x, y, Qt::black);
+    }
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_close"));
+    QVERIFY(f.ok());
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 1;
+    options.magnetic = true;
+    group->set(options);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    for (int i = 0; i < 2; ++i) {
+        click(f, QPointF(20, 20));
+        f.canvas->mouseMoved(QPointF(80, 20));
+        click(f, QPointF(80, 20));
+        f.canvas->mouseMoved(QPointF(80, 80));
+        click(f, QPointF(80, 80), i ? Qt::AltModifier : Qt::NoModifier);
+        click(f, QPointF(80, 80), i ? Qt::AltModifier : Qt::NoModifier);
+        QVERIFY(pictura::path_subpath_closed(*f.view, i));
+    }
+    QVERIFY(points(f, 0) > points(f, 1));
+    group->set({});
+}
+
+void PenToolsTest::magneticAlt()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_alt"));
+    QVERIFY(f.ok());
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 1;
+    options.magnetic = true;
+    group->set(options);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    click(f, QPointF(10, 10));
+    QTest::keyPress(f.canvas, Qt::Key_Alt, Qt::AltModifier);
+    f.drag({QPointF(20, 10), QPointF(30, 30), QPointF(40, 10)}, Qt::AltModifier);
+    QTest::keyRelease(f.canvas, Qt::Key_Alt, Qt::NoModifier);
+    click(f, QPointF(70, 20), Qt::AltModifier);
+    f.canvas->setFocus();
+    QTest::keyClick(f.canvas, Qt::Key_Return);
+    bool bend = false;
+    for (int i = 0; i < points(f, 0); ++i) {
+        const auto p = point(f, 0, i);
+        bend = bend || (std::abs(p.at(0) - 30) < 2 && std::abs(p.at(1) - 30) < 2);
+    }
+    QVERIFY(bend);
+    const auto last = point(f, 0, points(f, 0) - 1);
+    QVERIFY(std::abs(last.at(0) - 70) < 2 && std::abs(last.at(1) - 20) < 2);
+    group->set({});
+}
+
+void PenToolsTest::magneticModes()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    for (int mode = 0; mode < 3; ++mode) {
+        Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_mode_%1").arg(mode));
+        QVERIFY(f.ok());
+        auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+        auto options = group->get();
+        options.mode = mode;
+        options.magnetic = true;
+        group->set(options);
+        frame.show();
+        QVERIFY(QTest::qWaitForWindowActive(&frame));
+        frame.setActiveTool(pictura::ToolId::FreeformPen);
+        QVERIFY(pictura::path_append_corner(*f.view, 10, 85, false));
+        pictura::path_commit_anchor(*f.view);
+        QVERIFY(pictura::path_append_corner(*f.view, 70, 85, false));
+        pictura::path_commit_anchor(*f.view);
+        pictura::path_finish(*f.view);
+        const int originalPoints = points(f, 0);
+        const int before = f.view->history_index();
+        const int layers = f.view->layer_count();
+        click(f, QPointF(10, 10));
+        f.canvas->mouseMoved(QPointF(70, 10));
+        click(f, QPointF(70, 10));
+        f.canvas->mouseMoved(QPointF(70, 70));
+        click(f, QPointF(70, 70));
+        click(f, QPointF(70, 70));
+        QCOMPARE(f.view->history_index(), before + 1);
+        if (mode == 0) QCOMPARE(f.view->layer_count(), layers + 1);
+        if (mode == 1) QCOMPARE(pictura::paths_saved_count(*f.view), 1);
+        if (mode == 2) QVERIFY(f.view->sample_argb(40, 10) != QColor(Qt::white).rgba());
+        QVERIFY(f.view->undo());
+        QCOMPARE(f.view->layer_count(), layers);
+        QCOMPARE(pictura::paths_saved_count(*f.view), 0);
+        QCOMPARE(pictura::path_subpath_count(*f.view), 1);
+        QCOMPARE(points(f, 0), originalPoints);
+        QCOMPARE(f.view->sample_argb(40, 10), QColor(Qt::white).rgba());
+        group->set({});
+    }
+}
+
+void PenToolsTest::magneticQuickMask()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_magnetic_pen_quick_mask"));
+    QVERIFY(f.ok());
+    QVERIFY(pictura::quick_mask_set(*f.view, true));
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+    auto options = group->get();
+    options.mode = 2;
+    options.magnetic = true;
+    options.magneticFrequency = 0;
+    group->set(options);
+    f.tools->setForeground(Qt::black);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    const int before = f.view->history_index();
+    const int coverage = pictura::quick_mask_coverage(*f.view, 40, 40);
+    click(f, QPointF(10, 40));
+    f.canvas->mouseMoved(QPointF(70, 40));
+    f.canvas->setFocus();
+    QTest::keyClick(f.canvas, Qt::Key_Return);
+    QCOMPARE(f.view->history_index(), before + 1);
+    QVERIFY(pictura::quick_mask_coverage(*f.view, 40, 40) < coverage);
+    QVERIFY(f.view->undo());
+    QCOMPARE(pictura::quick_mask_coverage(*f.view, 40, 40), coverage);
+    QCOMPARE(pictura::path_subpath_count(*f.view), 0);
+    group->set({});
+}
+
+void PenToolsTest::magneticActivePaths()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    for (int target = 0; target < 2; ++target) {
+        for (int mode : {0, 2}) {
+            Fixture f(frame, seed, QStringLiteral("pictura_magnetic_active_%1_%2").arg(target).arg(mode));
+            QVERIFY(f.ok());
+            if (target == 0) {
+                QCOMPARE(pictura::paths_new(*f.view, QStringLiteral("Target")), 0);
+            } else {
+                const QString layer = f.view->add_solid_fill(0xff2244aau);
+                QVERIFY(!layer.isEmpty());
+                QVERIFY(pictura::layer_mask_delete_path(*f.view, layer));
+                QVERIFY(f.view->rasterize_fill_content(layer));
+                frame.selectLayerPath(layer);
+                QVERIFY(pictura::vector_mask_add(*f.view, QStringLiteral("reveal-all")));
+                QVERIFY(pictura::paths_set_active(*f.view, -4));
+            }
+            const int active = target == 0 ? 0 : -4;
+            QCOMPARE(pictura::paths_active(*f.view), active);
+            const int originalPaths = pictura::path_subpath_count(*f.view);
+            const int layers = f.view->layer_count();
+            const QRgb originalPixel = f.view->sample_argb(40, 40);
+            auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::FreeformPen);
+            auto options = group->get();
+            options.mode = mode;
+            options.magnetic = true;
+            options.magneticFrequency = 0;
+            group->set(options);
+            frame.show();
+            QVERIFY(QTest::qWaitForWindowActive(&frame));
+            frame.setActiveTool(pictura::ToolId::FreeformPen);
+            const int before = f.view->history_index();
+            click(f, QPointF(10, 40));
+            f.canvas->mouseMoved(QPointF(70, 40));
+            f.canvas->setFocus();
+            QTest::keyClick(f.canvas, Qt::Key_Return);
+            QCOMPARE(f.view->history_index(), before + 1);
+            QCOMPARE(pictura::paths_active(*f.view), active);
+            QCOMPARE(pictura::path_subpath_count(*f.view), originalPaths + 1);
+            QCOMPARE(f.view->layer_count(), layers);
+            QCOMPARE(f.view->sample_argb(40, 40), originalPixel);
+            QVERIFY(f.view->undo());
+            QCOMPARE(pictura::path_subpath_count(*f.view), originalPaths);
+            group->set({});
+        }
+    }
 }
 
 void PenToolsTest::anchorPointTools()

@@ -558,35 +558,6 @@ void ToolController::adjustBrushHardness(int delta)
     paint_->setHardness(paint_->hardness() + delta);
 }
 
-bool ToolController::applyBrushShortcut(int key, quint32 nativeScanCode, bool shift)
-{
-    PictureView* v = view();
-    if (!v) {
-        return false;
-    }
-    if (active_ == ToolId::MagneticLasso) {
-        // `[` / `]` step the detection width by 1 px (Shift has no meaning here).
-        const int step = v->brush_shortcut_delta(key, nativeScanCode, false, true);
-        if (step == 0) {
-            return false;
-        }
-        selection_->setMagneticWidth(selection_->magneticWidth() + (step > 0 ? 1 : -1));
-        return true;
-    }
-    const bool paint = isBrushTool(active_);
-    const int delta = v->brush_shortcut_delta(key, nativeScanCode, shift, paint);
-    if (delta == 0) {
-        return false;
-    }
-    // Magnitude 1 is a diameter step, magnitude 5 a hardness step.
-    if (std::abs(delta) >= 5) {
-        adjustBrushHardness(delta);
-    } else {
-        adjustBrushSize(delta);
-    }
-    return true;
-}
-
 void ToolController::setViewProvider(std::function<PictureView*()> provider)
 {
     viewProvider_ = std::move(provider);
@@ -649,7 +620,11 @@ void ToolController::bindCanvas(ImageView* canvas)
         return;
     }
     connect(canvas_, &ImageView::mousePressed, this, &ToolController::handlePressed);
+    tabletPressureAvailable_ = false;
+    pressure_ = 1.0;
     connect(canvas_, &ImageView::pointerPressure, this, &ToolController::setPressure);
+    connect(canvas_, &ImageView::pointerTabletPressureAvailable, this,
+            &ToolController::setTabletPressureAvailable);
     connect(canvas_, &ImageView::pointerPose, this, &ToolController::setPointerPose);
     connect(canvas_, &ImageView::mouseMoved, this, &ToolController::handleMoved);
     connect(canvas_, &ImageView::modifierKeyChanged, this, &ToolController::handleModifiers);

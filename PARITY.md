@@ -201,7 +201,7 @@ Source list: CS6 toolbox tools (73 catalogue entries) plus named brush-engine, b
 | P-TOOL-40 | Burn | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-41 | Sponge | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-42 | Pen | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-TOOL-43 | Freeform Pen | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
+| P-TOOL-43 | Freeform Pen | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Magnetic edge tracing uses an approximation (#531) | — |
 | P-TOOL-44 | Add Anchor Point | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-45 | Delete Anchor Point | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-46 | Convert Point | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |

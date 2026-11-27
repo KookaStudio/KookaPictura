@@ -380,6 +380,31 @@ pub(super) fn paths_stroke(
     stroked
 }
 
+pub(super) fn paths_stroke_magnetic(
+    mut view: Pin<&mut PictureView>,
+    foreground: u32,
+    diameter: i32,
+    hardness: i32,
+    opacity: i32,
+    flow: i32,
+    spacing: i32,
+) -> bool {
+    let Some(restore) = view.as_mut().rust_mut().session.live.take_path() else {
+        return false;
+    };
+    let stroked = paths_stroke(
+        view.as_mut(),
+        foreground,
+        diameter,
+        hardness,
+        opacity,
+        flow,
+        spacing,
+    );
+    view.as_mut().rust_mut().session.live.set_path(restore);
+    stroked
+}
+
 pub(super) fn paths_make_selection(
     mut view: Pin<&mut PictureView>,
     feather: f64,

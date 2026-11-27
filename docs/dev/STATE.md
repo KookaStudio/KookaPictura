@@ -4,6 +4,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Magnetic Pen, #531** (OpenSpec change `magnetic-pen`, capability
+  `tools/magnetic-pen`). Freeform Pen gains Magnetic, Width, Contrast,
+  Frequency and Pen Pressure controls. Clicks and automatic fastening
+  points trace image edges; Enter ends an open path, double-click closes,
+  and Escape cancels. The edge field is an approximation. Output follows
+  the active Pen mode or path target and commits one undo step. The Pen
+  and pointer-pressure Qt suites passed in the Mac x86-64 Docker build.
 - **Tool Presets panel, #511** (OpenSpec change `tool-presets-panel`;
   capabilities `ui/tool-presets-panel` added, `ui/preset-manager` and
   `codec/preset-libraries` modified). `Window > Panels > Tool Presets` opens a

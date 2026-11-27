@@ -10,14 +10,24 @@ pub(super) fn magnetic_begin(mut view: Pin<&mut PictureView>, contrast: i32) -> 
     view.as_mut().rust_mut().begin_magnetic(contrast)
 }
 
+pub(super) fn magnetic_pen_begin(mut view: Pin<&mut PictureView>, contrast: i32) -> bool {
+    view.as_mut()
+        .rust_mut()
+        .begin_magnetic_field(contrast, true)
+}
+
 impl super::super::state::PictureViewRust {
     /// Build and cache the edge field a magnetic lasso traces. False without a
     /// document, on a 32-bit document, or when another session owns the slot.
     pub(in crate::cxxqt_object) fn begin_magnetic(&mut self, contrast: i32) -> bool {
+        self.begin_magnetic_field(contrast, false)
+    }
+
+    fn begin_magnetic_field(&mut self, contrast: i32, allow_32_bit: bool) -> bool {
         if !self.slot_allows(super::super::document_session::SessionKind::Lasso) {
             return false;
         }
-        if self.document_depth_bits() == 32 {
+        if !allow_32_bit && self.document_depth_bits() == 32 {
             return false;
         }
         let map = {
