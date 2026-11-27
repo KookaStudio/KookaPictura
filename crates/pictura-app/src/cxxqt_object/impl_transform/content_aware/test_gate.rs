@@ -16,9 +16,10 @@ fn gate() -> &'static (Mutex<Gate>, Condvar) {
 }
 pub(super) fn started(id: u64) {
     let (lock, wake) = gate();
-    if let Ok(mut g) = lock.lock()
-        && g.held
-    {
+    let Ok(mut g) = lock.lock() else {
+        return;
+    };
+    if g.held {
         g.started.insert(id);
         wake.notify_all();
     }
@@ -36,9 +37,10 @@ pub(super) fn wait(id: u64) {
 }
 pub(super) fn finished(id: u64) {
     let (lock, wake) = gate();
-    if let Ok(mut g) = lock.lock()
-        && g.held
-    {
+    let Ok(mut g) = lock.lock() else {
+        return;
+    };
+    if g.held {
         g.finished.insert(id);
         wake.notify_all();
     }
