@@ -39,9 +39,18 @@ Both Curves surfaces SHALL support targeted editing and black, gray and white sa
 
 ### Requirement: Automatic Curves correction
 
-Both Curves surfaces SHALL provide Auto for the selected RGB or Gray channel using the existing fixed histogram stretch, discarding 0.1% at each tail. Auto SHALL be disabled for CMYK and Lab. Empty histograms and ranges narrower than two levels SHALL leave the adjustment and history unchanged. No Auto Options are introduced.
+Factory Auto SHALL stretch the selected RGB or Gray channel, discarding 0.1% at each tail. It SHALL be disabled for CMYK and Lab. Empty histograms and ranges narrower than two levels SHALL leave the adjustment and history unchanged. The destructive dialog always uses this factory behavior. Properties SHALL honor saved Auto Correction defaults when present and SHALL continue to open Auto Options from the menu and Alt-click.
 
 #### Scenario: Apply Auto [CURVE-AUTO]
 
-- **WHEN** a user chooses Auto on an RGB or Gray channel with a valid narrower-than-full tonal range
+- **WHEN** a user chooses Auto on an RGB or Gray channel with a valid narrower-than-full tonal range and the factory settings apply
 - **THEN** the selected curve becomes a two-point stretch using the shared bounds and the operation uses the existing preview and commit path
+
+### Requirement: Compact Curves Properties layout
+
+Curves Properties SHALL group presets above a single channel-and-Auto row. A compact tool strip SHALL sit beside a width-responsive square plot with the histogram, grid and curve, with paired input endpoint handles and selected-point Input/Output fields below. The strip SHALL expose targeted editing, three sample tools, point and pencil modes, smoothing and the existing clipping preview with named, theme-aware controls. The clipping button and Properties menu SHALL reflect the same preview state. The normal Auto action SHALL retain the selected-channel factory stretch when there are no saved defaults and honor saved Auto Correction defaults when present. Alt-click and the Properties menu SHALL still open the configured Auto Options dialog. Other adjustment pages and the destructive Curves dialog SHALL retain their layouts.
+
+#### Scenario: Work in a narrow Curves Properties panel [CURVE-PROPERTIES-LAYOUT]
+
+- **WHEN** a user narrows the dock, switches between point and pencil modes, or toggles clipping from the tool strip or menu
+- **THEN** the plot remains square and tracks the available width, controls stay in their functional order, tool state is visible, and both clipping entry points stay synchronized

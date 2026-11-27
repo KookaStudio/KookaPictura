@@ -5,6 +5,8 @@
 #include "api/filters_bridge.h"
 #include "color_models.h"
 #include "curve_widget.h"
+#include "icons.h"
+#include "levels_dialog.h"
 #include "tools.h"
 
 #include <QtCore/QSignalBlocker>
@@ -16,6 +18,7 @@
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
@@ -134,25 +137,37 @@ CurvesControls::CurvesControls(bool dialog, QWidget* parent)
 {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    auto* channelRow = new QHBoxLayout;
+    channelRow_ = new QHBoxLayout;
     channel_ = new QComboBox(this);
     channel_->setObjectName(dialog ? QStringLiteral("curvesChannel") : QStringLiteral("adjustmentCurveChannel"));
-    channelRow->addWidget(channel_, 1);
-    if (!dialog) {
-        auto_ = tool(this, tr("Auto"), QStringLiteral("curvesAuto"));
-        channelRow->addWidget(auto_);
-        connect(auto_, &QToolButton::clicked, this, &CurvesControls::applyAuto);
-    }
-    layout->addLayout(channelRow);
+    channel_->setAccessibleName(tr("Channel"));
+    channelRow_->addWidget(channel_, 1);
+    layout->addLayout(channelRow_);
 
-    auto* graphTools = new QHBoxLayout;
     pencil_ = tool(this, tr("Pencil"), QStringLiteral("curvesPencil"), true);
     smooth_ = tool(this, tr("Smooth"), QStringLiteral("curvesSmooth"));
     target_ = tool(this, tr("On-image"), QStringLiteral("curvesTarget"), true);
-    for (auto* button : {pencil_, smooth_, target_}) {
-        graphTools->addWidget(button);
+    if (dialog) {
+        auto* graphTools = new QHBoxLayout;
+        for (auto* button : {pencil_, smooth_, target_}) {
+            graphTools->addWidget(button);
+        }
+        layout->addLayout(graphTools);
     }
-    layout->addLayout(graphTools);
+
+    auto* plotColumn = layout;
+    QVBoxLayout* rail = nullptr;
+    if (!dialog) {
+        auto* editor = new QHBoxLayout;
+        editor->setSpacing(6);
+        rail = new QVBoxLayout;
+        rail->setSpacing(2);
+        plotColumn = new QVBoxLayout;
+        plotColumn->setSpacing(3);
+        editor->addLayout(rail);
+        editor->addLayout(plotColumn, 1);
+        layout->addLayout(editor);
+    }
 
     graph_ = new CurveWidget(this);
     graph_->setObjectName(dialog ? QStringLiteral("curve") : QStringLiteral("adjustmentCurve"));
@@ -160,26 +175,47 @@ CurvesControls::CurvesControls(bool dialog, QWidget* parent)
     graph_->setShowRamps(true);
     if (dialog) {
         graph_->setFixedSize(graph_->sizeHint() + QSize(32, 32));
+        plotColumn->addWidget(graph_);
+        auto* endpoints = new QGridLayout;
+        black_ = new QSlider(Qt::Horizontal, this);
+        white_ = new QSlider(Qt::Horizontal, this);
+        black_->setObjectName(QStringLiteral("curvesBlackSlider"));
+        white_->setObjectName(QStringLiteral("curvesWhiteSlider"));
+        for (auto* slider : {black_, white_}) {
+            slider->setRange(0, 255);
+            connect(slider, &QSlider::sliderPressed, this, &CurvesControls::gestureStarted);
+            connect(slider, &QSlider::sliderReleased, this, &CurvesControls::gestureEnded);
+        }
+        endpoints->addWidget(new QLabel(tr("Black Input"), this), 0, 0);
+        endpoints->addWidget(black_, 0, 1);
+        endpoints->addWidget(new QLabel(tr("White Input"), this), 1, 0);
+        endpoints->addWidget(white_, 1, 1);
+        plotColumn->addLayout(endpoints);
+        connect(black_, &QSlider::valueChanged, this, [this](int value) {
+            graph_->setEndpoint(false, value, false);
+        });
+        connect(white_, &QSlider::valueChanged, this, [this](int value) {
+            graph_->setEndpoint(true, value, false);
+        });
     } else {
-        graph_->setMinimumSize(180, 180);
+        graph_->useSquareLayout();
+        plotColumn->addWidget(graph_, 0, Qt::AlignTop);
+        endpoints_ = new TriangleSlider(2, this);
+        endpoints_->setObjectName(QStringLiteral("curvesEndpoints"));
+        endpoints_->setAccessibleName(tr("Black and white input endpoints"));
+        endpoints_->setToolTip(tr("Drag an endpoint, or select it with Up/Down and adjust with Left/Right"));
+        endpoints_->setFocusPolicy(Qt::StrongFocus);
+        const auto insets = graph_->plotInsets();
+        endpoints_->setTrackInsets(insets.left(), insets.right());
+        endpoints_->setColor(0, Qt::black);
+        endpoints_->setColor(1, Qt::white);
+        plotColumn->addWidget(endpoints_);
+        connect(endpoints_, &TriangleSlider::dragStarted, this, &CurvesControls::gestureStarted);
+        connect(endpoints_, &TriangleSlider::dragEnded, this, &CurvesControls::gestureEnded);
+        connect(endpoints_, &TriangleSlider::valueChanged, this, [this](int handle, int value) {
+            graph_->setEndpoint(handle == 1, value, false);
+        });
     }
-    layout->addWidget(graph_);
-
-    auto* endpoints = new QGridLayout;
-    black_ = new QSlider(Qt::Horizontal, this);
-    white_ = new QSlider(Qt::Horizontal, this);
-    black_->setObjectName(QStringLiteral("curvesBlackSlider"));
-    white_->setObjectName(QStringLiteral("curvesWhiteSlider"));
-    for (auto* slider : {black_, white_}) {
-        slider->setRange(0, 255);
-        connect(slider, &QSlider::sliderPressed, this, &CurvesControls::gestureStarted);
-        connect(slider, &QSlider::sliderReleased, this, &CurvesControls::gestureEnded);
-    }
-    endpoints->addWidget(new QLabel(tr("Black Input"), this), 0, 0);
-    endpoints->addWidget(black_, 0, 1);
-    endpoints->addWidget(new QLabel(tr("White Input"), this), 1, 0);
-    endpoints->addWidget(white_, 1, 1);
-    layout->addLayout(endpoints);
 
     auto* points = new QHBoxLayout;
     input_ = new QSpinBox(this);
@@ -188,7 +224,9 @@ CurvesControls::CurvesControls(bool dialog, QWidget* parent)
     output_->setObjectName(dialog ? QStringLiteral("curvesOutput") : QStringLiteral("adjustmentCurveOutput"));
     for (auto* field : {input_, output_}) {
         field->setKeyboardTracking(false);
-        field->setMinimumWidth(68);
+        if (dialog) {
+            field->setMinimumWidth(68);
+        }
         connect(field, &QSpinBox::valueChanged, this, [this, field] {
             const auto points = graph_->points();
             const int selected = graph_->selected();
@@ -202,20 +240,64 @@ CurvesControls::CurvesControls(bool dialog, QWidget* parent)
             emit gestureEnded();
         });
     }
-    points->addWidget(new QLabel(tr("Input"), this));
-    points->addWidget(input_);
-    points->addWidget(new QLabel(tr("Output"), this));
-    points->addWidget(output_);
-    layout->addLayout(points);
+    const auto addField = [&](const QString& text, QSpinBox* field) {
+        auto* label = new QLabel(text, this);
+        label->setBuddy(field);
+        field->setAccessibleName(text);
+        if (dialog) {
+            points->addWidget(label);
+            points->addWidget(field);
+        } else {
+            auto* column = new QVBoxLayout;
+            column->setSpacing(2);
+            column->addWidget(label);
+            column->addWidget(field);
+            points->addLayout(column, 1);
+        }
+    };
+    addField(tr("Input"), input_);
+    addField(tr("Output"), output_);
+    plotColumn->addLayout(points);
+    if (!dialog) {
+        plotColumn->addStretch(1);
+    }
 
-    auto* pipettes = new QHBoxLayout;
     blackPick_ = tool(this, tr("Black"), QStringLiteral("curvesBlackPoint"), true);
     grayPick_ = tool(this, tr("Gray"), QStringLiteral("curvesGrayPoint"), true);
     whitePick_ = tool(this, tr("White"), QStringLiteral("curvesWhitePoint"), true);
-    for (auto* button : {blackPick_, grayPick_, whitePick_}) {
-        pipettes->addWidget(button);
+    if (dialog) {
+        auto* pipettes = new QHBoxLayout;
+        for (auto* button : {blackPick_, grayPick_, whitePick_}) {
+            pipettes->addWidget(button);
+        }
+        layout->addLayout(pipettes);
+    } else {
+        point_ = tool(this, tr("Edit points"), QStringLiteral("curvesPointMode"), true);
+        clipping_ = tool(this, tr("Show clipping"), QStringLiteral("curvesClipping"), true);
+        const auto addTool = [&](QToolButton* button, const QString& iconId, const QString& label) {
+            button->setIcon(icon(iconId));
+            button->setIconSize(QSize(15, 15));
+            button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+            button->setToolTip(label);
+            button->setAccessibleName(label);
+            rail->addWidget(button);
+        };
+        addTool(target_, QStringLiteral("curves.target"), tr("Adjust a tone on the image"));
+        addTool(blackPick_, QStringLiteral("curves.blackPoint"), tr("Sample the black point"));
+        addTool(grayPick_, QStringLiteral("curves.grayPoint"), tr("Sample the gray point"));
+        addTool(whitePick_, QStringLiteral("curves.whitePoint"), tr("Sample the white point"));
+        addTool(point_, QStringLiteral("adjustments.curves"), tr("Edit curve points"));
+        addTool(pencil_, QStringLiteral("tool.pencil"), tr("Draw a freehand curve"));
+        addTool(smooth_, QStringLiteral("curves.smooth"), tr("Smooth the freehand curve"));
+        addTool(clipping_, QStringLiteral("curves.clipping"), tr("Show clipping"));
+        rail->addStretch(1);
+        connect(point_, &QToolButton::clicked, this, [this] {
+            disarm();
+            pencil_->setChecked(false);
+            refreshFields();
+        });
+        connect(clipping_, &QToolButton::toggled, this, &CurvesControls::clippingPreviewChanged);
     }
-    layout->addLayout(pipettes);
 
     auto* show = tool(this, tr("Display Options"), QStringLiteral("curvesDisplayToggle"), true);
     show->setChecked(dialog);
@@ -234,7 +316,7 @@ CurvesControls::CurvesControls(bool dialog, QWidget* parent)
     baseline_->setChecked(true);
     int index = 0;
     for (auto* control : {ink_, detailed_, histogram_, baseline_, overlays_, guides_}) {
-        display->addWidget(control, index / 2, index % 2);
+        display->addWidget(control, dialog ? index / 2 : index, dialog ? index % 2 : 0);
         ++index;
         connect(control, &QCheckBox::toggled, this, &CurvesControls::refreshGraph);
     }
@@ -256,8 +338,6 @@ CurvesControls::CurvesControls(bool dialog, QWidget* parent)
     });
     connect(graph_, &CurveWidget::gestureStarted, this, &CurvesControls::gestureStarted);
     connect(graph_, &CurveWidget::gestureEnded, this, &CurvesControls::gestureEnded);
-    connect(black_, &QSlider::valueChanged, this, [this](int value) { graph_->setEndpoint(false, value, false); });
-    connect(white_, &QSlider::valueChanged, this, [this](int value) { graph_->setEndpoint(true, value, false); });
     connect(pencil_, &QToolButton::toggled, this, [this](bool enabled) {
         disarm();
         if (graph_->setPencilEnabled(enabled)) {
@@ -304,9 +384,6 @@ void CurvesControls::setContext(const QString& mode, const CurveHistograms& hist
         }
         ink_->setChecked(mode == QLatin1String("cmyk"));
         ink_->setEnabled(mode != QLatin1String("lab"));
-    }
-    if (auto_) {
-        auto_->setEnabled(autoAvailable());
     }
     refreshGraph();
 }
@@ -363,11 +440,35 @@ void CurvesControls::refreshFields()
         field->setValue(displayCode(qRound((field == input_ ? current.x() : current.y()) * 255)));
     }
     const bool editable = points.size() >= 2 && !pencil_->isChecked();
+    if (endpoints_) {
+        endpoints_->setEnabled(editable);
+        endpoints_->setInvertedAppearance(reversed());
+        if (editable) {
+            const int lo = qRound(255 * points.first().x());
+            const int hi = qRound(255 * points.last().x());
+            const int next = qRound(255 * points[1].x());
+            const int previous = qRound(255 * points[points.size() - 2].x());
+            endpoints_->setRange(0, 0, next - 1);
+            endpoints_->setRange(1, previous + 1, 255);
+            endpoints_->setValue(0, lo);
+            endpoints_->setValue(1, hi);
+        }
+    }
     for (auto* slider : {black_, white_}) {
+        if (!slider) {
+            continue;
+        }
         const QSignalBlocker block(slider);
         slider->setEnabled(editable);
         slider->setInvertedAppearance(reversed());
         slider->setValue(editable ? qRound(255 * (slider == black_ ? points.first().x() : points.last().x())) : 0);
+    }
+    if (point_) {
+        point_->setChecked(!pencil_->isChecked());
+        clipping_->setEnabled(autoAvailable());
+    }
+    if (auto_) {
+        auto_->setEnabled(autoAvailable());
     }
     smooth_->setEnabled(graph_->hasDenseCurve());
     target_->setEnabled(tools_ && editable);
@@ -425,6 +526,23 @@ void CurvesControls::applyAuto()
         emit curveChanged(channel(), points);
         emit gestureEnded();
         reload();
+    }
+}
+
+void CurvesControls::setAutoButton(QPushButton* button)
+{
+    auto_ = button;
+    if (auto_) {
+        channelRow_->addWidget(auto_);
+        auto_->setEnabled(autoAvailable());
+    }
+}
+
+void CurvesControls::setClippingPreview(bool enabled)
+{
+    if (clipping_) {
+        const QSignalBlocker block(clipping_);
+        clipping_->setChecked(enabled && clipping_->isEnabled());
     }
 }
 

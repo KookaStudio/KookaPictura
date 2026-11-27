@@ -24,3 +24,7 @@ Implement the secondary controls on both Curves surfaces. Preserve existing spli
 - Properties picks composite a one-pixel prefix and enter the innermost isolated group before sampling. A clipped adjustment can see an isolated clipping-run backdrop that this prefix does not reproduce. Complex effects can also expand work beyond the requested pixel. Histograms remain based on the displayed composite when the Properties target opens.
 - On edit, a complete, recognized version-4 `Crv ` duplicate at the legacy-record boundary is removed. Malformed, unsupported or unrecognized trailing records are preserved and may remain stale for external readers.
 - CMYK and Lab are displayed in their own units. Their available precision is governed by the document's RGB-backed editing representation. The mode transform is an approximation and cannot recover source component information lost in RGB conversion.
+
+## Properties layout follow-up
+
+Keep the inner editor named and keyboard-accessible with existing Pictura widgets. Move the configured Properties Auto button into the channel row, retaining Alt-click, saved defaults and the menu. Without an override, normal Curves Auto uses the selected channel's factory stretch. Use one endpoint track with two handles and draw the plot at the width available beside the strip. Share the existing Properties clipping preview with its menu, reset it on target changes, and keep the dialog layout independent. Reuse Pictura icons and register original theme-tinted icons for missing tools.

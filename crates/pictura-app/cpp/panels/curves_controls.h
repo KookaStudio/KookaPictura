@@ -11,6 +11,8 @@
 
 class QCheckBox;
 class QComboBox;
+class QHBoxLayout;
+class QPushButton;
 class QSlider;
 class QSpinBox;
 class QToolButton;
@@ -20,6 +22,7 @@ namespace pictura {
 class CurveWidget;
 class PictureView;
 class ToolController;
+class TriangleSlider;
 
 using CurveHistogram = std::array<int, 256>;
 using CurveHistograms = std::array<CurveHistogram, 5>;
@@ -45,6 +48,8 @@ public:
     void setTargeting(bool enabled);
     int channel() const;
     void applyAuto();
+    void setAutoButton(QPushButton* button);
+    void setClippingPreview(bool enabled);
     bool autoAvailable() const;
     void toggleDisplayOptions();
     CurveWidget* graph() const { return graph_; }
@@ -52,6 +57,7 @@ public:
 signals:
     void curveChanged(int channel, const QString& points);
     void grayPointPicked(const QColor& color);
+    void clippingPreviewChanged(bool enabled);
     void gestureStarted();
     void gestureEnded();
 
@@ -67,6 +73,7 @@ private:
     QString mode_;
     CurveHistograms histograms_{};
     QComboBox* channel_ = nullptr;
+    QHBoxLayout* channelRow_ = nullptr;
     CurveWidget* graph_ = nullptr;
     QWidget* display_ = nullptr;
     QCheckBox* ink_ = nullptr;
@@ -85,7 +92,10 @@ private:
     QToolButton* blackPick_ = nullptr;
     QToolButton* grayPick_ = nullptr;
     QToolButton* whitePick_ = nullptr;
-    QToolButton* auto_ = nullptr;
+    QPushButton* auto_ = nullptr;
+    QToolButton* point_ = nullptr;
+    QToolButton* clipping_ = nullptr;
+    TriangleSlider* endpoints_ = nullptr;
     CurveSource source_;
     QPointer<ToolController> tools_;
     CanvasSample sample_;

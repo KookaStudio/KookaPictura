@@ -18,6 +18,7 @@
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
@@ -103,6 +104,9 @@ void AdjustmentControls::insert(QWidget* widget)
 
 void AdjustmentControls::clear()
 {
+    if (curves_ && curvesAutoButton_) {
+        curvesAutoButton_->setParent(parentWidget());
+    }
     while (layout_->count() > 1) {
         QLayoutItem* item = layout_->takeAt(0);
         delete item->widget();
@@ -401,12 +405,14 @@ void AdjustmentControls::setCurvesContext(const QString& mode, const CurveHistog
 void AdjustmentControls::addCurves()
 {
     curves_ = new CurvesControls(false, this);
+    curves_->setAutoButton(curvesAutoButton_);
     curves_->setCurveSource(curveSource_);
     curves_->setContext(curveMode_, curveHistograms_);
     curves_->setCanvas(curveTools_, curveSample_);
     insert(curves_);
     connect(curves_, &CurvesControls::curveChanged, this, &AdjustmentControls::curveChanged);
     connect(curves_, &CurvesControls::grayPointPicked, this, &AdjustmentControls::grayPointPicked);
+    connect(curves_, &CurvesControls::clippingPreviewChanged, this, &AdjustmentControls::curvesClippingChanged);
     connect(curves_, &CurvesControls::gestureStarted, this, &AdjustmentControls::curveGestureStarted);
     connect(curves_, &CurvesControls::gestureEnded, this, &AdjustmentControls::gestureEnded);
     auto* channels = curves_->findChild<QComboBox*>(QStringLiteral("adjustmentCurveChannel"));

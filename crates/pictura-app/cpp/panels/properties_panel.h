@@ -119,6 +119,8 @@ private:
     // Apply a preset block as one "Modify … Layer" state.
     void applyPresetBlock(const QByteArray& block);
     QPushButton* makeAutoButton(QWidget* parent);
+    void placeAutoButton();
+    void setClippingPreview(bool enabled);
     void applyAuto(bool showOptions);
     void savePreset();
     void loadPreset();

@@ -48,9 +48,13 @@ public:
     void setValue(int index, int value);
     void setColor(int index, const QColor& color);
     int value(int index) const;
+    void setTrackInsets(int left, int right);
+    void setInvertedAppearance(bool inverted);
 
 signals:
     void valueChanged(int index, int value);
+    void dragStarted();
+    void dragEnded();
     void clippingThumbChanged(int index);
 
 protected:
@@ -58,6 +62,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     bool event(QEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
 
@@ -75,7 +80,11 @@ private:
         QColor color;
     };
     QVector<Thumb> thumbs_;
+    int leftInset_ = LevelsStrip::kInset;
+    int rightInset_ = LevelsStrip::kInset + 1;
+    int keyboardThumb_ = 0;
     int dragging_ = -1;
+    bool inverted_ = false;
     bool clipping_ = false;
 };
 

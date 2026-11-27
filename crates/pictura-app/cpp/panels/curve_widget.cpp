@@ -158,6 +158,19 @@ CurveWidget::CurveWidget(QWidget* parent)
     resetCurve();
 }
 
+void CurveWidget::useSquareLayout()
+{
+    QSizePolicy policy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    policy.setHeightForWidth(true);
+    setSizePolicy(policy);
+    setMinimumSize(96, 96);
+}
+
+int CurveWidget::heightForWidth(int width) const
+{
+    return sizePolicy().hasHeightForWidth() ? width : QWidget::heightForWidth(width);
+}
+
 QSize CurveWidget::sizeHint() const
 {
     const int extra = showRamps_ ? int(kRamp + kGap) : 0;
@@ -426,15 +439,20 @@ void CurveWidget::selectFirstPoint()
     if (!points_.isEmpty()) select(0);
 }
 
+QMargins CurveWidget::plotInsets() const
+{
+    // An endpoint's square overhangs the face by 4 px.
+    constexpr int inset = 5;
+    const int ramp = showRamps_ ? int(kRamp + kGap) : inset;
+    return {ramp, inset, inset, ramp};
+}
+
 QRectF CurveWidget::plot() const
 {
-    // An endpoint's square overhangs the face by 4 px, so inset by that much.
-    constexpr qreal inset = 5.0;
-    const qreal left = showRamps_ ? kRamp + kGap : inset;
-    const qreal bottom = showRamps_ ? kRamp + kGap : inset;
-    const qreal side =
-        std::max<qreal>(1.0, std::min(width() - left - inset, height() - bottom - inset));
-    return {left, inset, side, side};
+    const auto insets = plotInsets();
+    const int side = std::max(1, std::min(width() - insets.left() - insets.right(),
+                                          height() - insets.top() - insets.bottom()));
+    return QRectF(insets.left(), insets.top(), side, side);
 }
 
 QPointF CurveWidget::toWidget(QPointF p) const

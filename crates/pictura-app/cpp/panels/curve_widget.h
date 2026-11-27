@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QMargins>
 #include <QtCore/QPointF>
 #include <QtCore/QPair>
 #include <QtCore/QRectF>
@@ -81,6 +82,9 @@ public:
     bool selectTone(int input);
     int outputAt(int input) const;
 
+    void useSquareLayout();
+    QMargins plotInsets() const;
+    int heightForWidth(int width) const override;
     QSize sizeHint() const override;
 
 signals:

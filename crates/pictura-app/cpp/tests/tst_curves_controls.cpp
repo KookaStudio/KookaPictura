@@ -6,16 +6,20 @@
 #include "curves_dialog.h"
 #include "frame.h"
 #include "image_view.h"
+#include "levels_dialog.h"
 #include "panels/curve_widget.h"
 #include "panels/layers_panel.h"
 #include "panels/properties_panel.h"
 #include "qt_test_support.h"
 #include "tools.h"
 
+#include <QtCore/QScopeGuard>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QScrollBar>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
@@ -27,6 +31,7 @@ private slots:
     void initTestCase();
     void cleanup();
     void curvesDisplayOnBothSurfaces();
+    void curvesPropertiesLayout();
     void curvesModeChannels();
     void curvesPencilHistory();
     void curvesCanvasSampling();
@@ -124,8 +129,18 @@ void CurvesControlsTest::curvesDisplayOnBothSurfaces()
         auto* white = owner.findChild<QSlider*>(QStringLiteral("curvesWhiteSlider"));
         auto* grid = owner.findChild<QCheckBox*>(QStringLiteral("curvesDetailedGrid"));
         auto* overlays = owner.findChild<QCheckBox*>(QStringLiteral("curvesOverlays"));
-        QVERIFY(curve && white && grid && overlays);
-        white->setValue(243);
+        auto* endpoints = owner.findChild<pictura::TriangleSlider*>(QStringLiteral("curvesEndpoints"));
+        QVERIFY(curve && (white || endpoints) && grid && overlays);
+        const auto moveWhite = [&](int value) {
+            if (white) {
+                white->setValue(value);
+            } else {
+                endpoints->setValue(1, value);
+                QVERIFY(QMetaObject::invokeMethod(endpoints, "valueChanged",
+                                                  Q_ARG(int, 1), Q_ARG(int, value)));
+            }
+        };
+        moveWhite(243);
         QCOMPARE(curve->outputAt(243), 255);
         QCOMPARE(curve->outputAt(250), 255);
         const QString before = curve->pointsText();
@@ -133,7 +148,7 @@ void CurvesControlsTest::curvesDisplayOnBothSurfaces()
         overlays->toggle();
         QCOMPARE(curve->pointsText(), before);
         curve->setPointsText(QStringLiteral("0,33 255,211"));
-        white->setValue(230);
+        moveWhite(230);
         QCOMPARE(qRound(curve->points().last().y() * 255), 211);
     };
     editAndCheck(*dialog, QStringLiteral("curve"));
@@ -142,6 +157,125 @@ void CurvesControlsTest::curvesDisplayOnBothSurfaces()
     QVERIFY(panel);
     editAndCheck(*panel, QStringLiteral("adjustmentCurve"));
     panel->flushPending();
+}
+
+void CurvesControlsTest::curvesPropertiesLayout()
+{
+    QVERIFY(openPatch());
+    auto* panel = addCurves();
+    QVERIFY(panel);
+    window_->show();
+    const QSize minimum = panel->minimumSize();
+    const QSize maximum = panel->maximumSize();
+    const auto restore = qScopeGuard([&] {
+        panel->setMinimumSize(minimum);
+        panel->setMaximumSize(maximum);
+        window_->hide();
+    });
+    auto* preset = panel->findChild<QWidget*>(QStringLiteral("propertiesPreset"));
+    auto* channel = panel->findChild<QComboBox*>(QStringLiteral("adjustmentCurveChannel"));
+    auto* autoButton = panel->findChild<QPushButton*>(QStringLiteral("propertiesAuto"));
+    auto* plot = panel->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve"));
+    auto* endpoints = panel->findChild<pictura::TriangleSlider*>(QStringLiteral("curvesEndpoints"));
+    auto* input = panel->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveInput"));
+    auto* output = panel->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveOutput"));
+    QVERIFY(preset && channel && autoButton && plot && endpoints && input && output);
+    const auto bounds = [panel](QWidget* widget) {
+        return QRect(widget->mapTo(panel, QPoint()), widget->size());
+    };
+    const auto button = [panel](const char* name) {
+        return panel->findChild<QToolButton*>(QString::fromLatin1(name));
+    };
+    const int widths[] = {244, 308};
+    int previousPlotWidth = 0;
+    for (const int width : widths) {
+        panel->setFixedWidth(width);
+        QCoreApplication::processEvents();
+        QVERIFY(bounds(preset).bottom() < bounds(channel).top());
+        QVERIFY(bounds(channel).top() <= bounds(autoButton).center().y());
+        QVERIFY(bounds(autoButton).top() <= bounds(channel).center().y());
+        QVERIFY(bounds(channel).bottom() < bounds(plot).top());
+        QVERIFY(qAbs(plot->width() - plot->height()) <= 1);
+        QVERIFY(plot->width() >= width - 90);
+        QVERIFY(plot->width() > previousPlotWidth);
+        previousPlotWidth = plot->width();
+        QVERIFY(bounds(plot).bottom() < bounds(endpoints).top());
+        QVERIFY(bounds(endpoints).bottom() < bounds(input).top());
+        QCOMPARE(bounds(input).top(), bounds(output).top());
+        for (auto* bar : panel->findChildren<QScrollBar*>()) {
+            if (bar->orientation() == Qt::Horizontal) {
+                QCOMPARE(bar->maximum(), 0);
+            }
+        }
+    }
+
+    int previousTop = -1;
+    for (const char* name : {"curvesTarget", "curvesBlackPoint", "curvesGrayPoint",
+                             "curvesWhitePoint", "curvesPointMode", "curvesPencil",
+                             "curvesSmooth", "curvesClipping"}) {
+        auto* tool = button(name);
+        QVERIFY(tool);
+        QVERIFY(!tool->toolTip().isEmpty() && !tool->accessibleName().isEmpty());
+        for (auto mode : {QIcon::Normal, QIcon::Disabled}) {
+            const QImage glyph = tool->icon().pixmap(QSize(16, 16), mode).toImage();
+            bool visibleInk = false;
+            for (int y = 0; y < glyph.height() && !visibleInk; ++y) {
+                for (int x = 0; x < glyph.width(); ++x) {
+                    visibleInk |= qAlpha(glyph.pixel(x, y)) > 0;
+                }
+            }
+            QVERIFY(visibleInk);
+        }
+        QVERIFY(bounds(tool).right() < bounds(plot).left());
+        QVERIFY(bounds(tool).top() > previousTop);
+        previousTop = bounds(tool).top();
+    }
+    auto* point = button("curvesPointMode");
+    auto* pencil = button("curvesPencil");
+    auto* clipping = button("curvesClipping");
+    QVERIFY(point->isChecked() && !pencil->isChecked());
+    pencil->click();
+    QVERIFY(pencil->isChecked() && !point->isChecked());
+    point->click();
+    QVERIFY(point->isChecked() && !pencil->isChecked());
+    QCOMPARE(endpoints->value(1), 255);
+    QTest::keyClick(endpoints, Qt::Key_Down);
+    QTest::keyClick(endpoints, Qt::Key_Left);
+    QCOMPARE(endpoints->value(1), 254);
+    QCOMPARE(qRound(plot->points().last().x() * 255), 254);
+
+    QMenu menu;
+    auto* clippingMenu = menu.addAction(QStringLiteral("Clipping"));
+    clippingMenu->setData(QStringLiteral("properties.showClipping"));
+    clippingMenu->setCheckable(true);
+    auto* canvas = tools() ? tools()->canvas() : nullptr;
+    auto* layers = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(canvas && layers);
+    clipping->click();
+    panel->updatePanelMenu(&menu);
+    QVERIFY(clipping->isChecked() && clippingMenu->isChecked());
+    QVERIFY(canvas->filterPreviewShownForTest());
+    QCOMPARE(canvas->filterPreviewImageForTest().pixel(0, 0), qRgb(128, 128, 128));
+    clippingMenu->trigger();
+    QVERIFY(!clipping->isChecked() && !canvas->filterPreviewShownForTest());
+    panel->updatePanelMenu(&menu);
+    QVERIFY(!clippingMenu->isChecked());
+
+    clippingMenu->trigger();
+    QVERIFY(clipping->isChecked() && canvas->filterPreviewShownForTest());
+    QVERIFY(view_->add_adjustment(QStringLiteral("levels")));
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        const auto row = pictura::layers_api::rowAt(*view_, i);
+        if (row.adjustmentKind == QLatin1String("levels")) {
+            QVERIFY(layers->selectRowForTest(row.path));
+            break;
+        }
+    }
+    panel->refresh();
+    QVERIFY(!canvas->filterPreviewShownForTest());
+    QVERIFY(!panel->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve")));
+    QCOMPARE(panel->findChild<QPushButton*>(QStringLiteral("propertiesAuto")), autoButton);
+    QVERIFY(!autoButton->isHidden());
 }
 
 void CurvesControlsTest::curvesModeChannels()
@@ -321,7 +455,7 @@ void CurvesControlsTest::curvesAutoModesAndNoOp()
     QVERIFY(pictura::convert_image_mode(*view_, QStringLiteral("grayscale")));
     auto* panel = addCurves();
     QVERIFY(panel);
-    auto* autoButton = panel->findChild<QToolButton*>(QStringLiteral("curvesAuto"));
+    auto* autoButton = panel->findChild<QPushButton*>(QStringLiteral("propertiesAuto"));
     QVERIFY(autoButton && autoButton->isEnabled());
     autoButton->click();
     const QString path = panel->currentPath();

@@ -237,6 +237,36 @@
       "slug": "arrow-left-right",
       "match": "good"
     },
+    "curves.blackPoint": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "Original pipette with a filled shadow marker; original Pictura artwork"
+    },
+    "curves.clipping": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "A histogram bounded by clipping marks; original Pictura artwork"
+    },
+    "curves.grayPoint": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "Original pipette with a half-filled midtone marker; original Pictura artwork"
+    },
+    "curves.smooth": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "A smoothed wave below a segmented input; original Pictura artwork"
+    },
+    "curves.target": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "A sampled point with vertical output arrows; original Pictura artwork"
+    },
+    "curves.whitePoint": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "Original pipette with an outlined highlight marker; original Pictura artwork"
+    },
     "edit.redo": {
       "kind": "lucide",
       "slug": "redo-2",

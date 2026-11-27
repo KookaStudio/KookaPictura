@@ -37,6 +37,15 @@ void PropertiesPanel::refreshCurvesContext()
     }
 }
 
+void PropertiesPanel::setClippingPreview(bool enabled)
+{
+    levelsClipping_ = enabled;
+    if (auto* curves = controls_->curves()) {
+        curves->setClippingPreview(enabled);
+    }
+    updateLevelsClipping();
+}
+
 void PropertiesPanel::updateLevelsClipping()
 {
     if (!tools_ || !tools_->canvas()) return;

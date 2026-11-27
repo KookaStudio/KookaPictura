@@ -191,6 +191,8 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     adjustmentLayout->addWidget(autoButton_, 0, Qt::AlignRight);
     controls_ = new AdjustmentControls(adjustmentPage);
     controls_->setObjectName(QStringLiteral("propertiesControls"));
+    controls_->setCurvesAutoButton(autoButton_);
+    connect(controls_, &AdjustmentControls::curvesClippingChanged, this, &PropertiesPanel::setClippingPreview);
     controls_->setCurveSource([this](int channel) {
         return view_ ? QString(adjustment_curve(*view_, path_, channel)) : QString();
     });
@@ -895,7 +897,6 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
     setPage(AdjustmentPage);
     canvas_->hide();
     footer_->show();
-    autoButton_->setVisible(canAutoCorrect());
     const bool supported = adjustmentPresetSupportsMenu(kind_);
     preset_->setVisible(supported);
     if (supported && view_) {
@@ -918,6 +919,13 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
     }
     refreshCurvesContext();
     controls_->setPage(page, dirty_ || curveGestureActive_);
+    placeAutoButton();
+    if (auto* curves = controls_->curves()) {
+        if (!curves->autoAvailable() && levelsClipping_) {
+            setClippingPreview(false);
+        }
+        curves->setClippingPreview(levelsClipping_);
+    }
     if (view_ && !dirty_) {
         controls_->refreshThresholdHistogram(*view_, path_);
     }
@@ -1065,14 +1073,13 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
                 });
             }
         } else if (id == QLatin1String("properties.showClipping")) {
-            action->setEnabled(hasLayer && (kind_ == QLatin1String("levels") || kind_ == QLatin1String("curves")));
-            action->setChecked(levelsClipping_);
+            const auto* curves = controls_->curves();
+            const bool available = hasLayer && (kind_ == QLatin1String("levels") || (curves && curves->autoAvailable()));
+            action->setEnabled(available);
+            action->setChecked(available && levelsClipping_);
             if (!action->property("propertiesClippingConnected").toBool()) {
                 action->setProperty("propertiesClippingConnected", true);
-                connect(action, &QAction::triggered, this, [this](bool enabled) {
-                    levelsClipping_ = enabled;
-                    updateLevelsClipping();
-                });
+                connect(action, &QAction::triggered, this, &PropertiesPanel::setClippingPreview);
             }
         } else if (id == QLatin1String(command_ids::PanelPropertiesAutoOptions)) {
             action->setEnabled(canAutoCorrect());

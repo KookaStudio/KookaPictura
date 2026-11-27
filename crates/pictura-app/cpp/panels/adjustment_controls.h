@@ -11,6 +11,7 @@
 #include <vector>
 
 class QComboBox;
+class QPushButton;
 class QLabel;
 class QVBoxLayout;
 
@@ -45,6 +46,7 @@ public:
     void setCurvesContext(const QString& mode, const CurveHistograms& histograms,
                           ToolController* tools, CurvesControls::CanvasSample sample);
     CurvesControls* curves() const { return curves_; }
+    void setCurvesAutoButton(QPushButton* button) { curvesAutoButton_ = button; }
     QWidget* controlForTest(const QString& key) const;
 
 signals:
@@ -56,6 +58,7 @@ signals:
     void gestureEnded();
     void curveGestureStarted();
     void grayPointPicked(const QColor& color);
+    void curvesClippingChanged(bool enabled);
 
 private:
     struct Row {
@@ -87,6 +90,7 @@ private:
     QComboBox* groups_ = nullptr;
     HistogramView* thresholdHistogram_ = nullptr;
     CurvesControls* curves_ = nullptr;
+    QPushButton* curvesAutoButton_ = nullptr;
     QString curveMode_ = QStringLiteral("rgb");
     CurveHistograms curveHistograms_{};
     ToolController* curveTools_ = nullptr;

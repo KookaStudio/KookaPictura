@@ -1,5 +1,7 @@
 #include "properties_panel.h"
 
+#include "adjustment_controls.h"
+
 #include "auto_correction_options.h"
 #include "dialogs.h"
 #include "preferences.h"
@@ -9,6 +11,7 @@
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QVBoxLayout>
 
 namespace pictura {
 namespace {
@@ -57,8 +60,26 @@ QPushButton* PropertiesPanel::makeAutoButton(QWidget* parent)
     button->setObjectName(QStringLiteral("propertiesAuto"));
     button->setToolTip(QCoreApplication::translate("PicturaUi", "Alt-click for Auto Options"));
     button->hide();
-    connect(button, &QPushButton::clicked, this, [this] { applyAuto(false); });
+    connect(button, &QPushButton::clicked, this, [this] {
+        if (auto* curves = controls_->curves(); curves && !loadPreferences().autoCorrectionSaved) {
+            curves->applyAuto();
+        } else {
+            applyAuto(false);
+        }
+    });
     return button;
+}
+
+void PropertiesPanel::placeAutoButton()
+{
+    if (!controls_->curves()) {
+        auto* layout = static_cast<QVBoxLayout*>(controls_->parentWidget()->layout());
+        if (layout->indexOf(autoButton_) < 0) {
+            layout->insertWidget(1, autoButton_, 0, Qt::AlignRight);
+        }
+        autoButton_->setEnabled(true);
+    }
+    autoButton_->setVisible(canAutoCorrect());
 }
 
 bool PropertiesPanel::canAutoCorrect() const

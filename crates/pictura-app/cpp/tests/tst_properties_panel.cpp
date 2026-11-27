@@ -197,8 +197,8 @@ void PropertiesPanelTest::curvesControlsAndMenu()
 {
     QVERIFY(setupAdjustment(QStringLiteral("curves")));
     auto* graph = panel_->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve"));
-    auto* black = panel_->findChild<QSlider*>(QStringLiteral("curvesBlackSlider"));
-    QVERIFY(graph && black);
+    auto* endpoints = panel_->findChild<pictura::TriangleSlider*>(QStringLiteral("curvesEndpoints"));
+    QVERIFY(graph && endpoints);
     auto* target = panel_->findChild<QToolButton*>(QStringLiteral("curvesTarget"));
     auto* tools = window_->findChild<pictura::ToolController*>();
     QVERIFY(target && tools);
@@ -218,7 +218,8 @@ void PropertiesPanelTest::curvesControlsAndMenu()
     QCOMPARE(input->value(), 128);
     output->setValue(150);
     QCOMPARE(qRound(graph->points()[graph->selected()].y() * 255), 150);
-    black->setValue(20);
+    endpoints->setValue(0, 20);
+    QVERIFY(QMetaObject::invokeMethod(endpoints, "valueChanged", Q_ARG(int, 0), Q_ARG(int, 20)));
     QCOMPARE(qRound(graph->points().first().x() * 255), 20);
     QMenu menu;
     auto* display = menu.addAction(QStringLiteral("Display"));
