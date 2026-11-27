@@ -341,7 +341,10 @@ fn selection_window(selection: &Selection, bounds: pictura_core::PsdRect) -> Sel
     let ys = bounds.top as usize..bounds.bottom as usize;
     let mut data = Vec::with_capacity(xs.len() * ys.len());
     for y in ys.clone() {
-        if let Some(row) = selection.data.row_span(y, xs.clone(), selection.width as usize) {
+        if let Some(row) = selection
+            .data
+            .row_span(y, xs.clone(), selection.width as usize)
+        {
             data.extend_from_slice(&row);
         } else {
             data.resize(data.len() + xs.len(), 0);
