@@ -146,7 +146,7 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
 - [x] Advanced blending engine: Blend Clipped Layers as Group, Transparency
       Shapes Layers, Mask Hides Effects, channel Include and Blend Interior
       Effects as Group (#579)
-- [ ] Layer Style dialog controls for the advanced-blending toggles (#695)
+- [x] Layer Style dialog controls for the advanced-blending toggles (#695)
 - [x] Layer-style Global Light, Create Layers, and Rasterize Layer Style (#580)
 - [x] Bevel Contour, the style dialog's gradient editor, and channel include
       (#581)
