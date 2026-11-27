@@ -12,7 +12,7 @@
 use super::super::document_session::TransformSession;
 use super::distort::{carry_pivot as carry_projective_pivot, map_qtransform};
 use super::geometry::{
-    opposite_handle, projective_coefficients, session_quad_is_degenerate, session_quad, set_pivot,
+    opposite_handle, projective_coefficients, session_quad, session_quad_is_degenerate, set_pivot,
     store_quad, unmap_quad, MapParams,
 };
 
@@ -218,7 +218,10 @@ pub(super) fn gesture_scale_base(
             s
         }
     };
-    let (sx, sy) = (min(sx, source[1].0 - source[0].0), min(sy, source[3].1 - source[0].1));
+    let (sx, sy) = (
+        min(sx, source[1].0 - source[0].0),
+        min(sy, source[3].1 - source[0].1),
+    );
     let mut quad = source;
     for p in &mut quad {
         let scaled = (

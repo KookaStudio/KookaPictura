@@ -207,7 +207,12 @@ fn edit_target_with<T>(
 
 pub(super) fn path_selection_target_key(view: &PictureView) -> QString {
     let rust = view.rust();
-    QString::from(format!("{}:{:?}:{:?}", rust.session.document_generation, rust.active_path, layer_target(&rust)))
+    QString::from(format!(
+        "{}:{:?}:{:?}",
+        rust.session.document_generation,
+        rust.active_path,
+        layer_target(&rust)
+    ))
 }
 
 pub(super) fn path_set_layer_target(mut view: Pin<&mut PictureView>, on: bool) {
@@ -721,19 +726,30 @@ pub(super) fn path_commit_drag(view: Pin<&mut PictureView>, label: &str) {
 }
 
 pub(super) fn path_remove_subpaths(mut view: Pin<&mut PictureView>, components: &[i32]) -> bool {
-    let Some(mut indices) = components.iter().map(|&i| index(i)).collect::<Option<Vec<_>>>() else {
+    let Some(mut indices) = components
+        .iter()
+        .map(|&i| index(i))
+        .collect::<Option<Vec<_>>>()
+    else {
         return false;
     };
     indices.sort_unstable();
     indices.dedup();
-    let Some(path) = path(&view) else { return false; };
+    let Some(path) = path(&view) else {
+        return false;
+    };
     if indices.is_empty() || indices.last().is_some_and(|&i| i >= path.subpaths.len()) {
         return false;
     }
     let removed = edit(view.as_mut(), |path| {
-        for &i in indices.iter().rev() { path.remove_subpath(i); }
-    }).is_some();
-    if removed { commit(view, "Delete Path"); }
+        for &i in indices.iter().rev() {
+            path.remove_subpath(i);
+        }
+    })
+    .is_some();
+    if removed {
+        commit(view, "Delete Path");
+    }
     removed
 }
 

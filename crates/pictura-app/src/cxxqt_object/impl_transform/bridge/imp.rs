@@ -16,16 +16,31 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use pictura_render::Interpolation;
 
-pub(super) fn path_transform_can_begin(view: &PictureView, components: &[i32], anchors: &[i32], repeat: bool) -> bool {
+pub(super) fn path_transform_can_begin(
+    view: &PictureView,
+    components: &[i32],
+    anchors: &[i32],
+    repeat: bool,
+) -> bool {
     super::super::path::can_begin(view, components, anchors, repeat)
 }
 
-pub(super) fn path_transform_begin(view: Pin<&mut PictureView>, components: &[i32], anchors: &[i32], mode: &QString, repeat: bool) -> bool {
+pub(super) fn path_transform_begin(
+    view: Pin<&mut PictureView>,
+    components: &[i32],
+    anchors: &[i32],
+    mode: &QString,
+    repeat: bool,
+) -> bool {
     super::super::path::begin(view, components, anchors, mode, repeat)
 }
 
 pub(super) fn path_transform_active(view: &PictureView) -> bool {
-    view.rust().session.live.transform().is_some_and(|s| s.path_transform.is_some())
+    view.rust()
+        .session
+        .live
+        .transform()
+        .is_some_and(|s| s.path_transform.is_some())
 }
 
 pub(super) fn path_transform_has_repeat(view: &PictureView) -> bool {
@@ -33,10 +48,16 @@ pub(super) fn path_transform_has_repeat(view: &PictureView) -> bool {
 }
 
 pub(super) fn path_transform_repeat(mut view: Pin<&mut PictureView>) -> bool {
-    let Some(last) = view.rust().session.last_path_transform else { return false; };
+    let Some(last) = view.rust().session.last_path_transform else {
+        return false;
+    };
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.session.live.transform_mut() else { return false; };
-    if session.path_transform.is_none() { return false; }
+    let Some(session) = rust.session.live.transform_mut() else {
+        return false;
+    };
+    if session.path_transform.is_none() {
+        return false;
+    }
     let (cx, cy) = session.source_center();
     session.pivot = (cx + last.pivot_offset.0, cy + last.pivot_offset.1);
     session.pivot_origin = (cx, cy);

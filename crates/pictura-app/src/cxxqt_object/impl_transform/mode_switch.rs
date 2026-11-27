@@ -4,7 +4,7 @@
 //! scale, rotation, and skew carry over as CS6 keeps them.
 
 use super::super::document_session::{TransformMode, TransformSession};
-use super::geometry::{pivot_point, session_quad_is_degenerate, session_quad};
+use super::geometry::{pivot_point, session_quad, session_quad_is_degenerate};
 
 /// Whether an open `session` may switch to `mode`. Leaving a projective mode
 /// for a similarity one is refused, as are a session editing or holding a

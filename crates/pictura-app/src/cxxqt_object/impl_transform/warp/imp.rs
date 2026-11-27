@@ -1,12 +1,12 @@
 use super::*;
 
 use super::super::super::document_session::{TransformSession, TransformTarget, WarpDrag};
+#[cfg(test)]
+use super::super::geometry::source_corners;
 use super::super::geometry::{
     projective_coefficients, session_quad, store_quad, unmap_quad, MapParams,
 };
 use super::super::session::{rendered_transform_group, transform_preview_layer_at};
-#[cfg(test)]
-use super::super::geometry::source_corners;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -93,9 +93,13 @@ pub(in crate::cxxqt_object::impl_transform) fn map_source_point(
         let (x, y) = if let Some(target) = &session.path_transform {
             let [l, t, r, b] = target.bounds;
             let rect = session.orig_rect;
-            (f64::from(rect.left) + (x - l) * f64::from(rect.width()) / (r - l),
-             f64::from(rect.top) + (y - t) * f64::from(rect.height()) / (b - t))
-        } else { (x, y) };
+            (
+                f64::from(rect.left) + (x - l) * f64::from(rect.width()) / (r - l),
+                f64::from(rect.top) + (y - t) * f64::from(rect.height()) / (b - t),
+            )
+        } else {
+            (x, y)
+        };
         let point = pictura_render::selection_transform_point(
             session.orig_rect,
             session_quad(session),
@@ -379,13 +383,9 @@ pub(in crate::cxxqt_object::impl_transform) fn refresh_warp_preview(
 ) -> bool {
     // A selection border has no moving image: its preview is the mapped
     // contour, refreshed by the C++ overlay.
-    if view
-        .rust()
-        .session
-        .live
-        .transform()
-        .is_some_and(|session| session.target == TransformTarget::Selection || session.path_transform.is_some())
-    {
+    if view.rust().session.live.transform().is_some_and(|session| {
+        session.target == TransformTarget::Selection || session.path_transform.is_some()
+    }) {
         return true;
     }
     let gpu_compute = view.rust().gpu_compute;
@@ -464,7 +464,10 @@ pub(super) fn transform_enter_warp(mut view: Pin<&mut PictureView>) -> bool {
             if Frame::of(session).is_none() {
                 return false;
             }
-            let b = session.path_transform.as_ref().map_or_else(|| rect_bounds(session.orig_rect), |target| target.bounds);
+            let b = session
+                .path_transform
+                .as_ref()
+                .map_or_else(|| rect_bounds(session.orig_rect), |target| target.bounds);
             session.warp = Some(Warp::custom(BezierMesh::identity(b, 1, 1), b));
             session.warp_post = None;
         }

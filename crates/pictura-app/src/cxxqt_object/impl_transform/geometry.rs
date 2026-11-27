@@ -140,7 +140,9 @@ pub(super) fn linear(session: &TransformSession) -> [[f64; 2]; 2] {
 
 /// The source-rect corners under the session map.
 pub(super) fn map_quad(session: &TransformSession) -> [(f64, f64); 4] {
-    session.source_corners().map(|p| MapParams::of(session).map_point(p))
+    session
+        .source_corners()
+        .map(|p| MapParams::of(session).map_point(p))
 }
 
 /// Whether a session's snapshot is the identity transform: a warp's own
@@ -462,19 +464,26 @@ pub(super) fn quad_is_degenerate(quad: &[(f64, f64); 4]) -> bool {
     false
 }
 
-pub(super) fn session_quad_is_degenerate(session: &TransformSession, quad: &[(f64, f64); 4]) -> bool {
+pub(super) fn session_quad_is_degenerate(
+    session: &TransformSession,
+    quad: &[(f64, f64); 4],
+) -> bool {
     if session.path_transform.is_none() {
         return quad_is_degenerate(quad);
     }
     if quad.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
         return true;
     }
-    let area2: f64 = (0..4).map(|i| {
-        let a = quad[i];
-        let b = quad[(i + 1) % 4];
-        a.0 * b.1 - b.0 * a.1
-    }).sum();
-    if area2.abs() < 1e-12 { return true; }
+    let area2: f64 = (0..4)
+        .map(|i| {
+            let a = quad[i];
+            let b = quad[(i + 1) % 4];
+            a.0 * b.1 - b.0 * a.1
+        })
+        .sum();
+    if area2.abs() < 1e-12 {
+        return true;
+    }
     (0..4).any(|i| {
         let (a, b, c) = (quad[i], quad[(i + 1) % 4], quad[(i + 2) % 4]);
         ((b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)).abs() < 1e-12
@@ -596,8 +605,16 @@ pub(super) fn gesture_scale(session: &mut TransformSession, x: f64, y: f64, shif
         new_sy = uniform;
     }
     let source = session.source_corners();
-    let min_sx = if session.path_transform.is_some() { 1e-9 } else { 1.0 / (source[1].0 - source[0].0) };
-    let min_sy = if session.path_transform.is_some() { 1e-9 } else { 1.0 / (source[3].1 - source[0].1) };
+    let min_sx = if session.path_transform.is_some() {
+        1e-9
+    } else {
+        1.0 / (source[1].0 - source[0].0)
+    };
+    let min_sy = if session.path_transform.is_some() {
+        1e-9
+    } else {
+        1.0 / (source[3].1 - source[0].1)
+    };
     if new_sx.abs() < min_sx {
         new_sx = if new_sx < 0.0 { -min_sx } else { min_sx };
     }

@@ -1,7 +1,8 @@
 use super::super::document_session::TransformSession;
 use super::convex::keep_convex;
 use super::geometry::{
-    projective_coefficients, session_quad_is_degenerate, set_pivot, store_quad, unmap_quad, MapParams,
+    projective_coefficients, session_quad_is_degenerate, set_pivot, store_quad, unmap_quad,
+    MapParams,
 };
 
 /// Map `(x, y)` through `projective_coefficients`' `QTransform`-order matrix:
