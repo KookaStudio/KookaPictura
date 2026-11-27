@@ -1,5 +1,5 @@
 use cxx_qt_lib::{QImage, QString};
-use pictura_codec::action_descriptor::ActionValue;
+use pictura_codec::action_descriptor::{ActionClass, ActionDescriptor, ActionKey, ActionValue};
 use pictura_codec::preset_library::{
     decode, encode_native, encode_swatches, Color, Format, Kind, Library, Payload, Preset, Swatch,
     SwatchRole,
@@ -102,12 +102,20 @@ pub(super) fn preset_row_values(set: &ReadPresetSet, index: i32) -> QString {
                 .join(" ");
             json!({ "points": pairs })
         }
-        Payload::Tool(values) => json!({
-            "tool": String::from_utf8_lossy(key_bytes(&values.class.id)),
-            "opacity": number(values, b"Opct"),
-            "flow": number(values, b"Flw ").or_else(|| number(values, b"flow")),
-            "size": item(values, b"Brsh").and_then(object).and_then(|tip| number(tip, b"Dmtr")),
-        }),
+        Payload::Tool(values) => {
+            let class = String::from_utf8_lossy(key_bytes(&values.class.id)).to_string();
+            let mut result = json!({
+                "tool": class,
+                "toolId": pictura_tool_id(&class),
+                "opacity": number(values, b"Opct"),
+                "flow": number(values, b"Flw ").or_else(|| number(values, b"flow")),
+                "size": item(values, b"Brsh").and_then(object).and_then(|tip| number(tip, b"Dmtr")),
+            });
+            if let Ok(Value::Object(options)) = serde_json::from_slice::<Value>(&row.opaque) {
+                result["options"] = Value::Object(options);
+            }
+            result
+        }
         Payload::Pattern(pattern) => {
             json!({"patternId": pictura_codec::preset_library::document_pattern_id(pattern)})
         }
@@ -276,6 +284,36 @@ fn encode_one(kind: Kind, name: &QString, payload: Payload) -> Vec<u8> {
         opaque: Vec::new(),
     }];
     encode_native(&Library { kind, entries }).unwrap_or_default()
+}
+
+fn pictura_tool_id(class: &str) -> &str {
+    match class {
+        "paintbrushTool" => "brush",
+        "pencilTool" => "pencil",
+        other => other,
+    }
+}
+
+pub(super) fn preset_make_tool(name: &QString, tool: &QString, options: &QString) -> Vec<u8> {
+    let tool = tool.to_string();
+    let descriptor = ActionDescriptor {
+        name: String::new(),
+        class: ActionClass {
+            name: tool.clone(),
+            id: ActionKey::String(tool.into_bytes()),
+        },
+        items: Vec::new(),
+    };
+    let entries = vec![Preset {
+        name: name.to_string(),
+        payload: Payload::Tool(descriptor),
+        opaque: options.to_string().into_bytes(),
+    }];
+    encode_native(&Library {
+        kind: Kind::Tools,
+        entries,
+    })
+    .unwrap_or_default()
 }
 
 pub(super) fn preset_make_swatch(name: &QString, argb: u32) -> Vec<u8> {

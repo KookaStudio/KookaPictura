@@ -1241,6 +1241,12 @@
       "slug": "swatch-book",
       "match": "exact"
     },
+    "window.panels.tool.presets": {
+      "kind": "lucide",
+      "slug": "wrench",
+      "match": "good",
+      "note": "same wrench glyph as window.panels.tools"
+    },
     "window.panels.tools": {
       "kind": "lucide",
       "slug": "wrench",

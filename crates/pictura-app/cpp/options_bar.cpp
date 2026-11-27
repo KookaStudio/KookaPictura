@@ -9,6 +9,7 @@
 #include "panels/brush_preset_picker.h"
 #include "panels/numeric_field.h"
 #include "preset_store.h"
+#include "tool_presets.h"
 
 #include "api/paint_bridge.h"
 #include "api/engine_bridge.h"
@@ -1081,47 +1082,43 @@ QToolButton* OptionsBar::toolButton(ToolId id, QWidget* parent)
     button->setToolTip(QString::fromLatin1(toolInfo(id).label));
     button->setObjectName(QStringLiteral("optionsToolPreset-") + toolIdName(id));
     auto* menu = new QMenu(button);
-    const auto tool = id == ToolId::Brush ? QStringLiteral("paintbrushTool")
-                    : id == ToolId::Pencil ? QStringLiteral("pencilTool") : QString();
-    if (tool.isEmpty()) {
-        menu->addAction(tr("No Tool Presets"))->setEnabled(false);
-    } else {
+    const bool brush = id == ToolId::Brush || id == ToolId::Pencil;
+    if (brush) {
         for (int i = 0; i < BrushPresetPicker::additionalPresetCount(); ++i) {
             auto* action = menu->addAction(QIcon(BrushPresetPicker::additionalPresetIcon(i, 16)),
                                            BrushPresetPicker::additionalPresetName(i));
             connect(action, &QAction::triggered, this,
                     [this, i] { brushPicker()->chooseAdditionalPreset(i); });
         }
-        connect(menu, &QMenu::aboutToShow, this, [this, menu, tool] {
-            for (auto* action : menu->actions()) {
-                if (action->property("libraryToolPreset").toBool()) {
-                    menu->removeAction(action);
-                    action->deleteLater();
-                }
-            }
-            if (!paint_) {
-                return;
-            }
-            for (const auto& preset : PresetStore::current().rows(PresetType::Tools)) {
-                if (preset.values.value(QStringLiteral("tool")).toString() != tool) {
-                    continue;
-                }
-                auto* action = menu->addAction(preset.name);
-                action->setProperty("libraryToolPreset", true);
-                connect(action, &QAction::triggered, this, [this, settings = preset.values] {
-                    if (const auto v = settings.value(QStringLiteral("opacity")); v.isDouble()) {
-                        paint_->setOpacity(v.toInt());
-                    }
-                    if (const auto v = settings.value(QStringLiteral("flow")); v.isDouble()) {
-                        paint_->setFlow(v.toInt());
-                    }
-                    if (const auto v = settings.value(QStringLiteral("size")); v.isDouble()) {
-                        paint_->setSize(v.toInt());
-                    }
-                });
-            }
-        });
     }
+    connect(menu, &QMenu::aboutToShow, this, [this, menu, id, brush] {
+        for (auto* action : menu->actions()) {
+            if (action->property("libraryToolPreset").toBool()
+                || action->property("emptyToolPreset").toBool()) {
+                menu->removeAction(action);
+                action->deleteLater();
+            }
+        }
+        int matches = 0;
+        for (const auto& preset : PresetStore::current().rows(PresetType::Tools)) {
+            if (!toolPresetMatches(preset.values, id)) {
+                continue;
+            }
+            auto* action = menu->addAction(preset.name);
+            action->setProperty("libraryToolPreset", true);
+            connect(action, &QAction::triggered, this, [this, values = preset.values] {
+                if (controller_) {
+                    applyToolPreset(*controller_, values);
+                }
+            });
+            ++matches;
+        }
+        if (matches == 0 && !brush) {
+            auto* empty = menu->addAction(tr("No Tool Presets"));
+            empty->setEnabled(false);
+            empty->setProperty("emptyToolPreset", true);
+        }
+    });
     button->setMenu(menu);
     button->setPopupMode(QToolButton::InstantPopup);
     return button;

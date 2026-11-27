@@ -252,6 +252,7 @@ inline constexpr char ViewScreenModeFull[] = "view.screenMode.full";
 inline constexpr char WindowPanelsLayers[] = "window.panels.layers";
 inline constexpr char WindowPanelsLayerComps[] = "window.panels.layer.comps";
 inline constexpr char WindowPanelsTools[] = "window.panels.tools";
+inline constexpr char WindowPanelsToolPresets[] = "window.panels.tool.presets";
 inline constexpr char WindowPanelsNavigator[] = "window.panels.navigator";
 inline constexpr char WindowPanelsNotes[] = "window.panels.notes";
 inline constexpr char WindowPanelsHistory[] = "window.panels.history";

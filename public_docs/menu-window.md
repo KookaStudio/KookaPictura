@@ -91,7 +91,6 @@ These commands appear in the menu but are greyed out for now. They are listed he
 - **Window ▸ Panels ▸ Measurement Log** (Extended edition)
 - **Window ▸ Panels ▸ Styles**
 - **Window ▸ Panels ▸ Timeline**
-- **Window ▸ Panels ▸ Tool Presets**
 
 <!-- pictura-commands
 window.arrange.cascade

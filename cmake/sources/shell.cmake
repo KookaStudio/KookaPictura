@@ -48,6 +48,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/settings_backup.h
     crates/pictura-app/cpp/preset_store.cpp
     crates/pictura-app/cpp/preset_store.h
+    crates/pictura-app/cpp/tool_presets.cpp
+    crates/pictura-app/cpp/tool_presets.h
     crates/pictura-app/cpp/smart_guides.cpp
     crates/pictura-app/cpp/svg_icon_engine.cpp
     crates/pictura-app/cpp/svg_icon_engine.h

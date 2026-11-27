@@ -1021,6 +1021,7 @@ void MenuRegistrar::buildMenus(QMenuBar* menuBar)
         command_ids::ViewOptions,
         command_ids::WindowPanelsLayers,
         command_ids::WindowPanelsTools,
+        command_ids::WindowPanelsToolPresets,
         command_ids::WindowPanelsLayerComps,
         command_ids::FileScriptsLayerCompsToFiles,
         command_ids::FileScriptsLayerCompsToPdf,

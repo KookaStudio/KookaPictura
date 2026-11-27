@@ -620,7 +620,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] Refine the Adjustments panel icon artwork (#819)
 - [ ] Fill-layer presets in the Adjustments panel (#1521)
 - [ ] The Measurement Log panel, Record Measurements, and its export workflow (#510)
-- [ ] The Tool Presets panel and `.tpl` libraries (#511)
+- [x] **The Tool Presets panel and `.tpl` libraries (#511)** — captures every tool and its options-bar snapshot, applies through the shared picker, filters by Current Tool Only, sorts by tool, supports the three display modes, and loads/replaces/saves `.tpl` and native `.kpset` libraries. `crates/pictura-app/cpp/panels/tool_presets_panel.cpp`.
 - [ ] The Styles panel and `.asl` presets (#512)
 - [ ] Channel panel spot channels, Split and Merge, and Panel Options (#513)
 - [x] History Options, Clear History and purge, and New Document from state

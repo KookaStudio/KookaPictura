@@ -253,6 +253,7 @@ set(PICTURA_QT_TEST_DRIVER_ui
     tst_histogram_panel
     tst_swatches_panel
     tst_preset_manager
+    tst_tool_presets_panel
     tst_color_picker
     tst_eyedropper
     tst_color_settings

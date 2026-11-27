@@ -38,6 +38,7 @@
 #include "panels/placeholder_panel.h"
 #include "panels/properties_panel.h"
 #include "panels/swatches_panel.h"
+#include "panels/tool_presets_panel.h"
 #include "preset_store.h"
 #include "session.h"
 
@@ -70,6 +71,12 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state, const Prefe
     swatchesPanel_->setObjectName(QStringLiteral("swatchesPanel"));
     ColorPickerDialog::setDefaultSwatchGrid(swatchesPanel_->grid());
     swatchesPanel_->attachPresetStore(PresetStore::current());
+
+    toolPresetsPanel_ = new ToolPresetsPanel(shell_);
+    toolPresetsPanel_->setObjectName(QStringLiteral("toolPresetsPanel"));
+    toolPresetsPanel_->attachPresetStore(PresetStore::current());
+    setPanelMenuHook(QStringLiteral("toolPresetsPanel"),
+                     [this](QMenu* menu) { toolPresetsPanel_->updatePanelMenu(menu); });
 
     infoPanel_ = new InfoPanel(shell_);
     infoPanel_->setObjectName(QStringLiteral("infoPanel"));
@@ -228,6 +235,7 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state, const Prefe
     registerPanel(navigatorPanel_, Qt::RightDockWidgetArea);
     registerPanel(colorPanel_, Qt::RightDockWidgetArea);
     registerPanel(swatchesPanel_, Qt::RightDockWidgetArea);
+    registerPanel(toolPresetsPanel_, Qt::RightDockWidgetArea);
     registerPanel(stylesPanel_, Qt::RightDockWidgetArea);
     registerPanel(infoPanel_, Qt::RightDockWidgetArea);
     registerPanel(histogramPanel_, Qt::RightDockWidgetArea);
@@ -327,6 +335,8 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state, const Prefe
              QString::fromLatin1(command_ids::WindowPanelsBrush));
     addPanel(overflowGroup, cloneSourcePanel_, tr("Clone Source"),
              QString::fromLatin1(command_ids::WindowPanelsCloneSource));
+    addPanel(overflowGroup, toolPresetsPanel_, tr("Tool Presets"),
+             QString::fromLatin1(command_ids::WindowPanelsToolPresets));
     addPanel(overflowGroup, layerCompsPanel_, tr("Layer Comps"),
              QStringLiteral("window.panels.layer.comps"));
     attachGroup(overflowGroup);
@@ -362,6 +372,7 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state, const Prefe
     panelColumn_->showPanel(QStringLiteral("notesPanel"), false);
     panelColumn_->showPanel(QStringLiteral("brushPanel"), false);
     panelColumn_->showPanel(QStringLiteral("cloneSourcePanel"), false);
+    panelColumn_->showPanel(QStringLiteral("toolPresetsPanel"), false);
     panelColumn_->showPanel(QStringLiteral("glyphsPanel"), false);
     panelColumn_->showPanel(QStringLiteral("characterPanel"), false);
     panelColumn_->showPanel(QStringLiteral("paragraphPanel"), false);

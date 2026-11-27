@@ -843,6 +843,7 @@ free	patterns_available	patterns_available	api/layers_bridge.h	pictura_app/src/c
 free	preset_encode_set	preset_encode_set	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h
 free	preset_make_builtin	preset_make_builtin	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h
 free	preset_make_swatch	preset_make_swatch	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h
+free	preset_make_tool	preset_make_tool	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h
 free	preset_read_set	preset_read_set	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h
 free	preset_row_bytes	preset_row_bytes	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h
 free	preset_row_name	preset_row_name	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h

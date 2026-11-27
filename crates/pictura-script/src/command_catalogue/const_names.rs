@@ -252,6 +252,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("WindowPanelsLayers", "window.panels.layers"),
     ("WindowPanelsLayerComps", "window.panels.layer.comps"),
     ("WindowPanelsTools", "window.panels.tools"),
+    ("WindowPanelsToolPresets", "window.panels.tool.presets"),
     ("WindowPanelsNavigator", "window.panels.navigator"),
     ("WindowPanelsNotes", "window.panels.notes"),
     ("WindowPanelsHistory", "window.panels.history"),
