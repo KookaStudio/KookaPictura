@@ -29,8 +29,8 @@ fn drop_shadow_layer_preserves_effect_block() {
         "lfx2 survives a round-trip"
     );
 
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("psd-drop-shadow");
@@ -57,7 +57,7 @@ print(int(round(effect.size)))
 print(1 if effect.use_global_light else 0)
 print(1 if effect.layer_knocks_out else 0)
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

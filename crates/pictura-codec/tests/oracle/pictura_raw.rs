@@ -59,7 +59,7 @@ print(fltr[b"Ex12"])
 print(fltr[b"Temp"])
 print(fltr[b"Cl12"])
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -76,8 +76,8 @@ print(fltr[b"Cl12"])
 
 #[test]
 fn psd_tools_reads_the_authored_pictura_raw_filter() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let mut doc = authoring_smart_doc();

@@ -1314,6 +1314,7 @@ version = "0.4.0"
 dependencies = [
  "i_overlay",
  "pictura-core",
+ "pictura-testkit",
  "rayon",
  "thiserror 2.0.20",
 ]

@@ -1,13 +1,11 @@
 //! The oracle harness itself: script presence, ImageMagick availability, the
 //! planar round-trip, and the perturbation guard.
 
-use std::process::Command;
-
 use pictura_core::PixelBuffer;
 use pictura_filters::{apply, Filter};
-use pictura_testkit::compare;
+use pictura_testkit::{compare, oracle};
 
-use crate::common::{magick_available, oracle, script, test_image_planar, CHANNELS, SIZE};
+use crate::common::{oracle, script, test_image_planar, CHANNELS, SIZE};
 
 #[test]
 fn reference_script_is_present() {
@@ -17,7 +15,7 @@ fn reference_script_is_present() {
         "missing oracle script at {}",
         path.display()
     );
-    let help = Command::new("python3")
+    let help = oracle::Command::new("python3")
         .arg(&path)
         .arg("apply")
         .arg("--help")
@@ -32,11 +30,11 @@ fn reference_script_is_present() {
 
 #[test]
 fn imagemagick_runs() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg(script())
         .arg("version")
         .output()
@@ -57,8 +55,8 @@ fn imagemagick_runs() {
 /// for every planar sample (this also proves the planar round-trip).
 #[test]
 fn oracle_negate_matches_expected_bytes() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let input = test_image_planar();
@@ -73,8 +71,8 @@ fn oracle_negate_matches_expected_bytes() {
 /// comparison fails; revert and confirm it matches again.
 #[test]
 fn differential_harness_detects_perturbation() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let original = test_image_planar();

@@ -5,10 +5,10 @@
 //! `psd-tools` is absent.
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use pictura_codec::{read_psd, write_psd};
 use pictura_core::{BitDepth, ColorMode, Compression, Document};
+use pictura_testkit::oracle;
 
 fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
@@ -25,17 +25,6 @@ fn load(name: &str) -> Document {
     read_psd(&bytes).unwrap_or_else(|e| panic!("{} failed to parse: {e}", path.display()))
 }
 
-fn psd_tools_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// Decode `path` with `psd-tools` and return its composite as planar RGB hex.
 fn psd_tools_composite_planes(path: &std::path::Path) -> Vec<String> {
     let script = r#"
@@ -47,7 +36,7 @@ arr = np.array(psd.composite().convert("RGB"))
 for c in range(3):
     print(arr[:, :, c].tobytes().hex())
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(path)
@@ -94,7 +83,7 @@ for layer in psd:
         data = ch.get_data(layer.width, layer.height, psd.depth, psd.version)
         print("L", int(info.id), int(ch.compression), bytes(data).hex())
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(path)
@@ -154,8 +143,8 @@ fn assert_matches_psd_tools(name: &str) {
 
 #[test]
 fn depth16_fixture_matches_psd_tools_exactly() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     assert_matches_psd_tools("rgb16.psd");
@@ -163,8 +152,8 @@ fn depth16_fixture_matches_psd_tools_exactly() {
 
 #[test]
 fn depth32_fixture_matches_psd_tools_exactly() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     assert_matches_psd_tools("rgb32.psd");
@@ -175,6 +164,10 @@ fn depth32_fixture_matches_psd_tools_exactly() {
 /// source depth, and `psd-tools` reads the native source samples exactly.
 #[test]
 fn depth_documents_preserve_source_depth_on_save() {
+    let psd_tools = oracle::require(oracle::Tool::PsdTools);
+    if let Err(skip) = &psd_tools {
+        skip.clone().report();
+    }
     for (name, bits, depth) in [
         ("rgb16.psd", BitDepth::Sixteen, 16u16),
         ("rgb32.psd", BitDepth::ThirtyTwo, 32u16),
@@ -207,8 +200,7 @@ fn depth_documents_preserve_source_depth_on_save() {
             "{name}: normalized pixels are stable across a save"
         );
 
-        if !psd_tools_available() {
-            eprintln!("skipping: python3 + psd-tools not available");
+        if psd_tools.is_err() {
             continue;
         }
         let dir = scratch_dir("depth-roundtrip");
@@ -235,6 +227,10 @@ fn depth_documents_preserve_source_depth_on_save() {
 /// round-trip, and `psd-tools` decodes the same native planes.
 #[test]
 fn high_depth_composite_re_encodes_every_compression() {
+    let psd_tools = oracle::require(oracle::Tool::PsdTools);
+    if let Err(skip) = &psd_tools {
+        skip.clone().report();
+    }
     for (name, bits, depth) in [
         ("rgb16.psd", BitDepth::Sixteen, 16u16),
         ("rgb32.psd", BitDepth::ThirtyTwo, 32u16),
@@ -259,8 +255,7 @@ fn high_depth_composite_re_encodes_every_compression() {
             let back = read_psd(&out).unwrap();
             assert_eq!(back.composite, doc.composite, "{name} {kind:?}: pixels");
 
-            if !psd_tools_available() {
-                eprintln!("skipping: python3 + psd-tools not available");
+            if psd_tools.is_err() {
                 continue;
             }
             let dir = scratch_dir("depth-compression");
@@ -286,6 +281,10 @@ fn high_depth_composite_re_encodes_every_compression() {
 /// byte, and `psd-tools` sees the widened native sample.
 #[test]
 fn edited_plane_saves_widened_at_source_depth() {
+    let psd_tools = oracle::require(oracle::Tool::PsdTools);
+    if let Err(skip) = &psd_tools {
+        skip.clone().report();
+    }
     for (name, depth) in [("rgb16.psd", 16u16), ("rgb32.psd", 32u16)] {
         let mut doc = load(name);
         let edited = doc.composite.data[0].wrapping_add(1);
@@ -306,8 +305,7 @@ fn edited_plane_saves_widened_at_source_depth() {
             "{name}: the widened plane narrows back to the edit"
         );
 
-        if !psd_tools_available() {
-            eprintln!("skipping: python3 + psd-tools not available");
+        if psd_tools.is_err() {
             continue;
         }
         let dir = scratch_dir("depth-edited");
@@ -388,6 +386,10 @@ fn layered_spot_psd(depth: u16, id: i16, plane: &[u8]) -> Vec<u8> {
 /// `psd-tools` decodes the native samples.
 #[test]
 fn unmodeled_layer_channel_preserves_source_depth() {
+    let psd_tools = oracle::require(oracle::Tool::PsdTools);
+    if let Err(skip) = &psd_tools {
+        skip.clone().report();
+    }
     for (depth, plane, bits) in [
         (16u16, 0xab00u16.to_be_bytes().to_vec(), BitDepth::Sixteen),
         (32u16, 0.5f32.to_be_bytes().to_vec(), BitDepth::ThirtyTwo),
@@ -428,8 +430,7 @@ fn unmodeled_layer_channel_preserves_source_depth() {
             "depth {depth}: the re-read 8-bit stream narrows back unchanged"
         );
 
-        if !psd_tools_available() {
-            eprintln!("skipping: python3 + psd-tools not available");
+        if psd_tools.is_err() {
             continue;
         }
         let dir = scratch_dir("unmodeled-depth");
@@ -454,6 +455,10 @@ fn unmodeled_layer_channel_preserves_source_depth() {
 /// preserves the depth and every native plane, and `psd-tools` agrees.
 #[test]
 fn layered_depth_fixtures_preserve_depth_and_channels() {
+    let psd_tools = oracle::require(oracle::Tool::PsdTools);
+    if let Err(skip) = &psd_tools {
+        skip.clone().report();
+    }
     for (name, bits, depth) in [
         ("rgb16_layered.psd", BitDepth::Sixteen, 16u16),
         ("rgb16_tagged.psd", BitDepth::Sixteen, 16u16),
@@ -487,8 +492,7 @@ fn layered_depth_fixtures_preserve_depth_and_channels() {
             "{name}: an unedited high-depth layered document round-trips whole"
         );
 
-        if !psd_tools_available() {
-            eprintln!("skipping: python3 + psd-tools not available");
+        if psd_tools.is_err() {
             continue;
         }
         let dir = scratch_dir("layered-depth");
@@ -569,6 +573,10 @@ fn grouped_depth_fixtures_round_trip_whole() {
 /// the source depth; `psd-tools` decodes the same native samples.
 #[test]
 fn layered_depth_layer_channels_re_encode_every_compression() {
+    let psd_tools = oracle::require(oracle::Tool::PsdTools);
+    if let Err(skip) = &psd_tools {
+        skip.clone().report();
+    }
     for kind in [
         Compression::Rle,
         Compression::Zip,
@@ -600,8 +608,7 @@ fn layered_depth_layer_channels_re_encode_every_compression() {
                 "{name} {kind:?}: unmodeled stable"
             );
 
-            if !psd_tools_available() {
-                eprintln!("skipping: python3 + psd-tools not available");
+            if psd_tools.is_err() {
                 continue;
             }
             let dir = scratch_dir("layer-compression");

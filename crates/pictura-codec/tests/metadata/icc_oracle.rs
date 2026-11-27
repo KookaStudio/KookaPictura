@@ -3,11 +3,11 @@
 //! the profile resource must be dropped on save.
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use pictura_codec::{
     decode_image_resources, read_psd, read_psd_with, write_psd, Policy, ICC_PROFILE,
 };
+use pictura_testkit::oracle;
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -22,7 +22,7 @@ fn temp_path(name: &str) -> PathBuf {
 fn pil_available() -> bool {
     static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
+        oracle::Command::new("python3")
             .args(["-c", "import PIL.ImageCms"])
             .output()
             .map(|o| o.status.success())
@@ -42,7 +42,7 @@ srgb = ImageCms.createProfile("sRGB")
 out = ImageCms.profileToProfile(src, prof, srgb, renderingIntent=1, outputMode="RGB")
 print(*out.getpixel((0, 0)))
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(fixture("psd_icc_rgb.icc"))
@@ -232,7 +232,7 @@ if not data:
     sys.exit(1)
 sys.stdout.buffer.write(data)
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&psd)
@@ -276,7 +276,7 @@ from PIL import Image
 im = Image.open(sys.argv[1])
 print("TAGGED" if im.info.get("icc_profile") else "UNTAGGED")
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&psd)

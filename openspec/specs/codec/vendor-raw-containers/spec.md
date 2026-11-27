@@ -337,11 +337,13 @@ least significant bit first followed by one pad byte; `1.5n` bytes SHALL be
 words under an `IIRO` header and over bytes under an `IIRS` header, whose
 strips SHALL be taken as two fields, the even rows and then the odd, each
 strip holding whole rows whatever `RowsPerStrip` says. One strip of fewer
-than `1.5n` bytes is the Olympus compressed stream and SHALL be refused as
-unsupported, with a message saying that compressed sensor data is not
-supported yet. Any other size, and packed data of other than 12 valid bits,
-SHALL be refused as unsupported, and declared sizes SHALL be charged against
-the image budget before the plane is allocated.
+than `1.5n` bytes is the Olympus compressed stream and SHALL be decoded as
+"Olympus-compressed ORF data is decoded as LibRaw decodes it" requires, at
+12 or 14 valid bits; without the maker note's coding parameters it SHALL be
+refused as unsupported, with a message naming the coding parameters. Any
+other size, packed data of other than 12 valid bits, and compressed data of
+other than 12 or 14, SHALL be refused as unsupported, and declared sizes
+SHALL be charged against the image budget before the plane is allocated.
 
 #### Scenario: Sixteen-bit words [orf_words]
 
@@ -360,8 +362,8 @@ the image budget before the plane is allocated.
 
 #### Scenario: Compressed data is refused by name [orf_compressed]
 
-- **WHEN** 12-bit and 14-bit ORFs whose one strip holds one byte per photosite are opened
-- **THEN** each is named ORF and refused as unsupported, naming compressed sensor data
+- **WHEN** 12-bit and 14-bit ORFs whose one strip holds one byte per photosite, and whose maker note has no coding parameters, are opened
+- **THEN** each is named ORF and refused as unsupported, naming the coding parameters
 
 #### Scenario: Refused variants [orf_unsupported]
 
@@ -375,16 +377,18 @@ from the file start), `OLYMPUS` and `OM SYSTEM` (offsets from the note), and
 from it, preferring ImageProcessing, then RawInfo, then the main note: the
 black per 2 x 2 position, the valid bits, the as-shot red and blue
 multipliers over 256, and the crop, which SHALL become the default crop of
-the whole plane. The white SHALL be the first SensorCalibration value when it
-lies above the black and within the precision, else the precision's ceiling;
-16-bit words SHALL scale both levels by their left alignment. The CFA SHALL
-be Exif `CFAPattern`, 2 x 2 red, green, green, blue in some phase, any other
-being refused as unsupported. Make, model and orientation SHALL come from
-IFD0.
+the whole plane. Maker-note entries whose values lie outside the file SHALL
+be skipped, as some bodies (E-P1, E-PL1) record one. The white SHALL be the first SensorCalibration value when it
+lies above the black and within the precision, else the precision's ceiling.
+At 14 valid bits the black and SensorCalibration, recorded at 12 bits, SHALL
+be scaled by 4 first; 16-bit words SHALL scale both levels by their left
+alignment. The CFA SHALL be Exif `CFAPattern`, 2 x 2 red, green, green, blue
+in some phase, any other being refused as unsupported. Make, model and
+orientation SHALL come from IFD0.
 
 #### Scenario: Every maker-note layout [orf_maker_notes]
 
-- **WHEN** the same levels, crop and multipliers are written in an `OLYMPUS` note, an `OM SYSTEM` note, an `OLYMP` note with ImageProcessing as a value, one with RawInfo, and one with only the main note's tags
+- **WHEN** the same levels, crop and multipliers are written in an `OLYMPUS` note, an `OM SYSTEM` note, an `OLYMP` note with ImageProcessing as a value, one with RawInfo, and one with only the main note's tags, the first and third also holding an entry whose value lies before the file
 - **THEN** all decode to the same plane and neutral, and all but the last report the crop
 
 #### Scenario: Camera tags and the demosaic [orf_tags]
@@ -400,7 +404,7 @@ IFD0.
 #### Scenario: Real camera files [orf_corpus]
 
 - **WHEN** `PICTURA_RAW_CORPUS` names a directory of user-supplied `.ORF` and `.ORI` files
-- **THEN** each is named ORF, each compressed file is refused as such, and each other reads non-flat, with the two green positions within 5 % of each other, and decodes with colour when it has a white balance
+- **THEN** each is named ORF, and each, compressed or not, reads non-flat, with the two green positions within 5 % of each other, and decodes with colour when it has a white balance
 
 ### Requirement: An ORF's embedded matrix supplies its colour
 
@@ -711,7 +715,9 @@ fail without a panic and without an allocation beyond the image budget.
 The RAF reader SHALL read the big-endian header's section offsets and
 lengths (camera JPEG at `0x54`, directory at `0x5C`, sensor section at
 `0x64`) and SHALL read the primary frame whether or not the header names a
-second directory at `0x78`. A sensor section that is a TIFF SHALL be read
+second directory at `0x78`. The header SHALL name a second directory only
+when `0x78` is not 0 and the camera JPEG's offset is above `0x78`, as LibRaw
+checks; a shorter header's bytes at `0x78` SHALL be ignored. A sensor section that is a TIFF SHALL be read
 through its entry `0xF000`, which points at the raw directory. The plane SHALL be
 `0xF001` by `0xF002` photosites of `0xF003` bits, its data the `0xF008` bytes
 at `0xF007` from the section's start. For `n` photosites, `2n` bytes SHALL be
@@ -766,6 +772,11 @@ is allocated.
 
 - **WHEN** a TIFF-section RAF names a second directory at `0x78`
 - **THEN** it decodes to the same image as without it
+
+#### Scenario: A short header names no second directory [raf_short_header]
+
+- **WHEN** a SuperCCD word-section RAF with the layout's top bit set has non-zero bytes at `0x78` but its camera JPEG starts at `0x6C`
+- **THEN** its rows hold the width once, as without a second directory
 
 ### Requirement: A RAF is normalized with its directory's layout and levels
 
@@ -923,5 +934,107 @@ SHALL be the whole upright image the demosaic produces.
 
 #### Scenario: Real SuperCCD files match LibRaw [raf_superccd_libraw]
 
-- **WHEN** `PICTURA_RAW_CORPUS` holds SuperCCD RAFs and python3 with rawpy is available
+- **WHEN** `PICTURA_RAW_CORPUS` holds SuperCCD RAFs and python3 with rawpy is available, the SR files read with header offset `0x80` cleared so only their primary frame is read, as LibRaw reads them
 - **THEN** each grid has LibRaw's size and equals LibRaw's raw plane, repacked with LibRaw's margins and normalized by LibRaw's black and white, within 1
+
+### Requirement: A SuperCCD SR file merges its R frame into extended highlight range
+
+For a SuperCCD layout in a word section whose header names a second
+directory and whose header offset at `0x80` is not 0, the RAF reader SHALL
+read a second frame of the same size and row stride from that offset,
+bounded by the file; rows or
+samples the file does not hold SHALL be missing. The second frame's black
+SHALL come from the second directory's `0x4000`. Both frames SHALL be
+repacked onto LibRaw's grid with the same active area. With `s` and `r`
+each frame's black-subtracted sample over the primary frame's range, for
+each grid CFA colour the ratio `k` SHALL be the median of `s / r` over
+samples with `s` from 0.25 to 0.75 and `r` at least 16 counts, falling back,
+with fewer than 256 such samples, to record `0x9200`'s first value in the
+primary directory over that in the second, or 16 when either is absent or
+0. The merged value SHALL be `s` below 0.80, `k·r` from 0.95, and linear
+between the two from 0.80 to 0.95, and no less than `s` where `s` reaches
+the range, a clipped sample being a lower bound; a missing second sample
+SHALL keep `s`.
+With `h` the larger of 1 and the largest merged value, each sample SHALL be
+`65535 · m / h` rounded and `BaselineExposure` SHALL grow by `log2 h`. Any
+other layout SHALL keep the primary frame alone.
+
+#### Scenario: Unclipped samples keep the primary frame [raf_sr_unclipped]
+
+- **WHEN** an SR RAF of each layout bit has S samples below 0.80 of its range and R samples a sixteenth of them
+- **THEN** it decodes to the same samples and `BaselineExposure` as without the R frame
+
+#### Scenario: Clipped samples come from the R frame [raf_sr_clipped]
+
+- **WHEN** an SR RAF's R samples are a per-colour fraction (1/12, 1/16, 1/20) of a scene that clips its S samples, the R frame's black differs from the S frame's, and some clipped photosites have R at black
+- **THEN** the fitted ratio recovers each fraction, clipped samples decode to the scene over the headroom within 1 count, those with R at black to the S range over it, and `BaselineExposure` grows by `log2` of the largest merged value over the S range
+
+#### Scenario: The blend is continuous [raf_sr_blend]
+
+- **WHEN** S samples ramp from 0.75 to 0.99 of the range, unclipped, with R samples 4 % above S over the fitted ratio
+- **THEN** the merged samples equal `s + t·(k·r − s)`, `t` rising linearly from 0 at 0.80 to 1 at 0.95, over the headroom within 1 count, and rise monotonically with `s`
+
+#### Scenario: Too few samples fall back to the nominal ratio [raf_sr_nominal]
+
+- **WHEN** an SR RAF's S samples are all clipped, with `0x9200` 256 in the primary directory and 32 in the second, then without `0x9200`
+- **THEN** they merge with ratios of 8 and 16
+
+#### Scenario: Missing R rows keep the S frame [raf_sr_missing_rows]
+
+- **WHEN** an S3 Pro-style RAF, R in a section of its own, is cut short of its R frame's last row, and that row is clipped
+- **THEN** it decodes, and that row's samples equal the primary frame's over the headroom within 1 count
+
+#### Scenario: Upright layouts keep the primary frame [raf_sr_upright]
+
+- **WHEN** a Bayer word section has a second directory and a second frame at `0x80`, and an SR RAF has a second directory but `0x80` is 0
+- **THEN** each decodes to its primary samples alone
+
+#### Scenario: Real SR files gain highlight range [raf_sr_corpus]
+
+- **WHEN** `PICTURA_RAW_CORPUS` holds the S3 Pro, S5 Pro or F700 samples
+- **THEN** each reads as with `0x80` cleared except that `BaselineExposure` grows by `log2 h` > 0, samples where that primary read is below 0.80 of its range equal it over `h` within 1 count, and samples where it clips decode to at least the range over `h`
+
+### Requirement: Olympus-compressed ORF data is decoded as LibRaw decodes it
+
+The ORF reader SHALL decode Olympus-compressed sensor data as LibRaw
+0.22.1's `olympus14.cpp` does, with the coding parameters of the maker
+note's ImageProcessing tags `0x0640`-`0x0649` and `0x0650`-`0x0653`, each 0
+when absent. The strip SHALL start with `0x0653` bytes holding a big-endian
+1 and two zero bytes, else the data SHALL be refused as invalid. One bit
+stream SHALL follow over the whole plane, read most significant bit first
+from big-endian words and running on past the strip to the end of the
+file. Each photosite SHALL be decoded from a sign, `0x0643` fine bits,
+`0x0640` raw low bits, a unary or escaped high part and an adaptive number
+of low bits, folded with LibRaw's fine context and added to LibRaw's
+prediction from the same-colour neighbours two columns left and two rows
+up. Parameters that would make a shift undefined (`0x0640` or `0x0643`
+above 16, `0x0641` above 30, `0x0644` above 15, `0x0645` modulo 32 above
+30, `0x0651` above 15) or a header length of 0 SHALL be refused as
+unsupported, and a strip shorter than `2 + 0x0643 + 0x0640` bits per
+photosite SHALL be refused as invalid before decoding. Corrupt streams
+SHALL fail or decode without a panic.
+
+#### Scenario: Compressed data [orf_compressed_decode]
+
+- **WHEN** planes of noise beside a smooth ramp are coded at 12 bits with 2, 1 and 0 fine bits, at 14 bits with a SensorCalibration of 4000, and at 14 bits with two raw low bits and the fine context off
+- **THEN** each decodes to the written plane, normalized by its black and white, scaled by 4 at 14 bits
+
+#### Scenario: Notes carrying the coding [orf_compressed_notes]
+
+- **WHEN** the same compressed plane's coding is written in an `OLYMPUS` note, an `OM SYSTEM` note, and an `OLYMP` note with ImageProcessing as a value
+- **THEN** all decode to the written plane
+
+#### Scenario: Coding checks [orf_compressed_coding]
+
+- **WHEN** a compressed ORF has no coding parameters, a parameter outside the decoder's bounds, 16 valid bits, or a header that does not hold 1
+- **THEN** the first three are refused as unsupported and the header as invalid
+
+#### Scenario: Hostile compressed files [orf_compressed_hostile]
+
+- **WHEN** a compressed ORF is cut at every length, has bytes of its stream flipped, or has a strip far shorter than its plane
+- **THEN** reading returns without panicking, and the cuts and the short strip fail with an error
+
+#### Scenario: Real files match LibRaw [orf_compressed_libraw]
+
+- **WHEN** `PICTURA_RAW_CORPUS` holds compressed ORFs and python3 with rawpy is available
+- **THEN** each decodes to LibRaw's raw plane of the same size, sample for sample after the same normalization

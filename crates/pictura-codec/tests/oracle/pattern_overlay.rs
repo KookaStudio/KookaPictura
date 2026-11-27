@@ -35,8 +35,8 @@ fn pattern_overlay_layer_preserves_effect_block() {
         "the Patt fixture pattern survives"
     );
 
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("psd-pattern-overlay");
@@ -63,7 +63,7 @@ print(effect.scale)
 print(effect.angle)
 print(1 if effect.aligned else 0)
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

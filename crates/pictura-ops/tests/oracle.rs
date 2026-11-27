@@ -17,7 +17,6 @@
 //! `tests/README.md`.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_core::PixelBuffer;
@@ -25,7 +24,7 @@ use pictura_ops::{
     flip_horizontal, flip_vertical, resize, resize_canvas, rotate180, rotate90_ccw, rotate90_cw,
     rotate_arbitrary, Anchor, Resample,
 };
-use pictura_testkit::compare;
+use pictura_testkit::{compare, oracle};
 
 /// One row of the op -> ImageMagick mapping table.
 struct Mapping {
@@ -108,17 +107,6 @@ fn script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/ops_oracle.py")
 }
 
-fn magick_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("magick")
-            .arg("-version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// Unique scratch directory per call so tests can run in parallel.
 fn scratch_dir(tag: &str) -> PathBuf {
     static SEQ: AtomicU64 = AtomicU64::new(0);
@@ -171,7 +159,7 @@ fn oracle_at(
     let output_path = dir.join("out.rgb");
     std::fs::write(&input_path, input_planar).unwrap();
     let channels_arg = channels.to_string();
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg(script())
         .arg("apply")
         .args(["--size", size, "--channels", &channels_arg, "--planar"])
@@ -228,8 +216,8 @@ fn differential_exact(
     size: &str,
     tolerance: u8,
 ) {
-    if !magick_available() {
-        eprintln!("skipping {label}: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let (reference, (iw, ih)) = oracle_at(extra, input, size, actual.channels);
@@ -256,7 +244,7 @@ fn reference_script_is_present() {
         "missing oracle script at {}",
         path.display()
     );
-    let help = Command::new("python3")
+    let help = oracle::Command::new("python3")
         .arg(&path)
         .arg("apply")
         .arg("--help")
@@ -271,11 +259,11 @@ fn reference_script_is_present() {
 
 #[test]
 fn imagemagick_runs() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg(script())
         .arg("version")
         .output()
@@ -309,8 +297,8 @@ fn mapping_documents_ops_and_tolerances() {
 /// for every planar sample (this also proves the planar round-trip).
 #[test]
 fn oracle_negate_matches_expected_bytes() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let input = test_image_planar(16, 16);
@@ -379,6 +367,10 @@ fn resize_bicubic_matches_imagemagick() {
 
 #[test]
 fn resize_canvas_matches_imagemagick() {
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
+        return;
+    }
     let src = test_image_buffer(16, 16);
     let anchors = [
         (Anchor::TopLeft, "northwest"),
@@ -496,8 +488,8 @@ fn flip_vertical_matches_imagemagick() {
 /// source is intact; the measured max delta is 8 (mean 0.6).
 #[test]
 fn rotate_arbitrary_matches_imagemagick() {
-    if !magick_available() {
-        eprintln!("skipping rotate_arbitrary: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let src = test_image_buffer(16, 16);
@@ -544,8 +536,8 @@ fn rotate_arbitrary_matches_imagemagick() {
 /// then revert and confirm it matches again.
 #[test]
 fn differential_harness_detects_perturbation() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let src = test_image_buffer(16, 12);

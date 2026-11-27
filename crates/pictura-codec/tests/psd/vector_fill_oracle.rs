@@ -8,10 +8,9 @@
 //! Needs `python3` with `psd-tools`; self-skips with a message otherwise.
 
 use std::path::PathBuf;
-use std::process::Command;
-use std::sync::OnceLock;
 
 use pictura_codec::DescValue;
+use pictura_testkit::oracle;
 
 const SCRIPT: &str = r#"
 import sys
@@ -42,30 +41,19 @@ lines.append("outside|" + ",".join(str(c) for c in outside))
 print("\n".join(lines))
 "#;
 
-fn psd_tools_available() -> bool {
-    static AVAILABLE: OnceLock<bool> = OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 fn fixture_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vector_fill.psd")
 }
 
 #[test]
 fn psd_tools_reads_vector_fill_fixture() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
     let fixture = fixture_path();
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", SCRIPT, fixture.to_str().expect("utf-8 fixture path")])
         .output()
         .expect("run python3");

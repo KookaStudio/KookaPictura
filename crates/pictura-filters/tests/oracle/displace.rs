@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use pictura_core::PixelBuffer;
 use pictura_filters::{apply, DisplaceFit, DisplaceMap, Filter};
-use pictura_testkit::{compare, Diff};
+use pictura_testkit::{compare, oracle, Diff};
 
-use crate::common::{magick_available, oracle, scratch_dir, test_image_planar, CHANNELS, SIZE};
+use crate::common::{oracle, scratch_dir, test_image_planar, CHANNELS, SIZE};
 
 /// A `SIZE`x`SIZE` map whose red and green planes ramp at different angles,
 /// so both axes and both signs are exercised.
@@ -33,12 +33,8 @@ fn write_map(path: &std::path::Path, red: &[u8], green: &[u8]) {
     std::fs::write(path, ppm).unwrap();
 }
 
-/// Diff Pictura's Displace against ImageMagick at `tolerance`, or `None`
-/// without `magick`.
-fn displace_diff(scale: (f64, f64), tolerance: u8) -> Option<Diff> {
-    if !magick_available() {
-        return None;
-    }
+/// Diff Pictura's Displace against ImageMagick at `tolerance`.
+fn displace_diff(scale: (f64, f64), tolerance: u8) -> Diff {
     let (red, green) = map_planes();
     let dir = scratch_dir("displace-map");
     let map_path = dir.join("map.ppm");
@@ -71,7 +67,7 @@ fn displace_diff(scale: (f64, f64), tolerance: u8) -> Option<Diff> {
         wrap: false,
     };
     apply(&filter, &mut buf).expect("displace applies");
-    Some(compare(&buf.data, &reference, tolerance).unwrap())
+    compare(&buf.data, &reference, tolerance).unwrap()
 }
 
 /// Repeat Edge Pixels matches within 5 levels at these scales, mean under 0.5.
@@ -84,11 +80,12 @@ fn displace_diff(scale: (f64, f64), tolerance: u8) -> Option<Diff> {
 /// the script's `--wrap`).
 #[test]
 fn displace_matches_imagemagick() {
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
+        return;
+    }
     for scale in [(4.0, 4.0), (6.0, -5.0)] {
-        let Some(diff) = displace_diff(scale, 8) else {
-            eprintln!("skipping Displace: `magick` not on PATH");
-            return;
-        };
+        let diff = displace_diff(scale, 8);
         assert!(
             diff.is_empty(),
             "Displace {scale:?}: {} of {} samples over tolerance 8 (max delta {})",

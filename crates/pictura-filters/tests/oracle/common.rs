@@ -1,12 +1,11 @@
 //! Shared constants and helpers for the ImageMagick oracle tests.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_core::PixelBuffer;
 use pictura_filters::{apply, Filter};
-use pictura_testkit::{compare, Diff};
+use pictura_testkit::{compare, oracle, Diff};
 
 /// Side length of the raw planar RGB8 test image.
 pub(crate) const SIZE: u32 = 16;
@@ -14,17 +13,6 @@ pub(crate) const CHANNELS: u8 = 3;
 
 pub(crate) fn script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/filter_oracle.py")
-}
-
-pub(crate) fn magick_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("magick")
-            .arg("-version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
 }
 
 /// Unique scratch directory per call so tests can run in parallel.
@@ -88,7 +76,7 @@ pub(crate) fn oracle(extra: &[&str], input_planar: &[u8]) -> Vec<u8> {
     let input_path = dir.join("in.rgb");
     let output_path = dir.join("out.rgb");
     std::fs::write(&input_path, input_planar).unwrap();
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg(script())
         .arg("apply")
         .args(["--size", "16x16", "--planar"])
@@ -107,12 +95,8 @@ pub(crate) fn oracle(extra: &[&str], input_planar: &[u8]) -> Vec<u8> {
     bytes
 }
 
-/// Apply `filter` and diff it against the ImageMagick oracle. `None` when
-/// `magick` is not on PATH.
-pub(crate) fn oracle_diff(filter: &Filter, extra: &[&str], tolerance: u8) -> Option<Diff> {
-    if !magick_available() {
-        return None;
-    }
+/// Apply `filter` and diff it against the ImageMagick oracle.
+pub(crate) fn oracle_diff(filter: &Filter, extra: &[&str], tolerance: u8) -> Diff {
     let original = test_image_planar();
     let reference = oracle(extra, &original);
     let mut buf = PixelBuffer {
@@ -122,15 +106,16 @@ pub(crate) fn oracle_diff(filter: &Filter, extra: &[&str], tolerance: u8) -> Opt
         data: original.into(),
     };
     apply(filter, &mut buf).expect("pictura_filters::apply");
-    Some(compare(&buf.data, &reference, tolerance).expect("buffer lengths agree"))
+    compare(&buf.data, &reference, tolerance).expect("buffer lengths agree")
 }
 
 /// Diff `apply` against the ImageMagick oracle. Skips when `magick` is absent.
 pub(crate) fn differential(filter: &Filter, extra: &[&str], tolerance: u8, label: &str) {
-    let Some(diff) = oracle_diff(filter, extra, tolerance) else {
-        eprintln!("skipping {label}: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
-    };
+    }
+    let diff = oracle_diff(filter, extra, tolerance);
     assert!(
         diff.is_empty(),
         "{label}: {} of {} samples over tolerance {tolerance} (max delta {})",

@@ -1,13 +1,14 @@
 //! Olympus and OM System ORF/ORI (#1471): a TIFF with its own magic whose
 //! IFD0 is the sensor image, stored in 16-bit words or in one of three 12-bit
-//! packings, or Olympus-compressed, which is refused (#1535). The directory
-//! calls all of them uncompressed, so the strips' size tells them apart. Built
-//! from the TIFF specification and observation of real files; the maker note
-//! is `orf_meta`'s.
+//! packings, or Olympus-compressed, which `orf_decode` decodes (#1535). The
+//! directory calls all of them uncompressed, so the strips' size tells them
+//! apart. Built from the TIFF specification and observation of real files;
+//! the maker note is `orf_meta`'s.
 
 use rayon::prelude::*;
 
 use super::levels::{self, Area, Levels};
+use super::orf_decode;
 use super::orf_meta::OrfMeta;
 use super::tiff::{Order, Tiff};
 use super::{
@@ -49,6 +50,8 @@ enum Coding {
     /// Most significant bit first over bytes, in two fields: the even rows,
     /// then the odd.
     MsbFields,
+    /// One strip of Olympus's compressed stream.
+    Compressed,
 }
 
 /// The coding of `stored` bytes in `strips` strips of a `width × height`
@@ -75,7 +78,7 @@ fn coding(
             Err(unsupported("packed width"))
         }
     } else if strips == 1 && stored * 2 < 3 * n {
-        Err(unsupported("compressed sensor data is not supported yet"))
+        Ok(Coding::Compressed)
     } else {
         Err(unsupported("sensor data layout"))
     }
@@ -173,7 +176,7 @@ fn decode_packed(
         Coding::PaddedLsb => (width / 5 * 8, unpack_padded),
         Coding::MsbWords => (width / 2 * 3, unpack_msb_words),
         Coding::MsbFields => (width / 2 * 3, unpack_msb),
-        Coding::Words => unreachable!("read as TIFF strips"),
+        Coding::Words | Coding::Compressed => unreachable!("not packed"),
     };
     let rows = stored_rows(tags, counts, row_bytes, height)?;
     let mut plane = vec![0u16; width * height];
@@ -281,6 +284,7 @@ pub(super) fn read_orf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
     let bits = meta.bits.unwrap_or(12);
     let bits_ok = match coding {
         Coding::Words => (8..=16).contains(&bits),
+        Coding::Compressed => bits == 12 || bits == 14,
         _ => bits == 12,
     };
     if !bits_ok {
@@ -301,6 +305,20 @@ pub(super) fn read_orf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
             let layout = layout(&tags, width, height, budget)?;
             decode_plane(&tiff, &layout, 1, 16, dims, 1)?
         }
+        Coding::Compressed => {
+            let params = meta.params.ok_or_else(|| {
+                unsupported("compressed sensor data without the maker note's coding parameters")
+            })?;
+            let at = tags
+                .uints(STRIP_OFFSETS)?
+                .and_then(|offsets| offsets.first().copied())
+                .ok_or_else(|| invalid("strip offsets"))?;
+            let data = bytes.get(to_usize(at)?..).ok_or(PsdError::Truncated)?;
+            if (data.len() as u64) < stored {
+                return Err(PsdError::Truncated);
+            }
+            orf_decode::decode(data, stored as usize, &params, dims)?
+        }
         _ => decode_packed(&tags, &counts, coding, dims)?,
     };
 
@@ -308,11 +326,14 @@ pub(super) fn read_orf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         Coding::Words => (1u32 << (16 - bits)) as f64,
         _ => 1.0,
     };
-    let black = meta.black.unwrap_or([0.0; 4]);
+    // 14-bit files record their levels at 12 bits, as LibRaw reads them.
+    let recorded = if bits == 14 { 4.0 } else { 1.0 };
+    let black = meta.black.unwrap_or([0.0; 4]).map(|b| b * recorded);
     let top_black = black.iter().fold(0.0f64, |a, &b| a.max(b));
     let ceiling = ((1u32 << bits) - 1) as f64;
     let white = meta
         .white
+        .map(|w| w * recorded)
         .filter(|&w| w > top_black && w <= ceiling)
         .unwrap_or(ceiling);
     let levels = Levels {

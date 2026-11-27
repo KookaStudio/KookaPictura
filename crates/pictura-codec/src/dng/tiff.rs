@@ -200,6 +200,16 @@ impl<'a> Tiff<'a> {
     }
 
     pub fn ifd(&self, offset: u64) -> Result<Ifd, PsdError> {
+        self.directory(offset, false)
+    }
+
+    /// A maker note's directory, skipping entries whose values lie outside
+    /// the file: some bodies (E-P1, E-PL1) record such junk entries.
+    pub fn ifd_skipping_strays(&self, offset: u64) -> Result<Ifd, PsdError> {
+        self.directory(offset, true)
+    }
+
+    fn directory(&self, offset: u64, skip_strays: bool) -> Result<Ifd, PsdError> {
         let at = usize::try_from(offset).map_err(|_| PsdError::Truncated)?;
         let (count, first, entry_len, inline) = if self.big {
             let n = usize::try_from(self.u64_at(at)?).map_err(|_| PsdError::Truncated)?;
@@ -231,7 +241,10 @@ impl<'a> Tiff<'a> {
             } else {
                 self.u32_at(value_at)? as usize
             };
-            self.slice(at, len)?;
+            match self.slice(at, len) {
+                Err(_) if skip_strays => continue,
+                checked => checked?,
+            };
             entries.push(Entry {
                 tag,
                 typ,

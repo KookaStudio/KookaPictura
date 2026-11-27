@@ -11,8 +11,9 @@
 //! always run; the differential tests skip when ImageMagick is absent.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+use pictura_testkit::oracle;
 
 /// Side length of the raw RGBA8 test image used throughout.
 const SIZE: u32 = 8;
@@ -20,17 +21,6 @@ const SIZE: u32 = 8;
 /// Oracle script, relative to this crate.
 fn script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/color_oracle.py")
-}
-
-fn magick_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("magick")
-            .arg("-version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
 }
 
 /// Unique scratch directory per call so tests can run in parallel.
@@ -83,7 +73,7 @@ fn reference_script_is_present() {
         "missing oracle script at {}",
         path.display()
     );
-    let help = Command::new("python3")
+    let help = oracle::Command::new("python3")
         .arg(&path)
         .arg("--help")
         .output()
@@ -97,11 +87,11 @@ fn reference_script_is_present() {
 
 #[test]
 fn imagemagick_runs() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg(script())
         .arg("version")
         .output()
@@ -124,8 +114,8 @@ fn imagemagick_runs() {
 fn oracle_script_converts_with_system_profiles() {
     const SRGB: &str = "/usr/share/color/icc/colord/sRGB.icc";
     const ADOBE: &str = "/usr/share/color/icc/colord/AdobeRGB1998.icc";
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     if !PathBuf::from(SRGB).is_file() || !PathBuf::from(ADOBE).is_file() {
@@ -136,7 +126,7 @@ fn oracle_script_converts_with_system_profiles() {
     let input = dir.join("in.rgba");
     let output = dir.join("out.rgba");
     std::fs::write(&input, test_image()).unwrap();
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg(script())
         .args([
             "convert", "--src", SRGB, "--dst", ADOBE, "--intent", "relative", "--bpc", "--size",
@@ -190,7 +180,7 @@ mod differential {
         fs::write(&src, src_icc).unwrap();
         fs::write(&dst, dst_icc).unwrap();
         fs::write(&input_path, input).unwrap();
-        let mut cmd = Command::new("python3");
+        let mut cmd = oracle::Command::new("python3");
         cmd.arg(script())
             .args(["convert", "--src"])
             .arg(&src)
@@ -214,8 +204,8 @@ mod differential {
 
     /// Diff `convert` against the oracle and report the max delta.
     fn compare_with_oracle(src: &Profile, dst: &Profile, intent: Intent, bpc: bool, label: &str) {
-        if !magick_available() {
-            eprintln!("skipping {label}: `magick` not on PATH");
+        if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+            skip.report();
             return;
         }
         let input = test_image();

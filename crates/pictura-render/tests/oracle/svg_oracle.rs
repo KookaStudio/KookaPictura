@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use pictura_adjust::{GradientKind, GradientStop, PatternFillParams};
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
 use pictura_core::{BitDepth, BlendMode, ColorMode, Document};
-use pictura_testkit::compare;
+use pictura_testkit::{compare, oracle};
 
 // A unique path per call: nextest runs one binary's tests in parallel threads.
 fn scratch(tag: &str) -> PathBuf {
@@ -48,17 +48,6 @@ fn rsvg_render(svg: &str, tag: &str) -> Result<Vec<u8>, String> {
 /// accepts the `RSVG:` prefix but silently renders with its internal MSVG
 /// renderer, which ignores `mix-blend-mode`, so a successful render is not
 /// enough; the format list must name librsvg.
-fn rsvg_available() -> bool {
-    Command::new("magick")
-        .args(["-list", "format"])
-        .output()
-        .is_ok_and(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .any(|line| line.trim_start().starts_with("RSVG") && line.contains("Librsvg"))
-        })
-}
-
 /// `doc`'s CPU composite flattened onto white, as interleaved RGB8.
 fn composite_on_white(doc: &Document) -> Vec<u8> {
     let buffer = pictura_render::composite_rgba(doc);
@@ -215,8 +204,8 @@ fn librsvg_renders_gradients_patterns_and_strokes_like_the_composite() {
     assert!(svg.contains("<pattern"), "{svg}");
     assert!(svg.contains("stroke="), "{svg}");
 
-    if !rsvg_available() {
-        eprintln!("skipping: magick with the RSVG coder not available");
+    if let Err(skip) = oracle::require(oracle::Tool::MagickRsvg) {
+        skip.report();
         return;
     }
     let rendered = rsvg_render(&svg, "primitives").expect("librsvg renders the export");
@@ -240,8 +229,8 @@ fn librsvg_renders_the_exported_svg_like_the_composite() {
     assert!(svg.contains("mix-blend-mode:multiply"), "{svg}");
     assert!(svg.contains("<g opacity="), "{svg}");
 
-    if !rsvg_available() {
-        eprintln!("skipping: magick with the RSVG coder not available");
+    if let Err(skip) = oracle::require(oracle::Tool::MagickRsvg) {
+        skip.report();
         return;
     }
     let rendered = rsvg_render(&svg, "vector").expect("librsvg renders the export");

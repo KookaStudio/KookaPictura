@@ -15,8 +15,8 @@
 //! the psd-tools/magick oracles.
 
 use std::path::PathBuf;
-use std::process::Command;
-use std::sync::OnceLock;
+
+use pictura_testkit::oracle;
 
 const SCRIPT: &str = r#"
 const fs = require('fs');
@@ -45,30 +45,16 @@ const lines = [];
 console.log(lines.join('\n'));
 "#;
 
-fn node_ag_psd_available() -> bool {
-    static AVAILABLE: OnceLock<bool> = OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("node")
-            .args(["-e", "require('ag-psd')"])
-            .current_dir(env!("CARGO_MANIFEST_DIR"))
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 #[test]
 fn ag_psd_reads_channel_mixer_fixture() {
-    if !node_ag_psd_available() {
-        eprintln!(
-            "skipping ag-psd check: node + ag-psd not available (run `npm i ag-psd`, or set NODE_PATH)"
-        );
+    if let Err(skip) = oracle::require(oracle::Tool::AgPsd) {
+        skip.report();
         return;
     }
 
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/channel_mixer.psd");
-    let out = Command::new("node")
+    let out = oracle::Command::new("node")
         .args(["-e", SCRIPT, fixture.to_str().expect("utf-8 fixture path")])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -134,15 +120,13 @@ console.log(lines.join('\n'));
 
 #[test]
 fn ag_psd_reads_curves_fixture() {
-    if !node_ag_psd_available() {
-        eprintln!(
-            "skipping ag-psd check: node + ag-psd not available (run `npm i ag-psd`, or set NODE_PATH)"
-        );
+    if let Err(skip) = oracle::require(oracle::Tool::AgPsd) {
+        skip.report();
         return;
     }
 
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/curves.psd");
-    let out = Command::new("node")
+    let out = oracle::Command::new("node")
         .args([
             "-e",
             CURVES_SCRIPT,
@@ -211,16 +195,14 @@ console.log(lines.join('\n'));
 
 #[test]
 fn ag_psd_reads_selective_color_fixture() {
-    if !node_ag_psd_available() {
-        eprintln!(
-            "skipping ag-psd check: node + ag-psd not available (run `npm i ag-psd`, or set NODE_PATH)"
-        );
+    if let Err(skip) = oracle::require(oracle::Tool::AgPsd) {
+        skip.report();
         return;
     }
 
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/selective_color.psd");
-    let out = Command::new("node")
+    let out = oracle::Command::new("node")
         .args([
             "-e",
             SELECTIVE_COLOR_SCRIPT,
@@ -289,15 +271,13 @@ console.log(lines.join('\n'));
 
 #[test]
 fn ag_psd_reads_vector_mask_fixture() {
-    if !node_ag_psd_available() {
-        eprintln!(
-            "skipping ag-psd check: node + ag-psd not available (run `npm i ag-psd`, or set NODE_PATH)"
-        );
+    if let Err(skip) = oracle::require(oracle::Tool::AgPsd) {
+        skip.report();
         return;
     }
 
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vector_mask.psd");
-    let out = Command::new("node")
+    let out = oracle::Command::new("node")
         .args([
             "-e",
             VECTOR_MASK_SCRIPT,
@@ -349,15 +329,13 @@ console.log(lines.join('\n'));
 
 #[test]
 fn ag_psd_reads_vector_fill_fixture() {
-    if !node_ag_psd_available() {
-        eprintln!(
-            "skipping ag-psd check: node + ag-psd not available (run `npm i ag-psd`, or set NODE_PATH)"
-        );
+    if let Err(skip) = oracle::require(oracle::Tool::AgPsd) {
+        skip.report();
         return;
     }
 
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vector_fill.psd");
-    let out = Command::new("node")
+    let out = oracle::Command::new("node")
         .args([
             "-e",
             VECTOR_FILL_SCRIPT,
@@ -405,15 +383,13 @@ console.log(lines.join('\n'));
 
 #[test]
 fn ag_psd_reads_color_lookup_fixture() {
-    if !node_ag_psd_available() {
-        eprintln!(
-            "skipping ag-psd check: node + ag-psd not available (run `npm i ag-psd`, or set NODE_PATH)"
-        );
+    if let Err(skip) = oracle::require(oracle::Tool::AgPsd) {
+        skip.report();
         return;
     }
 
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/color_lookup.psd");
-    let out = Command::new("node")
+    let out = oracle::Command::new("node")
         .args([
             "-e",
             COLOR_LOOKUP_SCRIPT,
@@ -478,10 +454,8 @@ fn ag_psd_reads_authored_text_path() {
         TypeSpec,
     };
 
-    if !node_ag_psd_available() {
-        eprintln!(
-            "skipping ag-psd check: node + ag-psd not available (run `npm i ag-psd`, or set NODE_PATH)"
-        );
+    if let Err(skip) = oracle::require(oracle::Tool::AgPsd) {
+        skip.report();
         return;
     }
 
@@ -539,7 +513,7 @@ fn ag_psd_reads_authored_text_path() {
     let fixture =
         std::env::temp_dir().join(format!("pictura-text-path-{}.psd", std::process::id()));
     std::fs::write(&fixture, bytes).expect("write fixture");
-    let out = Command::new("node")
+    let out = oracle::Command::new("node")
         .args([
             "-e",
             TEXT_PATH_SCRIPT,

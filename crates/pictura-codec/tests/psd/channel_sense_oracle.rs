@@ -4,9 +4,10 @@
 //! `psd-tools` for the DisplayInfo kinds. Needs `python3` with `psd-tools`;
 //! self-skips with a message otherwise.
 
-use pictura_core::{BitDepth, Channel, ColorMode, Document};
 use std::path::Path;
-use std::process::Command;
+
+use pictura_core::{BitDepth, Channel, ColorMode, Document};
+use pictura_testkit::oracle;
 
 const SCRIPT: &str = r#"
 from psd_tools.constants import Resource
@@ -18,16 +19,8 @@ info = psd.image_resources[Resource.DISPLAY_INFO].data
 print(','.join(str(int(c.mode)) for c in info.alpha_channels))
 "#;
 
-fn psd_tools_available() -> bool {
-    Command::new("python3")
-        .args(["-c", "import psd_tools"])
-        .output()
-        .map(|out| out.status.success())
-        .unwrap_or(false)
-}
-
 fn read_modes(path: &Path) -> String {
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", SCRIPT])
         .arg(path)
         .output()
@@ -46,8 +39,8 @@ fn read_modes(path: &Path) -> String {
 
 #[test]
 fn psd_tools_reports_channel_sense_modes() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let mut doc = Document::new(2, 2, ColorMode::Grayscale, BitDepth::Eight);

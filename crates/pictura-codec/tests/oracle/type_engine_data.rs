@@ -29,8 +29,8 @@ fn engine_data_fixture_decodes_to_expected_style() {
         Some(&EngineValue::String("hello world\r".into()))
     );
 
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools cross-check: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     assert_eq!(ours(&fonts, &style, &root), psd_tools_values(&path));
@@ -103,7 +103,7 @@ print("fill=" + ",".join(repr(v) for v in vals))
 print("tracking=" + repr(tracking))
 print("just=" + str(just))
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(path)
@@ -216,8 +216,8 @@ fn grounded_cs6_antialias_fixtures_match_the_confirmed_mapping() {
 /// psd-tools is absent.
 #[test]
 fn authored_type_layer_psd_round_trips_through_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping 7.2 psd-tools round-trip: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -320,7 +320,7 @@ print("hscale=" + str(float(run["HorizontalScale"].value)))
 print("size=" + str(float(run["FontSize"].value)))
 print("marker=" + str(run["PicturaMarker"].value))
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

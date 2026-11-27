@@ -9,11 +9,10 @@
 //! Needs `python3` with `psd-tools`; self-skips with a message otherwise.
 
 use std::path::PathBuf;
-use std::process::Command;
-use std::sync::OnceLock;
 
 use pictura_codec::{read_psd, write_psd};
 use pictura_core::{Document, LayerBlock, LayerMask, PsdRect};
+use pictura_testkit::oracle;
 
 const SCRIPT: &str = r#"
 import sys
@@ -58,24 +57,13 @@ for layer in psd:
 print("\n".join(lines))
 "#;
 
-fn psd_tools_available() -> bool {
-    static AVAILABLE: OnceLock<bool> = OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// One `|`-separated row per vector-mask layer, as `SCRIPT` prints them.
 fn read_with_psd_tools(path: &std::path::Path) -> (String, Vec<Vec<String>>) {
     run_psd_tools(SCRIPT, path)
 }
 
 fn run_psd_tools(script: &str, path: &std::path::Path) -> (String, Vec<Vec<String>>) {
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", script, path.to_str().expect("utf-8 path")])
         .output()
         .expect("run python3");
@@ -95,8 +83,8 @@ fn run_psd_tools(script: &str, path: &std::path::Path) -> (String, Vec<Vec<Strin
 
 #[test]
 fn psd_tools_reads_vector_mask_fixture() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -181,8 +169,8 @@ fn vsms_fixture_round_trips() {
 
 #[test]
 fn vsms_fixture_matches_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -311,8 +299,8 @@ fn codec_preserves_vector_mask_blocks() {
 
 #[test]
 fn psd_tools_reads_the_derived_raster_mask_fixture() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 

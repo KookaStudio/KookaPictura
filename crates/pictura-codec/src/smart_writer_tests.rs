@@ -1,10 +1,10 @@
 //! Authoring tests for embedded smart objects (write-side).
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_core::*;
+use pictura_testkit::oracle;
 
 use crate::{read_psd, write_psd};
 
@@ -241,17 +241,6 @@ fn authored_descriptor_is_sold_v4() {
     );
 }
 
-fn psd_tools_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 fn scratch_dir(tag: &str) -> PathBuf {
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
@@ -266,8 +255,8 @@ fn scratch_dir(tag: &str) -> PathBuf {
 
 #[test]
 fn psd_tools_parses_authored_smart_object() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let fixture =
@@ -308,7 +297,7 @@ print(so.kind)
 print(so.filename)
 print(len(so.data))
 "#;
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

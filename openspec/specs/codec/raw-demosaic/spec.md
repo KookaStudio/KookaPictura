@@ -134,5 +134,5 @@ demosaic itself is ours.
 
 #### Scenario: Real SuperCCD renders match LibRaw [superccd_rotate_libraw]
 
-- **WHEN** `PICTURA_RAW_CORPUS` holds SuperCCD RAFs and python3 with rawpy is available
+- **WHEN** `PICTURA_RAW_CORPUS` holds SuperCCD RAFs and python3 with rawpy is available, the SR files read with header offset `0x80` cleared so only their primary frame is read, as LibRaw reads them
 - **THEN** each demosaiced and oriented image has the size of LibRaw's linear, unscaled camera-RGB rendering, and each channel's 8 × 8 block means correlate with LibRaw's at 0.99 or more

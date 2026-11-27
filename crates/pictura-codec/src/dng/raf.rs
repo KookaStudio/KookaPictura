@@ -5,7 +5,8 @@
 //! Fujifilm's compressed data (`raf_compressed.rs`, #1620) are read for
 //! X-Trans and Bayer sensors. Older bodies (#1621) store plain words in a
 //! sensor section that is not a TIFF; SuperCCD bodies turn their lattice by
-//! 45°, repacked as LibRaw does (`raf_superccd.rs`). Built from ExifTool's
+//! 45°, repacked as LibRaw does (`raf_superccd.rs`); SR bodies merge their
+//! second frame for highlight range (`raf_sr.rs`). Built from ExifTool's
 //! public RAF tag documentation and observation of real files; the word
 //! sections' byte order, frame layout and levels follow LibRaw 0.22.1.
 
@@ -13,6 +14,7 @@ use rayon::prelude::*;
 
 use super::levels::{self, Area, Levels};
 use super::raf_compressed;
+use super::raf_sr;
 use super::raf_superccd::{self, UPRIGHT_SIZE};
 use super::tiff::{Ifd, Order, Tiff};
 use super::{to_usize, CfaPattern, DngColor, DngCrop, DngImage, Tags, MAKE, ORIENTATION};
@@ -27,6 +29,8 @@ const RECORDS_AT: usize = 0x5C;
 const SENSOR_AT: usize = 0x64;
 /// A second directory: LibRaw counts it as a second frame.
 const SECOND_FRAME_AT: usize = 0x78;
+/// The second frame's sensor data, LibRaw's `100 + 28`.
+const SECOND_SENSOR_AT: usize = 0x80;
 const HEADER_LEN: usize = 0x80;
 
 /// Directory records.
@@ -40,6 +44,9 @@ const RAW_EXPOSURE_BIAS: u16 = 0x9650;
 /// Word sections' black and as-shot levels, green, red, green, blue.
 const WORD_BLACK: u16 = 0x4000;
 const WORD_AS_SHOT: u16 = 0x2FF0;
+/// The frame's sensitivity; the S and R frames' first values give their
+/// nominal ratio.
+const SENSITIVITY: u16 = 0x9200;
 /// Present in files of the generation LibRaw sizes from its own table.
 const RAF_DATA: u16 = 0xC000;
 const LAYOUT_XTRANS: [u8; 4] = [0x0C; 4];
@@ -90,9 +97,12 @@ fn section(bytes: &[u8], at: usize) -> Result<&[u8], PsdError> {
         .ok_or(PsdError::Truncated)
 }
 
-/// The directory's records, tag → value bytes.
-fn records(bytes: &[u8]) -> Result<Vec<(u16, &[u8])>, PsdError> {
-    let dir = section(bytes, RECORDS_AT)?;
+/// A directory's records, tag → value bytes.
+type Records<'a> = Vec<(u16, &'a [u8])>;
+
+/// The records of the directory whose section the header names at `at`.
+fn records(bytes: &[u8], at: usize) -> Result<Records<'_>, PsdError> {
+    let dir = section(bytes, at)?;
     let count = be32(dir, 0)?;
     let mut out = Vec::new();
     let mut at = 4;
@@ -105,6 +115,12 @@ fn records(bytes: &[u8]) -> Result<Vec<(u16, &[u8])>, PsdError> {
         at += 4 + len;
     }
     Ok(out)
+}
+
+/// Whether the header names a second directory. LibRaw trusts `0x78` only
+/// when the camera JPEG starts after it; the S2 Pro's header is shorter.
+fn names_second_directory(bytes: &[u8]) -> Result<bool, PsdError> {
+    Ok(be32(bytes, SECOND_FRAME_AT)? != 0 && be32(bytes, JPEG_AT)? > SECOND_FRAME_AT)
 }
 
 fn record<'a>(records: &[(u16, &'a [u8])], tag: u16) -> Option<&'a [u8]> {
@@ -584,6 +600,40 @@ fn tiff_plane(
     })
 }
 
+/// `height` rows of `width` words in the given byte order, `stride` words
+/// apart from `at`. Rows the file does not hold fail as truncated, or with
+/// `partial` are `raf_sr::MISSING`.
+fn words(
+    bytes: &[u8],
+    at: usize,
+    (width, height, stride): (usize, usize, usize),
+    big_endian: bool,
+    partial: bool,
+) -> Result<Vec<u16>, PsdError> {
+    let data = bytes.get(at..).ok_or(PsdError::Truncated)?;
+    if !partial && data.len() < stride * height * 2 {
+        return Err(PsdError::Truncated);
+    }
+    let mut samples = vec![0u16; width * height];
+    samples
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(y, dst)| {
+            let Some(row) = data.get(y * stride * 2..y * stride * 2 + width * 2) else {
+                dst.fill(raf_sr::MISSING);
+                return;
+            };
+            for (d, w) in dst.iter_mut().zip(row.as_chunks::<2>().0) {
+                *d = if big_endian {
+                    u16::from_be_bytes(*w)
+                } else {
+                    u16::from_le_bytes(*w)
+                };
+            }
+        });
+    Ok(samples)
+}
+
 /// The plane of a sensor section of plain words: `0x0100`'s height by width
 /// in the camera JPEG's byte order. With LibRaw's `fuji_layout` and a second
 /// directory each row holds both frames, the primary first, and the data
@@ -598,27 +648,11 @@ fn word_plane(
     let (height, width) = pair(records, FULL_SIZE)?.ok_or_else(|| invalid("missing raw size"))?;
     charge(width, height, budget)?;
     let stride = if two_frames { 2 * width } else { width };
-    let data = bytes
-        .get(be32(bytes, SENSOR_AT)?..)
-        .and_then(|d| d.get(..stride * height * 2))
-        .ok_or(PsdError::Truncated)?;
-    let mut samples = vec![0u16; width * height];
-    samples
-        .par_chunks_mut(width)
-        .zip(data.par_chunks(stride * 2))
-        .for_each(|(dst, row)| {
-            for (d, w) in dst.iter_mut().zip(row.as_chunks::<2>().0) {
-                *d = if big_endian {
-                    u16::from_be_bytes(*w)
-                } else {
-                    u16::from_le_bytes(*w)
-                };
-            }
-        });
+    let at = be32(bytes, SENSOR_AT)?;
     Ok(Plane {
         width,
         height,
-        samples,
+        samples: words(bytes, at, (width, height, stride), big_endian, false)?,
         black: Black::Colours(word_black(records)?),
         white: if big_endian {
             WORD_WHITE_12
@@ -627,6 +661,31 @@ fn word_plane(
         },
         neutral: word_neutral(records),
     })
+}
+
+/// An SR body's second (R) frame of the primary's `(width, height,
+/// stride)` from `0x80`, and the second directory's records. `None` when
+/// `0x80` is 0.
+fn second_frame<'a>(
+    bytes: &'a [u8],
+    size: (usize, usize, usize),
+    big_endian: bool,
+    budget: &ImageBudget,
+) -> Result<Option<(Vec<u16>, Records<'a>)>, PsdError> {
+    let at = be32(bytes, SECOND_SENSOR_AT)?;
+    if at == 0 {
+        return Ok(None);
+    }
+    charge(size.0, size.1, budget)?;
+    let samples = words(bytes, at, size, big_endian, true)?;
+    Ok(Some((samples, records(bytes, SECOND_FRAME_AT)?)))
+}
+
+/// A directory's nominal sensitivity, `0x9200`'s first value.
+fn sensitivity(records: &[(u16, &[u8])]) -> Option<f64> {
+    let v = record(records, SENSITIVITY)?;
+    let s = f64::from(u16::from_be_bytes([*v.first()?, *v.get(1)?]));
+    (s > 0.0).then_some(s)
 }
 
 /// Reads a RAF's sensor plane: an upright CFA normalized over the whole
@@ -638,13 +697,16 @@ pub(super) fn read_raf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
     if bytes.len() < HEADER_LEN {
         return Err(PsdError::Truncated);
     }
-    let two_frames = be32(bytes, SECOND_FRAME_AT)? != 0;
-    let records = records(bytes)?;
+    let two_frames = names_second_directory(bytes)?;
+    let records = records(bytes, RECORDS_AT)?;
     let layout = layout(&records)?;
     let sensor = section(bytes, SENSOR_AT)?;
     let (make, model, orientation) = camera(bytes);
-    let plane = match (Tiff::parse(sensor), &layout) {
-        (Ok((tiff, first)), Layout::Cfa(cfa)) => tiff_plane(sensor, &tiff, first, cfa, budget)?,
+    // A word section's row stride and byte order.
+    let (plane, words_layout) = match (Tiff::parse(sensor), &layout) {
+        (Ok((tiff, first)), Layout::Cfa(cfa)) => {
+            (tiff_plane(sensor, &tiff, first, cfa, budget)?, None)
+        }
         (Ok(_), Layout::SuperCcd { .. }) => {
             return Err(unsupported("SuperCCD layout in a TIFF sensor section"));
         }
@@ -652,9 +714,16 @@ pub(super) fn read_raf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
             // LibRaw's `fuji_layout`, whatever the lattice.
             let shift = record(&records, LAYOUT).is_some_and(|l| l[0] & 0x80 != 0);
             let big_endian = exif(bytes).is_some_and(|e| e.starts_with(b"MM"));
-            word_plane(bytes, &records, shift && two_frames, big_endian, budget)?
+            let plane = word_plane(bytes, &records, shift && two_frames, big_endian, budget)?;
+            let stride = if shift && two_frames {
+                2 * plane.width
+            } else {
+                plane.width
+            };
+            (plane, Some((stride, big_endian)))
         }
     };
+    let mut headroom_stops = 0.0;
     let whole = |width, height| Area {
         top: 0,
         left: 0,
@@ -690,13 +759,40 @@ pub(super) fn read_raf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
                         .ok_or_else(|| invalid("SuperCCD grid size"))?;
                 let grid = raf_superccd::repack(&plane.samples, (width, height), &area, shift)?;
                 let cfa = raf_superccd::grid_cfa(fw);
-                let levels = levels(&plane.black, &cfa, plane.white);
-                let samples = levels::normalize(
-                    &grid.samples,
-                    grid.width,
-                    whole(grid.width, grid.height),
-                    &levels,
-                );
+                let s_levels = levels(&plane.black, &cfa, plane.white);
+                let second = match words_layout {
+                    Some((stride, big_endian)) if two_frames => {
+                        second_frame(bytes, (width, height, stride), big_endian, budget)?
+                    }
+                    _ => None,
+                };
+                let samples = match second {
+                    Some((r_samples, r_records)) => {
+                        charge(grid_width, grid_height, budget)?;
+                        let r_grid =
+                            raf_superccd::repack(&r_samples, (width, height), &area, shift)?;
+                        let r_black = Black::Colours(word_black(&r_records)?);
+                        let r_levels = levels(&r_black, &cfa, plane.white);
+                        let nominal = sensitivity(&records)
+                            .zip(sensitivity(&r_records))
+                            .map_or(raf_sr::NOMINAL_RATIO, |(s, r)| s / r);
+                        let merged = raf_sr::merge(
+                            (&grid.samples, &s_levels),
+                            (&r_grid.samples, &r_levels),
+                            grid.width,
+                            &cfa,
+                            nominal,
+                        );
+                        headroom_stops = merged.stops;
+                        merged.samples
+                    }
+                    None => levels::normalize(
+                        &grid.samples,
+                        grid.width,
+                        whole(grid.width, grid.height),
+                        &s_levels,
+                    ),
+                };
                 let crop = DngCrop {
                     x: 0.0,
                     y: 0.0,
@@ -717,8 +813,9 @@ pub(super) fn read_raf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         };
     let mut color: DngColor =
         super::vendor::camera_color(make.as_deref(), model.as_deref(), plane.neutral);
-    // The camera lifts its own JPEG by the bias; so does the develop.
-    color.baseline_exposure = -exposure_bias(&records);
+    // The camera lifts its own JPEG by the bias; so does the develop, and
+    // it lifts an SR merge by the headroom it was scaled down by.
+    color.baseline_exposure = headroom_stops - exposure_bias(&records);
     Ok(DngImage {
         width: image_width,
         height: image_height,

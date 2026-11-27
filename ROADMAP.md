@@ -492,8 +492,8 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] **Olympus ORF, uncompressed** — `read_raw` names the `IIRO`, `IIRS` and
       `MMOR` headers as ORF and reads 16-bit and packed 12-bit sensor planes,
       with levels, crop and white balance from the maker note and colour from
-      the camera's embedded matrix (approximate parity); compressed ORFs are
-      refused by name (#1471).
+      the camera's embedded matrix (approximate parity) (#1471).
+      Olympus-compressed ORFs are below (#1535).
       `crates/pictura-codec/src/dng/orf.rs`, `crates/pictura-codec/src/dng/orf_meta.rs`.
 - [x] **Panasonic RW2, plain packings, decode only** — `read_raw` names the `IIU\0` header
       as RW2 and reads 16-bit words and the two 16-byte packings (RawFormat 2
@@ -541,10 +541,19 @@ gaps are the CS6 Extended 3D object and camera tools.
       LibRaw); 14 more bodies open with camera-JPEG-fitted colour; Save Image
       writes SuperCCD as linear (#1621). `crates/pictura-codec/src/dng/raf_superccd.rs`,
       `crates/pictura-codec/src/dng/demosaic/superccd.rs`.
-- [ ] Merge SuperCCD SR frames for highlight range (#1648)
+- [x] **SuperCCD SR highlight range** — the S3 Pro, S5 Pro and F700 merge
+      their low-sensitivity R frame into extended highlight range, the S/R
+      ratio fitted per image and colour, the headroom carried by
+      `BaselineExposure` (approximate: the reference merges are closed); the
+      raw Exposure now applies in linear light before the develop's clip, so
+      negative Exposure recovers highlights in every raw (#1648).
+      `crates/pictura-codec/src/dng/raf_sr.rs`.
 - [ ] Colour for the remaining Fujifilm RAF bodies (#1622)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
-- [ ] Olympus-compressed ORF sensor data, most bodies since 2007 (#1535)
+- [x] **Olympus-compressed ORF sensor data** — the coding of most bodies
+      since 2007, 12-bit and the 14-bit high-resolution shots, decodes sample
+      for sample as LibRaw does, ported from LibRaw (#1535).
+      `crates/pictura-codec/src/dng/orf_decode.rs`.
 - [x] **Panasonic RW2 colour** — 10 Panasonic bodies open with colour: the
       DC-GX9 from spectral data, nine others from matrices fitted against each
       body's own camera JPEG (approximate, the maker's rendering); the Open

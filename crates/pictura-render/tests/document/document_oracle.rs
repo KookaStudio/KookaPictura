@@ -10,7 +10,6 @@
 //! tolerances.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_codec::{convert_document_with, read_psd, write_psd, ConversionOptions, Profile};
@@ -23,7 +22,7 @@ use pictura_render::{
     add_layer, composite_rgba, flatten, flip_document, resize_canvas_document, resize_document,
     rotate_document, rotate_document_in,
 };
-use pictura_testkit::compare;
+use pictura_testkit::{compare, oracle};
 
 // --- document builders (same layer-builder style as the unit tests) ---------
 
@@ -392,23 +391,12 @@ fn dimension_check_bites() {
 
 // --- independent psd-tools check --------------------------------------------
 
-fn psd_tools_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// Write `doc` to a scratch file and have `scripts/validate_output.py` open it
 /// with `psd-tools`, then assert the header reports our dimensions and layer
 /// count. Returns early with a message when `python3`/`psd_tools` is missing.
 fn assert_psd_tools_sees(doc: &Document, tag: &str) {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check for {tag}: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -417,7 +405,7 @@ fn assert_psd_tools_sees(doc: &Document, tag: &str) {
     let path = dir.join(format!("{tag}.psd"));
     std::fs::write(&path, write_psd(doc).unwrap()).unwrap();
 
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg(&script)
         .arg(&path)
         .output()
@@ -500,17 +488,6 @@ fn ops_oracle_script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/ops_oracle.py")
 }
 
-fn magick_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("magick")
-            .arg("-version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// The central `k×k` region of a planar buffer, channel planes preserved.
 fn center_crop(data: &[u8], width: u32, height: u32, channels: u8, k: u32) -> Vec<u8> {
     assert!(k <= width && k <= height, "crop larger than the buffer");
@@ -536,7 +513,7 @@ fn oracle_rotate(input_planar: &[u8], size: &str, angle: &str) -> (Vec<u8>, (u32
     let input_path = dir.join("in.rgb");
     let output_path = dir.join("out.rgb");
     std::fs::write(&input_path, input_planar).unwrap();
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg(ops_oracle_script())
         .arg("apply")
         .args(["--size", size, "--channels", "3", "--planar"])
@@ -569,8 +546,8 @@ fn oracle_rotate(input_planar: &[u8], size: &str, angle: &str) -> (Vec<u8>, (u32
 
 #[test]
 fn rotate_document_in_matches_imagemagick_central_region() {
-    if !magick_available() {
-        eprintln!("skipping rotate_document_in oracle: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let (w, h) = (16u32, 16u32);
