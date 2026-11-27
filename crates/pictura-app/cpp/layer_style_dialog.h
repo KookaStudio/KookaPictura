@@ -6,7 +6,7 @@
 // the layer's style as it moves, so the canvas is the preview; OK records the
 // visit as one history state and Cancel (or Escape, or the close box) drops
 // every edit. Ported from photorust's LayerStyleDialog.
-// ponytail: no texture, Blend If, New Style or Make / Reset to Default; the
+// ponytail: no texture, New Style or Make / Reset to Default; the
 // stroke is a colour fill, and the Pattern Overlay picks from the eight
 // built-in patterns.
 

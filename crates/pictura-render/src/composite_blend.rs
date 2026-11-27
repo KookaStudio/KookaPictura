@@ -281,7 +281,11 @@ pub(crate) fn blend_into_row_ctx(
     let gate = match ctx.blend_if {
         Some(view) => {
             let backdrop = row[(x - ox) as usize];
-            blend_if_factor(Some(view), cs, [backdrop.r, backdrop.g, backdrop.b])
+            if matches!(_doc.mode, pictura_core::ColorMode::Rgb | pictura_core::ColorMode::Grayscale) {
+                blend_if_factor(Some(view), cs, [backdrop.r, backdrop.g, backdrop.b])
+            } else {
+                crate::composite::legacy_blend_if_factor(view, cs, [backdrop.r, backdrop.g, backdrop.b])
+            }
         }
         None => 1.0,
     };
@@ -323,7 +327,11 @@ pub(crate) fn blend_into_row_legacy(
     let gate = match blend_if {
         Some(view) if !view.is_default() => {
             let backdrop = row[(x - ox) as usize];
-            blend_if_factor(Some(view), cs, [backdrop.r, backdrop.g, backdrop.b])
+            if matches!(doc.mode, pictura_core::ColorMode::Rgb | pictura_core::ColorMode::Grayscale) {
+                blend_if_factor(Some(view), cs, [backdrop.r, backdrop.g, backdrop.b])
+            } else {
+                crate::composite::legacy_blend_if_factor(view, cs, [backdrop.r, backdrop.g, backdrop.b])
+            }
         }
         _ => 1.0,
     };

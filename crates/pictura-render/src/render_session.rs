@@ -331,6 +331,8 @@ fn sync_targets(reduced: &mut Document, original: &Document, targets: &[&str]) {
         destination.visible = source.visible;
         destination.clipping = source.clipping;
         destination.knockout = source.knockout;
+        destination.blend_if = source.blend_if.clone();
+        destination.blending_ranges = source.blending_ranges.clone();
         destination.blend_clipping = source.blend_clipping;
         destination.blend_interior = source.blend_interior;
         destination.transparency_shapes = source.transparency_shapes;
@@ -371,7 +373,7 @@ fn layer_digest(layer: &Layer, doc: &Document, hasher: &mut DefaultHasher) {
     (layer.knockout as u8).hash(hasher);
     layer.is_group().hash(hasher);
     layer.blending_ranges.ident().hash(hasher);
-    layer.blend_if.is_some().hash(hasher);
+    layer.blend_if.hash(hasher);
     layer.blend_clipping.hash(hasher);
     layer.blend_interior.hash(hasher);
     layer.transparency_shapes.hash(hasher);
@@ -455,6 +457,22 @@ mod tests {
                 layer("top", rect(2, 2, 6, 6), [200, 100, 50, 255]),
             ],
         )
+    }
+
+    #[test]
+    fn blend_if_prefix_invalidation() {
+        let mut doc = two_layers();
+        doc.layers[0].blend_if = Some(pictura_core::BlendIf {
+            composite_source: (0x2020, 0xffff),
+            composite_dest: (0, 0xffff),
+            channel_ranges: Vec::new(),
+        });
+        let before = prefix_digest(&doc, 1, 0, whole(&doc));
+        doc.layers[0].blend_if.as_mut().unwrap().composite_source.0 = 0x4040;
+        let after = prefix_digest(&doc, 1, 0, whole(&doc));
+        assert_ne!(before, after);
+        doc.layers[0].blend_if.as_mut().unwrap().composite_source.0 = 0x6060;
+        assert_ne!(after, prefix_digest(&doc, 1, 0, whole(&doc)));
     }
 
     #[test]
@@ -619,6 +637,55 @@ mod tests {
             .preview(&doc, &["0"], 2, whole(&doc), 0)
             .expect("preview");
         assert_ne!(frame, changed);
+    }
+
+    #[test]
+    fn cached_prefix_updates_blend_if_output() {
+        let mut doc = document(
+            512,
+            512,
+            vec![
+                layer("bottom", rect(0, 0, 512, 512), [30, 60, 90, 255]),
+                layer("top", rect(0, 0, 512, 512), [200, 100, 50, 128]),
+            ],
+        );
+        let mut session = RenderSession::default();
+        let initial = session.preview(&doc, &["1"], 1, whole(&doc), 0).expect("preview");
+        doc.layers[0].blend_if = Some(pictura_core::BlendIf {
+            composite_source: (0x8080, 0xffff),
+            composite_dest: (0, 0xffff),
+            channel_ranges: Vec::new(),
+        });
+        let changed = session.preview(&doc, &["1"], 1, whole(&doc), 0).expect("preview");
+        assert_ne!(initial, changed);
+        let fresh = RenderSession::default().preview(&doc, &["1"], 1, whole(&doc), 0).expect("preview");
+        assert_eq!(changed, fresh);
+        doc.layers[0].blend_if.as_mut().unwrap().composite_source.0 = 0;
+        let restored = session.preview(&doc, &["1"], 1, whole(&doc), 0).expect("preview");
+        assert_eq!(initial, restored);
+    }
+
+    #[test]
+    fn reduced_preview_updates_target_blend_if() {
+        let mut doc = document(
+            512,
+            512,
+            vec![layer("top", rect(0, 0, 512, 512), [200, 100, 50, 255])],
+        );
+        let mut session = RenderSession::default();
+        let original = session.preview(&doc, &["0"], 1, whole(&doc), 0).expect("preview");
+        doc.layers[0].blend_if = Some(pictura_core::BlendIf {
+            composite_source: (0xc8c8, 0xffff),
+            composite_dest: (0, 0xffff),
+            channel_ranges: Vec::new(),
+        });
+        let hidden = session.preview(&doc, &["0"], 1, whole(&doc), 0).expect("preview");
+        assert_ne!(original, hidden);
+        assert_eq!(session.preview_doc_builds(), 1);
+        doc.layers[0].blend_if.as_mut().unwrap().composite_source.0 = 0;
+        let restored = session.preview(&doc, &["0"], 1, whole(&doc), 0).expect("preview");
+        assert_eq!(original, restored);
+        assert_eq!(session.preview_doc_builds(), 1);
     }
 
     #[test]

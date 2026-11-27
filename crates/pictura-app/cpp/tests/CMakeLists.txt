@@ -210,6 +210,7 @@ set(PICTURA_QT_TEST_DRIVER_layers
     tst_channel_options
     tst_paths_panel
     tst_layer_style
+    tst_blend_if
     tst_blend_mode_list
     tst_auto_align
     tst_auto_blend

@@ -504,6 +504,71 @@ pub(super) fn layer_style_set_blend_if(
     changed
 }
 
+fn default_blend_if() -> pictura_core::BlendIf {
+    pictura_core::BlendIf {
+        composite_source: (0, 65535),
+        composite_dest: (0, 65535),
+        channel_ranges: Vec::new(),
+    }
+}
+
+pub(super) fn layer_style_blend_if_status(view: &PictureView, path: &QString) -> i32 {
+    let Some(doc) = view.rust().session.doc.as_ref() else { return -1; };
+    if !matches!(doc.mode, pictura_core::ColorMode::Rgb | pictura_core::ColorMode::Grayscale) {
+        return -1;
+    }
+    let Some(layer) = pictura_render::resolve_path(doc, &path.to_string()) else { return -1; };
+    if layer.is_group() && layer.blend == pictura_core::BlendMode::PassThrough { return -2; }
+    if layer.blend_if.is_none() && !layer.blending_ranges.is_empty() { 1 } else { 0 }
+}
+
+pub(super) fn layer_style_blend_if_word(view: &PictureView, path: &QString, channel: i32, dest: bool, white: bool) -> i32 {
+    if layer_style_blend_if_status(view, path) != 0 || !(0..=3).contains(&channel) { return -1; }
+    with_layer(view, path, |layer| {
+        let default = default_blend_if();
+        let ranges = layer.blend_if.as_ref().unwrap_or(&default);
+        let full = ((0, 65535), (0, 65535));
+        let pair = if channel == 0 {
+            if dest { ranges.composite_dest } else { ranges.composite_source }
+        } else {
+            let group = ranges.channel_ranges.get((channel - 1) as usize).unwrap_or(&full);
+            if dest { group.1 } else { group.0 }
+        };
+        i32::from(if white { pair.1 } else { pair.0 })
+    }).unwrap_or(-1)
+}
+
+pub(super) fn layer_style_blend_if_range(view: Pin<&mut PictureView>, path: &QString, channel: i32, dest: bool, black: i32, white: i32) -> bool {
+    if layer_style_blend_if_status(view.as_ref().get_ref(), path) != 0 || !(0..=3).contains(&channel) || !(0..=65535).contains(&black) || !(0..=65535).contains(&white) { return false; }
+    let [b0, b1] = (black as u16).to_be_bytes();
+    let [w0, w1] = (white as u16).to_be_bytes();
+    if b0 > b1 || b1 > w0 || w0 > w1 { return false; }
+    apply_style_edit(view, path, |layer| {
+        let mut ranges = layer.blend_if.clone().unwrap_or_else(default_blend_if);
+        let slot = if channel == 0 {
+            if dest { &mut ranges.composite_dest } else { &mut ranges.composite_source }
+        } else {
+            ranges.channel_ranges.resize((channel as usize).max(ranges.channel_ranges.len()), ((0, 65535), (0, 65535)));
+            let group = &mut ranges.channel_ranges[(channel - 1) as usize];
+            if dest { &mut group.1 } else { &mut group.0 }
+        };
+        let next = (black as u16, white as u16);
+        if *slot == next { return false; }
+        *slot = next;
+        layer.blend_if = Some(ranges);
+        true
+    })
+}
+
+pub(super) fn layer_style_replace_blend_if(view: Pin<&mut PictureView>, path: &QString) -> bool {
+    if layer_style_blend_if_status(view.as_ref().get_ref(), path) != 1 { return false; }
+    apply_style_edit(view, path, |layer| {
+        layer.blending_ranges.clear();
+        layer.blend_if = Some(default_blend_if());
+        true
+    })
+}
+
 pub(super) fn layer_style_pattern_names() -> QStringList {
     let mut names = QStringList::default();
     for name in pictura_render::layer_style_pattern_names() {

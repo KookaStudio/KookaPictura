@@ -328,25 +328,7 @@ public:
         return QRect(right - side, itemRect.top() + (itemRect.height() - side) / 2, side, side);
     }
 
-    /// The `Blend If` chip's font: the app font, a step smaller and bold, so the
-    /// chip reads as a badge rather than a second name.
-    static QFont blendIfFont()
-    {
-        QFont font = QApplication::font();
-        font.setBold(true);
-        if (font.pixelSize() > 0) {
-            font.setPixelSize(qMax(1, font.pixelSize() - 3));
-        } else if (font.pointSize() > 0) {
-            font.setPointSize(qMax(1, font.pointSize() - 1));
-        }
-        return font;
-    }
-
-    /// The `Blend If` chip's width, from the font it draws with plus padding.
-    static int blendIfChipWidth()
-    {
-        return QFontMetrics(blendIfFont()).horizontalAdvance(QStringLiteral("Blend If")) + 10;
-    }
+    static int blendIfChipWidth() { return 16; }
 
     /// The horizontal space a row's Blend If chip consumes at the right edge.
     int blendIfAdvance(const QModelIndex& index) const
@@ -1002,19 +984,12 @@ public:
                 right -= linkSide + 3;
             }
         }
-        // A customised Blend If shows a text chip, left of the fx/lock badges.
         if (index.data(HasBlendIfRole).toBool()) {
-            const QRect chip = blendIfRect(rect, index);
-            painter->save();
-            painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setPen(QPen(palette.color(QPalette::Mid), 1));
-            painter->setBrush(Theme::contrastShade(palette.color(QPalette::Window), 2));
-            painter->drawRoundedRect(chip.adjusted(0, 0, -1, -1), 3, 3);
-            painter->setFont(blendIfFont());
-            painter->setPen(selected ? palette.color(QPalette::HighlightedText)
-                                     : palette.color(QPalette::Text));
-            painter->drawText(chip, Qt::AlignCenter, QStringLiteral("Blend If"));
-            painter->restore();
+            const QRect badge = blendIfRect(rect, index);
+            const QColor color = selected ? palette.color(QPalette::HighlightedText)
+                                          : palette.color(QPalette::Text);
+            painter->drawPixmap(badge, pictura::icon(QStringLiteral("layers.blend-if"), color)
+                                           .pixmap(badge.size()));
             right -= blendIfChipWidth() + 3;
         }
 

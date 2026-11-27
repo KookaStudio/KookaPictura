@@ -3,6 +3,7 @@
 // combo is the engine's choice order.
 
 #include "layer_style_dialog.h"
+#include "blend_if_slider.h"
 
 #include "api/layers_bridge.h"
 #include "panels/angle_dial.h"
@@ -16,6 +17,8 @@
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSlider>
@@ -158,6 +161,61 @@ QWidget* LayerStyleDialog::buildBlendingOptionsPage()
         check(QStringLiteral("blending.blendClipped"), tr("Blend Clipped Layers as Group"));
     bindCheck(clipped, QStringLiteral("blending.blendClipped"));
     advanced->addRow(QString(), clipped);
+    QFormLayout* blendIf = page.group(tr("Blend If"));
+    auto* channel = combo(QStringLiteral("blendIf.channel"), {tr("Gray")});
+    if (channels.size() == 3) channel->addItems(channels);
+    auto* source = new BlendIfSlider;
+    source->setObjectName(QStringLiteral("blendIf.source"));
+    auto* destination = new BlendIfSlider;
+    destination->setObjectName(QStringLiteral("blendIf.destination"));
+    auto* notice = new QLabel;
+    notice->setObjectName(QStringLiteral("blendIf.notice"));
+    notice->setWordWrap(true);
+    auto* replace = new QPushButton(tr("Replace…"));
+    replace->setObjectName(QStringLiteral("blendIf.replace"));
+    blendIf->addRow(tr("Channel:"), channel);
+    blendIf->addRow(tr("This Layer:"), source);
+    blendIf->addRow(tr("Underlying Layer:"), destination);
+    blendIf->addRow(notice);
+    blendIf->addRow(replace);
+    const auto refresh = [this, channel, source, destination, notice, replace] {
+        const int status = layer_style_blend_if_status(*view_, path_);
+        const bool editable = status == 0;
+        channel->setEnabled(editable);
+        source->setEnabled(editable);
+        destination->setEnabled(editable);
+        replace->setVisible(status == 1);
+        replace->setEnabled(status == 1);
+        notice->setText(status == -2 ? tr("Blend If is unavailable for pass-through groups.")
+                        : status < 0 ? tr("Blend If is unavailable for this document mode.")
+                        : status == 1 ? tr("The existing blending ranges cannot be interpreted.")
+                                      : QString());
+        if (editable) {
+            const int index = channel->currentIndex();
+            for (auto* slider : {source, destination}) {
+                const bool dest = slider == destination;
+                slider->setRange(layer_style_blend_if_word(*view_, path_, index, dest, false),
+                                 layer_style_blend_if_word(*view_, path_, index, dest, true));
+            }
+        }
+    };
+    connect(channel, &QComboBox::currentIndexChanged, this, [refresh](int) { refresh(); });
+    for (auto* slider : {source, destination}) {
+        connect(slider, &BlendIfSlider::rangeChanged, this,
+                [this, channel, slider, destination](int black, int white) {
+            if (layer_style_blend_if_range(*view_, path_, channel->currentIndex(),
+                                           slider == destination, black, white)) dirty_ = true;
+        });
+    }
+    connect(replace, &QPushButton::clicked, this, [this, refresh] {
+        if (QMessageBox::question(this, tr("Replace Blending Ranges"),
+                                  tr("Replace discards the existing opaque blending ranges and starts with defaults. Continue?"))
+                == QMessageBox::Yes && layer_style_replace_blend_if(*view_, path_)) {
+            dirty_ = true;
+            refresh();
+        }
+    });
+    refresh();
     return page.done();
 }
 
