@@ -650,18 +650,26 @@ mod tests {
             ],
         );
         let mut session = RenderSession::default();
-        let initial = session.preview(&doc, &["1"], 1, whole(&doc), 0).expect("preview");
+        let initial = session
+            .preview(&doc, &["1"], 1, whole(&doc), 0)
+            .expect("preview");
         doc.layers[0].blend_if = Some(pictura_core::BlendIf {
             composite_source: (0x8080, 0xffff),
             composite_dest: (0, 0xffff),
             channel_ranges: Vec::new(),
         });
-        let changed = session.preview(&doc, &["1"], 1, whole(&doc), 0).expect("preview");
+        let changed = session
+            .preview(&doc, &["1"], 1, whole(&doc), 0)
+            .expect("preview");
         assert_ne!(initial, changed);
-        let fresh = RenderSession::default().preview(&doc, &["1"], 1, whole(&doc), 0).expect("preview");
+        let fresh = RenderSession::default()
+            .preview(&doc, &["1"], 1, whole(&doc), 0)
+            .expect("preview");
         assert_eq!(changed, fresh);
         doc.layers[0].blend_if.as_mut().unwrap().composite_source.0 = 0;
-        let restored = session.preview(&doc, &["1"], 1, whole(&doc), 0).expect("preview");
+        let restored = session
+            .preview(&doc, &["1"], 1, whole(&doc), 0)
+            .expect("preview");
         assert_eq!(initial, restored);
     }
 
@@ -673,17 +681,23 @@ mod tests {
             vec![layer("top", rect(0, 0, 512, 512), [200, 100, 50, 255])],
         );
         let mut session = RenderSession::default();
-        let original = session.preview(&doc, &["0"], 1, whole(&doc), 0).expect("preview");
+        let original = session
+            .preview(&doc, &["0"], 1, whole(&doc), 0)
+            .expect("preview");
         doc.layers[0].blend_if = Some(pictura_core::BlendIf {
             composite_source: (0xc8c8, 0xffff),
             composite_dest: (0, 0xffff),
             channel_ranges: Vec::new(),
         });
-        let hidden = session.preview(&doc, &["0"], 1, whole(&doc), 0).expect("preview");
+        let hidden = session
+            .preview(&doc, &["0"], 1, whole(&doc), 0)
+            .expect("preview");
         assert_ne!(original, hidden);
         assert_eq!(session.preview_doc_builds(), 1);
         doc.layers[0].blend_if.as_mut().unwrap().composite_source.0 = 0;
-        let restored = session.preview(&doc, &["0"], 1, whole(&doc), 0).expect("preview");
+        let restored = session
+            .preview(&doc, &["0"], 1, whole(&doc), 0)
+            .expect("preview");
         assert_eq!(original, restored);
         assert_eq!(session.preview_doc_builds(), 1);
     }

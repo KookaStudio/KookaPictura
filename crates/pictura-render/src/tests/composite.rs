@@ -1192,16 +1192,30 @@ fn split_blend_if() {
     let mut view = default_blend_if();
     view.composite_source = (u16::from_be_bytes([32, 96]), u16::from_be_bytes([160, 224]));
     let gray = |v: f32| [v / 255.0; 3];
-    for (v, expected) in [(0.0, 0.0), (32.0, 0.0), (64.0, 0.5), (96.0, 1.0),
-                          (160.0, 1.0), (192.0, 0.5), (224.0, 0.0), (255.0, 0.0)] {
+    for (v, expected) in [
+        (0.0, 0.0),
+        (32.0, 0.0),
+        (64.0, 0.5),
+        (96.0, 1.0),
+        (160.0, 1.0),
+        (192.0, 0.5),
+        (224.0, 0.0),
+        (255.0, 0.0),
+    ] {
         let actual = blend_if_factor(Some(&view), gray(v), gray(128.0));
         assert!((actual - expected).abs() < 0.0001, "{v}: {actual}");
     }
     view.composite_dest = view.composite_source;
     view.composite_source = (0, 65535);
     assert!((blend_if_factor(Some(&view), gray(128.0), gray(64.0)) - 0.5).abs() < 0.0001);
-    assert_eq!(blend_if_factor(Some(&default_blend_if()), gray(0.0), gray(255.0)), 1.0);
-    view.composite_dest = (u16::from_be_bytes([128, 128]), u16::from_be_bytes([200, 200]));
+    assert_eq!(
+        blend_if_factor(Some(&default_blend_if()), gray(0.0), gray(255.0)),
+        1.0
+    );
+    view.composite_dest = (
+        u16::from_be_bytes([128, 128]),
+        u16::from_be_bytes([200, 200]),
+    );
     assert_eq!(blend_if_factor(Some(&view), gray(128.0), gray(128.0)), 1.0);
     assert_eq!(blend_if_factor(Some(&view), gray(128.0), gray(200.0)), 1.0);
 }
