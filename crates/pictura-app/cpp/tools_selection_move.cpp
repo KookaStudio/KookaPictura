@@ -11,12 +11,14 @@
 #include "api/selection_bridge.h"
 
 #include <QtGui/QDrag>
+#include <QtWidgets/QApplication>
 
 namespace pictura {
 
 bool ToolController::isSelectionTool(ToolId id)
 {
-    return id == ToolId::Marquee || id == ToolId::EllipticalMarquee || id == ToolId::Lasso
+    return id == ToolId::Marquee || id == ToolId::EllipticalMarquee
+        || id == ToolId::SingleRowMarquee || id == ToolId::SingleColumnMarquee || id == ToolId::Lasso
         || id == ToolId::PolygonalLasso || id == ToolId::MagneticLasso;
 }
 
@@ -34,6 +36,7 @@ bool ToolController::maybeBeginSelectionMove(PictureView* v, const QPointF& imag
     }
     contentMove_ = false;
     movingSelection_ = true;
+    selectionMoveDragged_ = false;
     dragging_ = true;
     dragCommitted_ = false;
     selectionMoveAnchor_ = imagePos;
@@ -112,6 +115,11 @@ void ToolController::dragSelectionMove(const QPointF& imagePos)
                canvas_->mapToGlobal(canvas_->imageToWidget(imagePos)).toPoint(), v, canvas_)) {
         dragSelectionToDocument();
         return;
+    }
+    if (canvas_ && (canvas_->imageToWidget(imagePos)
+                    - canvas_->imageToWidget(selectionMoveAnchor_)).manhattanLength()
+            >= QApplication::startDragDistance()) {
+        selectionMoveDragged_ = true;
     }
     const int dx = qRound(imagePos.x() - selectionMoveAnchor_.x());
     const int dy = qRound(imagePos.y() - selectionMoveAnchor_.y());

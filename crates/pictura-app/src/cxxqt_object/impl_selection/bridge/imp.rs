@@ -281,6 +281,43 @@ pub(super) fn selection_mask_targets(view: &PictureView) -> QStringList {
     view.selection_mask_targets()
 }
 
+pub(super) fn selection_below_half(view: &PictureView) -> bool {
+    let rust = view.rust();
+    let Some(sel) = rust.session.selection.as_ref() else {
+        return false;
+    };
+    let Some(bounds) = rust.selection_mask_bounds() else {
+        return false;
+    };
+    let xs = bounds.left as usize..bounds.right as usize;
+    let ys = bounds.top as usize..bounds.bottom as usize;
+    let mut nonzero = false;
+    let mut above = false;
+    sel.data.for_each_tile(xs.clone(), ys.clone(), sel.width as usize, |tile| {
+        if above {
+            return;
+        }
+        match tile.uniform() {
+            Some(v) => {
+                nonzero |= v > 0;
+                above |= v > 127;
+            }
+            None => {
+                let cols = xs.start.max(tile.x)..xs.end.min(tile.x + tile.w);
+                let rows = ys.start.max(tile.y)..ys.end.min(tile.y + tile.h);
+                for y in rows {
+                    let row = tile.row(y - tile.y).unwrap_or(&[]);
+                    for &v in &row[cols.start - tile.x..cols.end - tile.x] {
+                        nonzero |= v > 0;
+                        above |= v > 127;
+                    }
+                }
+            }
+        }
+    });
+    nonzero && !above
+}
+
 pub(super) fn selection_coverage_bytes(view: &PictureView) -> Vec<u8> {
     view.selection_coverage_bytes()
 }

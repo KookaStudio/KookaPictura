@@ -205,7 +205,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] Path selection and direct selection
 - [x] Rectangle, rounded rectangle, ellipse, polygon, line and custom shape
 - [x] Hand, rotate view and zoom
-- [ ] Single Row and Single Column marquee tools (#525)
+- [x] Single Row and Single Column marquee tools (#525)
 - [ ] Puppet Warp (#527) and Content-Aware Scale (#528)
 - [x] Transform ▸ Scale, Rotate and Again, the exact rotations, and flips (#529).
   `crates/pictura-script/src/command_catalogue/entries.rs`

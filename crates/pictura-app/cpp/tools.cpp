@@ -93,6 +93,7 @@ std::unique_ptr<ToolHandler> makePerspectiveCropToolHandler(std::shared_ptr<Crop
 std::unique_ptr<ToolHandler> makeSliceToolHandler();
 std::unique_ptr<ToolHandler> makeSliceSelectToolHandler();
 std::unique_ptr<ToolHandler> makeMarqueeToolHandler(std::shared_ptr<SelectionOptions> selection);
+std::unique_ptr<ToolHandler> makeSingleLineMarqueeToolHandler(bool row, std::shared_ptr<SelectionOptions> selection);
 std::unique_ptr<ToolHandler> makeEllipticalMarqueeToolHandler(
     std::shared_ptr<SelectionOptions> selection);
 std::unique_ptr<ToolHandler> makeLassoToolHandler(std::shared_ptr<SelectionOptions> selection);
@@ -279,6 +280,8 @@ ToolController::ToolController(QObject* parent)
     registry_.registerTool(ToolId::SliceSelect, makeSliceSelectToolHandler());
     registry_.registerTool(ToolId::Marquee, makeMarqueeToolHandler(selection));
     registry_.registerTool(ToolId::EllipticalMarquee, makeEllipticalMarqueeToolHandler(ellipticalSelection));
+    registry_.registerTool(ToolId::SingleRowMarquee, makeSingleLineMarqueeToolHandler(true, selection));
+    registry_.registerTool(ToolId::SingleColumnMarquee, makeSingleLineMarqueeToolHandler(false, selection));
     registry_.registerTool(ToolId::Lasso, makeLassoToolHandler(selection));
     registry_.registerTool(ToolId::PolygonalLasso, makePolygonalLassoToolHandler(selection));
     registry_.registerTool(ToolId::MagneticLasso, makeMagneticLassoToolHandler(selection));
@@ -1080,8 +1083,19 @@ void ToolController::handleReleased(const QPointF& imagePos)
         return;
     }
     if (movingSelection_) {
+        const bool lineClick = !contentMove_ && !selectionMoveDragged_
+            && (active_ == ToolId::SingleRowMarquee || active_ == ToolId::SingleColumnMarquee)
+            && qRound(imagePos.x() - selectionMoveAnchor_.x()) == 0
+            && qRound(imagePos.y() - selectionMoveAnchor_.y()) == 0;
+        const QPointF anchor = selectionMoveAnchor_;
         dragging_ = false;
         releaseSelectionMove(imagePos);
+        if (lineClick) {
+            if (ToolHandler* h = registry_.forTool(active_)) {
+                h->onPress(*this, anchor, Qt::NoModifier);
+                h->onRelease(*this, anchor, Qt::NoModifier);
+            }
+        }
         return;
     }
     if (ToolHandler* h = registry_.forTool(active_); h && !sliceEditingBlocked()) {

@@ -34,7 +34,7 @@ namespace pictura {
 class ImageView;
 class PictureView;
 
-// The 71-tool CS6 catalogue in frozen table order; the enum order matches the
+// The CS6 catalogue in frozen table order; the enum order matches the
 // engine tool catalogue (`pictura_script::tool_catalogue`), which a Qt Test
 // checks.
 enum class ToolId {
@@ -108,7 +108,9 @@ enum class ToolId {
     CameraZoom,
     Hand,
     RotateView,
-    Zoom
+    Zoom,
+    SingleRowMarquee,
+    SingleColumnMarquee
 };
 
 struct ToolInfo {
@@ -723,6 +725,7 @@ private:
     bool dragging_ = false;
     bool dragCommitted_ = false;
     bool movingSelection_ = false;
+    bool selectionMoveDragged_ = false;
     bool contentMove_ = false;
     bool contentDuplicate_ = false;
     // True while a duplicate content move is showing the pre-cloned pixel

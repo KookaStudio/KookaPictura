@@ -15,6 +15,8 @@
 #include <QtGui/QPainterPath>
 #include <QtGui/QPolygonF>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QMessageBox>
+#include <QtCore/QtMath>
 
 #include <algorithm>
 #include <memory>
@@ -173,6 +175,59 @@ private:
     bool mirrorAlt_ = false;
     QPointF anchor_;
     QPointF last_;
+};
+
+class SingleLineMarqueeToolHandler : public ToolHandler {
+public:
+    SingleLineMarqueeToolHandler(bool row, std::shared_ptr<SelectionOptions> selection)
+        : row_(row), selection_(std::move(selection))
+    {
+        addOptions(selection_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& pos, Qt::KeyboardModifiers mods) override
+    {
+        PictureView* view = ctx.view();
+        if (!view || !view->has_document()) return true;
+        const int x = qFloor(pos.x());
+        const int y = qFloor(pos.y());
+        if (x < 0 || y < 0 || x >= view->document_width() || y >= view->document_height()) return true;
+        anchor_ = QPoint(x, y);
+        ctx.setDragMode(ctx.resolveSelectionMode(mods, view->has_selection()));
+        ctx.setDragging(true);
+        ctx.setDragCommitted(false);
+        return true;
+    }
+
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    {
+        if (!ctx.dragging()) return;
+        ctx.setDragging(false);
+        PictureView* view = ctx.view();
+        if (!view) return;
+        const int x = row_ ? 0 : anchor_.x();
+        const int y = row_ ? anchor_.y() : 0;
+        const int w = row_ ? view->document_width() : 1;
+        const int h = row_ ? 1 : view->document_height();
+        if (view->select_rect(x, y, w, h, selectionModeString(ctx.dragMode()), selection_->feather())) {
+            ctx.emitSelectionCommitted();
+            if (selection_below_half(*view)) {
+                QMessageBox::warning(ctx.canvas(), QObject::tr("Warning"),
+                                     QObject::tr("No pixels are more than 50% selected"));
+            }
+        }
+    }
+
+    bool hasCanvasContextMenu() const override { return true; }
+    QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        return selectionCanvasMenu(ctx, imagePos);
+    }
+
+private:
+    bool row_;
+    QPoint anchor_;
+    std::shared_ptr<SelectionOptions> selection_;
 };
 
 // Freehand Lasso: the mask grows with each move until release.
@@ -452,6 +507,12 @@ std::unique_ptr<ToolHandler> makeEllipticalMarqueeToolHandler(
     std::shared_ptr<SelectionOptions> selection)
 {
     return std::make_unique<MarqueeToolHandler>(true, std::move(selection));
+}
+
+std::unique_ptr<ToolHandler> makeSingleLineMarqueeToolHandler(
+    bool row, std::shared_ptr<SelectionOptions> selection)
+{
+    return std::make_unique<SingleLineMarqueeToolHandler>(row, std::move(selection));
 }
 
 std::unique_ptr<ToolHandler> makeLassoToolHandler(std::shared_ptr<SelectionOptions> selection)

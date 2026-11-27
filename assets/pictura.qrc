@@ -188,6 +188,8 @@
     <file>icons/tool.magicwand.svg</file>
     <file>icons/tool.magneticlasso.svg</file>
     <file>icons/tool.marquee.svg</file>
+    <file>icons/tool.singlerowmarquee.svg</file>
+    <file>icons/tool.singlecolumnmarquee.svg</file>
     <file>icons/tool.mixerbrush.svg</file>
     <file>icons/tool.move.svg</file>
     <file>icons/tool.note.svg</file>
@@ -307,6 +309,12 @@
     <file>cursors/tool.marquee.add.svg</file>
     <file>cursors/tool.marquee.remove.svg</file>
     <file>cursors/tool.marquee.svg</file>
+    <file>cursors/tool.singlerowmarquee.svg</file>
+    <file>cursors/tool.singlerowmarquee.add.svg</file>
+    <file>cursors/tool.singlerowmarquee.remove.svg</file>
+    <file>cursors/tool.singlecolumnmarquee.svg</file>
+    <file>cursors/tool.singlecolumnmarquee.add.svg</file>
+    <file>cursors/tool.singlecolumnmarquee.remove.svg</file>
     <file>cursors/tool.mixerbrush.svg</file>
     <file>cursors/tool.move.svg</file>
     <file>cursors/tool.note.svg</file>

@@ -6,7 +6,7 @@
 
 namespace pictura {
 
-static_assert(static_cast<int>(ToolId::Zoom) + 1 == ToolRegistry::kToolCount,
+static_assert(static_cast<int>(ToolId::SingleColumnMarquee) + 1 == ToolRegistry::kToolCount,
               "ToolId catalogue size changed; update ToolRegistry::kToolCount");
 
 void ToolRegistry::registerTool(ToolId id, std::unique_ptr<ToolHandler> handler)

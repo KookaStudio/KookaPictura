@@ -161,6 +161,9 @@ pub mod ffi {
         /// Every existing raster layer mask as `path|Layer Name Mask`.
         fn selection_mask_targets(view: &PictureView) -> QStringList;
 
+        /// A nonempty selection whose coverage never exceeds 50%.
+        fn selection_below_half(view: &PictureView) -> bool;
+
         /// The live selection coverage, row-major; empty without a selection.
         fn selection_coverage_bytes(view: &PictureView) -> Vec<u8>;
 

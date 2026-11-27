@@ -1,7 +1,7 @@
 # Feature parity tracker
 
-Assessed: 2026-11-27
-Pictura commit: 73f469e1
+Assessed: 2026-11-28
+Pictura commit: ec3346bcd
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -13,12 +13,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 216 | 79 | 51 | 4 | 350 | 61.7% | 8 |
-| CS6 Standard, in scope | 216 | 79 | 45 | 2 | 342 | 63.2% | 8 |
-| CS6 Extended | 217 | 79 | 67 | 4 | 367 | 59.1% | 23 |
-| CS6 Extended, in scope | 217 | 79 | 46 | 2 | 344 | 63.1% | 23 |
-| CC 28.0 | 218 | 81 | 72 | 4 | 375 | 58.1% | 20 |
-| CC 28.0, in scope | 218 | 81 | 54 | 2 | 355 | 61.4% | 20 |
+| CS6 Standard | 218 | 79 | 49 | 4 | 350 | 62.3% | 8 |
+| CS6 Standard, in scope | 218 | 79 | 43 | 2 | 342 | 63.7% | 8 |
+| CS6 Extended | 219 | 79 | 65 | 4 | 367 | 59.7% | 23 |
+| CS6 Extended, in scope | 219 | 79 | 44 | 2 | 344 | 63.7% | 23 |
+| CC 28.0 | 220 | 81 | 70 | 4 | 375 | 58.7% | 20 |
+| CC 28.0, in scope | 220 | 81 | 52 | 2 | 355 | 62.0% | 20 |
 
 ## Baselines
 
@@ -42,7 +42,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 |---|---|---|---|
 | Files & interchange | 28/40 (70.0%) | 28/42 (66.7%) | 29/46 (63.0%) |
 | Layers & compositing | 31/38 (81.6%) | 31/39 (79.5%) | 31/39 (79.5%) |
-| Tools & painting | 41/70 (58.6%) | 42/81 (51.9%) | 42/71 (59.2%) |
+| Tools & painting | 43/70 (61.4%) | 44/81 (54.3%) | 44/71 (62.0%) |
 | Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
 | Adjustments & filters | 32/55 (58.2%) | 32/55 (58.2%) | 32/64 (50.0%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
@@ -155,7 +155,7 @@ Source list: named Layer-menu and Layers-panel capabilities.
 
 ### Tools & painting
 
-Source list: CS6 toolbox slots (71 catalogue slots plus the two missing single row/column tools) plus named brush-engine, brush-dynamics, and preset capabilities.
+Source list: CS6 toolbox tools (73 catalogue entries) plus named brush-engine, brush-dynamics, and preset capabilities.
 
 | ID | Feature | S | E | CC | Status | Scope | Evidence | Check | Notes | Tracking |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -230,8 +230,8 @@ Source list: CS6 toolbox slots (71 catalogue slots plus the two missing single r
 | P-TOOL-69 | Hand | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Scrubby zoom, animated zoom, Bird's Eye View, and Flick Panning remain | TOOL-9 |
 | P-TOOL-70 | Rotate View | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-71 | Zoom | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Scrubby zoom, animated zoom, Bird's Eye View, and Flick Panning remain | TOOL-10 |
-| P-TOOL-72 | Single Row Marquee | Y | Y | Y | Missing | in-scope | — | none | Tool absent from the catalogue | TOOL-1 |
-| P-TOOL-73 | Single Column Marquee | Y | Y | Y | Missing | in-scope | — | none | Tool absent from the catalogue | TOOL-1 |
+| P-TOOL-72 | Single Row Marquee | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/tool_selection.cpp | none | Feather profile is approximate | — |
+| P-TOOL-73 | Single Column Marquee | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/tool_selection.cpp | none | Feather profile is approximate | — |
 | P-TOOL-74 | Brush engine | Y | Y | Y | Complete | in-scope | crates/pictura-paint/src | none | — | — |
 | P-TOOL-75 | Brush dynamics | Y | Y | Y | Partial | in-scope | crates/pictura-paint/src | none | Texture and Dual Brush remain; the control model, Shape Dynamics, Scattering, Colour Dynamics, Transfer, Pose, and padlocks ship | SYS-4 |
 | P-TOOL-76 | Sampled, erodible, and airbrush tips | Y | Y | Y | Partial | in-scope | crates/pictura-paint/src | none | Round/elliptical and bristle tips ship; sampled, erodible, and airbrush tips plus Define Brush Preset remain | SYS-5 |
@@ -529,6 +529,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-28 | ec3346bcd | 218/350 (62.3%) | 219/367 (59.7%) | 28.0 | 220/375 (58.7%) |
 | 2026-11-27 | 73f469e1 | 216/350 (61.7%) | 217/367 (59.1%) | 28.0 | 218/375 (58.1%) |
 | 2026-11-27 | e7ca8f53 | 215/350 (61.4%) | 216/367 (58.9%) | 28.0 | 217/375 (57.9%) |
 | 2026-11-27 | 616cce308 | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
