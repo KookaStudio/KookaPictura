@@ -5,8 +5,8 @@ use super::*;
 /// independent psd-tools reader reports.
 #[test]
 fn image_resources_decode_matches_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -34,7 +34,7 @@ for key, res in psd.image_resources.items():
     if isinstance(res.data, (bytes, bytearray)):
         print(int(key), bytes(res.data).hex())
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

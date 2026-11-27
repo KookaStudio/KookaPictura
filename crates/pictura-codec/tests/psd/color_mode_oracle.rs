@@ -6,10 +6,10 @@
 //! `psd-tools` is absent.
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use pictura_codec::{read_psd, write_psd};
 use pictura_core::{BitDepth, ColorMode, Compression, Document};
+use pictura_testkit::oracle;
 
 fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
@@ -26,17 +26,6 @@ fn load(name: &str) -> Document {
     read_psd(&bytes).unwrap_or_else(|e| panic!("{} failed to parse: {e}", path.display()))
 }
 
-fn psd_tools_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// Decode `path` with `psd-tools` and return its composite as planar RGB hex.
 fn psd_tools_composite_planes(path: &std::path::Path) -> Vec<String> {
     let script = r#"
@@ -48,7 +37,7 @@ arr = np.array(psd.composite().convert("RGB"))
 for c in range(3):
     print(arr[:, :, c].tobytes().hex())
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(path)
@@ -86,7 +75,7 @@ rgb = tr.apply(lab)
 for c in range(3):
     print(rgb.getchannel(c).tobytes().hex())
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(path)
@@ -141,8 +130,8 @@ fn ours_matching(name: &str, tolerance: u8, reference: fn(&std::path::Path) -> V
 
 #[test]
 fn indexed_fixture_matches_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     // Palette expansion is exact: no tolerance.
@@ -160,8 +149,8 @@ fn indexed_fixture_matches_psd_tools() {
 
 #[test]
 fn cmyk_fixture_matches_psd_tools_within_one() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     // psd-tools/Pillow rounds `color * black / 255`; the engine floors it, a
@@ -182,8 +171,8 @@ fn cmyk_fixture_matches_psd_tools_within_one() {
 
 #[test]
 fn lab_fixture_matches_lcms2_exact_within_one() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     // The exact lcms2 transform, not psd-tools' optimized-LUT `.convert("RGB")`.
@@ -192,8 +181,8 @@ fn lab_fixture_matches_lcms2_exact_within_one() {
 
 #[test]
 fn bitmap_fixture_matches_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     ours_matching("bitmap.psd", 0, psd_tools_composite_planes);
@@ -262,8 +251,8 @@ fn bitmap_document_saves_as_bitmap() {
         "{name}: re-reading the packed plane reproduces the working RGB exactly"
     );
 
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("bitmap-write-back");
@@ -275,7 +264,7 @@ from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1])
 print(int(psd.color_mode))
 "#;
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -388,8 +377,8 @@ fn bitmap_rle_document_saves_as_bitmap() {
         "a re-read reproduces the original working RGB"
     );
 
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("bitmap-rle-write-back");
@@ -400,7 +389,7 @@ import sys
 from psd_tools import PSDImage
 print(int(PSDImage.open(sys.argv[1]).color_mode))
 "#;
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -476,8 +465,8 @@ fn indexed_document_saves_as_indexed() {
         "re-reading the retained palette reproduces the working RGB exactly"
     );
 
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("indexed-write-back");
@@ -489,7 +478,7 @@ from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1])
 print(int(psd.color_mode))
 "#;
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -563,8 +552,8 @@ fn lab_document_saves_as_lab() {
         .map(|c| &doc.composite.data[c * plane..(c + 1) * plane])
         .collect();
 
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("lab-write-back");
@@ -580,7 +569,7 @@ from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1])
 print(int(psd.color_mode))
 "#;
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -655,8 +644,8 @@ fn cmyk_document_saves_as_cmyk() {
         .map(|c| &doc.composite.data[c * plane..(c + 1) * plane])
         .collect();
 
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("cmyk-write-back");
@@ -672,7 +661,7 @@ from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1])
 print(int(psd.color_mode))
 "#;
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -720,7 +709,7 @@ from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1])
 print(int(psd.color_mode), int(psd.depth))
 "#;
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(path)
@@ -739,8 +728,8 @@ print(int(psd.color_mode), int(psd.depth))
 /// source mode and depth; `psd-tools` opens the output as mode 4/9 at depth 16.
 #[test]
 fn sixteen_bit_cmyk_and_lab_save_back_in_source_mode_and_depth() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let cmyk = [[0x80u8, 0x00], [0x40, 0x00], [0x20, 0x00], [0xc8, 0x00]];
@@ -782,8 +771,8 @@ fn sixteen_bit_cmyk_and_lab_save_back_in_source_mode_and_depth() {
 /// source mode and depth; `psd-tools` opens the output as mode 4/9 at depth 32.
 #[test]
 fn thirtytwo_bit_cmyk_and_lab_save_back_in_source_mode_and_depth() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let sample = 0.5f32.to_be_bytes();

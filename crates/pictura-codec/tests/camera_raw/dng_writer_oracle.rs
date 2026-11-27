@@ -8,6 +8,7 @@ use std::process::Command;
 use pictura_codec::{
     write_dng, CfaPattern, DngColor, DngCompatibility, DngCrop, DngPixels, DngRgb8, DngWrite,
 };
+use pictura_testkit::oracle;
 
 const W: usize = 64;
 const H: usize = 48;
@@ -71,7 +72,7 @@ fn write(path: &Path, pixels: DngPixels, original: Option<(&str, &[u8])>) {
 }
 
 fn rawpy_size(path: &Path) -> Option<(usize, usize)> {
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args([
             "-c",
             "import rawpy, sys\nr = rawpy.imread(sys.argv[1])\nprint(r.sizes.raw_width, r.sizes.raw_height)",

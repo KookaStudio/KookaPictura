@@ -19,10 +19,9 @@
 //! `python3 scripts/psd_knockout_reference.py gen`.
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use pictura_core::{BlendMode, Knockout};
-use pictura_testkit::compare;
+use pictura_testkit::{compare, oracle};
 
 /// One LSB of 8-bit rounding between psd-tools' floor and the CPU's round.
 const TOLERANCE: u8 = 1;
@@ -31,37 +30,6 @@ fn reference_path(stem: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
         .join(format!("{stem}.rgba"))
-}
-
-fn psd_tools_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
-/// `psd-tools` >= 1.19 is the first release whose compositor discriminates
-/// `Shallow` from `Deep` (`_knockout_backdrop`), so an older reference cannot
-/// verify this case and the Shallow oracle must self-skip rather than pass for
-/// the wrong reason.
-fn psd_tools_shallow_aware() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args([
-                "-c",
-                "import importlib.metadata as m, sys; \
-                 v = tuple(int(p) for p in m.version('psd-tools').split('.')[:2]); \
-                 sys.exit(0 if v >= (1, 19) else 1)",
-            ])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
 }
 
 /// Flatten a planar RGBA `PixelBuffer` to the interleaved layout the reference
@@ -80,8 +48,8 @@ fn interleaved(buf: &pictura_core::PixelBuffer) -> Vec<u8> {
 
 #[test]
 fn knockout_composite_matches_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -130,8 +98,8 @@ fn knockout_composite_matches_psd_tools() {
 /// loudly instead of passing for the wrong reason.
 #[test]
 fn knockout_in_pass_through_group_matches_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -204,8 +172,8 @@ fn knockout_in_pass_through_group_matches_psd_tools() {
 /// `Deep`, then diffs against the reference.
 #[test]
 fn knockout_in_isolated_group_matches_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -280,8 +248,8 @@ fn knockout_in_isolated_group_matches_psd_tools() {
 /// Shallow), then diffs against the reference.
 #[test]
 fn knockout_shallow_in_pass_through_group_matches_psd_tools() {
-    if !psd_tools_shallow_aware() {
-        eprintln!("skipping psd-tools Shallow check: python3 + psd-tools>=1.19 not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdToolsShallow) {
+        skip.report();
         return;
     }
 

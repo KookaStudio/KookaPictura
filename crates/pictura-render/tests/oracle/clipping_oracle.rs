@@ -5,9 +5,8 @@
 //!
 //! Needs `python3` with `psd-tools` (and numpy); self-skips otherwise.
 
-use std::process::Command;
-
 use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, PsdRect};
+use pictura_testkit::oracle;
 
 const SCRIPT: &str = r#"
 import sys
@@ -49,12 +48,8 @@ fn rect(left: i32, top: i32, right: i32, bottom: i32) -> PsdRect {
 
 #[test]
 fn psd_tools_composites_a_clipping_group_alike() {
-    let available = Command::new("python3")
-        .args(["-c", "import psd_tools, numpy"])
-        .output()
-        .is_ok_and(|o| o.status.success());
-    if !available {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let mut doc = Document::new(24, 16, ColorMode::Rgb, BitDepth::Eight);
@@ -73,7 +68,7 @@ fn psd_tools_composites_a_clipping_group_alike() {
     let ours = pictura_render::composite_rgba(&doc);
     let path = std::env::temp_dir().join(format!("pictura-clip-{}.psd", std::process::id()));
     std::fs::write(&path, pictura_codec::write_psd(&doc).expect("writes")).expect("write");
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", SCRIPT, path.to_str().expect("utf-8 path")])
         .output()
         .expect("run python3");

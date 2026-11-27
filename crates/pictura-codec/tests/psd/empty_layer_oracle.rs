@@ -2,24 +2,12 @@
 //!
 //! Self-skips when `python3`/`psd_tools` is absent.
 
-use std::process::Command;
-
 use pictura_codec::{read_psd, write_psd};
 use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerStack, LockFlags,
     PsdRect,
 };
-
-fn psd_tools_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
+use pictura_testkit::oracle;
 
 fn pixel_layer(name: &str, rect: PsdRect, size: usize) -> Layer {
     let w = rect.width().max(0) as usize;
@@ -62,8 +50,8 @@ fn temp_file(tag: &str) -> std::path::PathBuf {
 
 #[test]
 fn psd_tools_reads_an_empty_layer() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
@@ -91,7 +79,7 @@ fn psd_tools_reads_an_empty_layer() {
     ]);
     let file = temp_file("empty");
     std::fs::write(&file, write_psd(&doc).unwrap()).unwrap();
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args([
             "-c",
             "import sys\nfrom psd_tools import PSDImage\np = PSDImage.open(sys.argv[1])\nprint(len(list(p)))",
@@ -123,8 +111,8 @@ fn psd_tools_reads_an_empty_layer() {
 
 #[test]
 fn psd_tools_reads_a_grown_layers_rect_and_pixels() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let rect = PsdRect {
@@ -137,7 +125,7 @@ fn psd_tools_reads_a_grown_layers_rect_and_pixels() {
     doc.layers = LayerStack::from_layers(vec![pixel_layer("Grown", rect, 12)]);
     let file = temp_file("grown");
     std::fs::write(&file, write_psd(&doc).unwrap()).unwrap();
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args([
             "-c",
             "import sys\nfrom psd_tools import PSDImage\np = PSDImage.open(sys.argv[1])\nl = list(p)[0]\nim = l.topil()\nprint(*l.bbox)\nprint(*im.getpixel((0, 0)))\nprint(*im.getpixel((im.width - 1, im.height - 1)))",

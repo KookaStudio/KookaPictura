@@ -4,8 +4,8 @@ use super::*;
 /// the values the model set.
 #[test]
 fn psd_tools_sees_layer_attributes() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -72,7 +72,7 @@ print(1 if layer.locks.composite else 0)
 print(1 if layer.locks.position else 0)
 print(layer.sheet_color.value)
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -98,8 +98,8 @@ print(layer.sheet_color.value)
 /// model layer was named differently, and psd-tools reads that name back.
 #[test]
 fn psd_tools_sees_background_name_for_flagged_layer() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -152,7 +152,7 @@ from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1])
 print(psd[0].name)
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

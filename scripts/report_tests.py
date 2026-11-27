@@ -25,6 +25,9 @@ RULE = "\u2500" * 48
 TOKEN_PREFIX_RE = re.compile(
     r"^pictura self-test: (SUITE|PASS|SKIP|FAIL|SUMMARY)(?:\s+(.*))?$"
 )
+ORACLE_TOKEN_RE = re.compile(
+    r"^pictura oracle: SKIP (magick|psd-tools|ag-psd) (\S+)(?:\s+(.*))?$"
+)
 SUMMARY_RE = re.compile(r"passed=(\d+) failed=(\d+) skipped=(\d+)")
 
 
@@ -109,17 +112,19 @@ def _node_message(node):
     return " ".join(bit for bit in bits if bit).strip()
 
 
-def parse_junit(xml_text):
+def parse_junit(xml_text, include_identities=False):
     """Return ({package: Counts}, entries, [(test_id, message)]).
 
     ``entries`` is ``[(package, test_name, status, detail)]`` in document order;
     ``status`` is ``"pass"``/``"skip"``/``"fail"``. Skipped cases carry the
-    ``"(ignored)"`` detail.
+    ``"(ignored)"`` detail. With ``include_identities``, a fourth list maps each
+    entry to its nextest ``classname::name`` identity and status.
     """
     root = ET.fromstring(xml_text)
     suites = {}
     entries = []
     failures = []
+    identities = []
     for testsuite in root.iter("testsuite"):
         name = testsuite.get("name") or ""
         package = name.split("::", 1)[0] or name
@@ -128,21 +133,25 @@ def parse_junit(xml_text):
         if cases:
             for case in cases:
                 test_name = case.get("name") or "?"
+                container = case.get("classname") or name
+                identity = f"{container}::{test_name}"
                 bad = case.find("failure")
                 if bad is None:
                     bad = case.find("error")
                 if bad is not None:
                     counts.failed += 1
-                    container = case.get("classname") or name
-                    tid = f"{container}::{test_name}"
+                    tid = identity
                     failures.append((tid, _node_message(bad)))
                     entries.append((package, test_name, "fail", ""))
+                    identities.append((identity, "fail"))
                 elif case.find("skipped") is not None:
                     counts.skipped += 1
                     entries.append((package, test_name, "skip", "(ignored)"))
+                    identities.append((identity, "skip"))
                 else:
                     counts.passed += 1
                     entries.append((package, test_name, "pass", ""))
+                    identities.append((identity, "pass"))
         else:
             tests = int(testsuite.get("tests") or 0)
             failed = int(testsuite.get("failures") or 0) + int(
@@ -152,7 +161,54 @@ def parse_junit(xml_text):
             counts.passed += max(tests - failed - skipped, 0)
             counts.failed += failed
             counts.skipped += skipped
+    if include_identities:
+        return suites, entries, failures, identities
     return suites, entries, failures
+
+
+def parse_oracle_skips(text, label, errors):
+    records = []
+    seen = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line.startswith("pictura oracle:"):
+            continue
+        match = ORACLE_TOKEN_RE.fullmatch(line)
+        if match is None:
+            errors.append(f"{label}: malformed oracle token: {line}")
+            continue
+        tool, test, reason = match.groups()
+        if test in seen:
+            errors.append(f"{label}: duplicate oracle skip token: {test}")
+            continue
+        seen.add(test)
+        records.append((tool, test, reason or "not available"))
+    return records
+
+
+def apply_oracle_skips(suites, entries, identities, text, label, errors):
+    by_identity = {}
+    for index, (identity, _status) in enumerate(identities):
+        by_identity.setdefault(identity, []).append(index)
+    for tool, test, reason in parse_oracle_skips(text, label, errors):
+        matches = by_identity.get(test, [])
+        if len(matches) != 1:
+            errors.append(
+                f"{label}: oracle skip token {test} matches {len(matches)} Rust tests"
+            )
+            continue
+        index = matches[0]
+        package, _name, status, _detail = entries[index]
+        if status == "fail":
+            errors.append(f"{label}: oracle skip token {test} contradicts a failure")
+            continue
+        if status == "skip":
+            errors.append(f"{label}: oracle skip token {test} matches an already skipped test")
+            continue
+        counts = suites[package]
+        counts.passed -= 1
+        counts.skipped += 1
+        entries[index] = (package, test, "skip", f"{tool}: {reason}")
 
 
 QT_SYNTHETIC_CASES = ("initTestCase", "cleanupTestCase")
@@ -538,16 +594,31 @@ def build_layers(args, errors):
     layers = []
     failures = []
 
+    rust_suites = {}
+    rust_entries = []
+    rust_identities = []
+    rust_loaded = False
     if args.junit:
         text = _read(args.junit, errors)
         if text is not None:
             try:
-                suites, entries, junit_failures = parse_junit(text)
+                rust_suites, rust_entries, junit_failures, rust_identities = parse_junit(
+                    text, include_identities=True
+                )
             except ET.ParseError as exc:
                 errors.append(f"{args.junit}: invalid JUnit XML: {exc}")
             else:
-                layers.append(Layer("Rust tests (nextest)", suites, entries=entries))
                 failures.extend(junit_failures)
+                rust_loaded = True
+
+    for path in args.oracle_skips or []:
+        text = _read(path, errors)
+        if text is not None:
+            apply_oracle_skips(
+                rust_suites, rust_entries, rust_identities, text, path, errors
+            )
+    if rust_loaded:
+        layers.append(Layer("Rust tests (nextest)", rust_suites, entries=rust_entries))
 
     if args.selftest:
         texts = []
@@ -643,6 +714,11 @@ def _parse_args(argv):
     parser = argparse.ArgumentParser(description="Unified Kooka Pictura test report")
     parser.add_argument("--junit", help="nextest JUnit XML path")
     parser.add_argument(
+        "--oracle-skips",
+        action="append",
+        help="captured pictura oracle: SKIP token stream (repeatable)",
+    )
+    parser.add_argument(
         "--selftest",
         action="append",
         help="captured self-test output path (repeatable; streams are merged)",
@@ -694,6 +770,32 @@ FAIL_JUNIT = """<testsuites>
     </testcase>
   </testsuite>
 </testsuites>"""
+
+ORACLE_JUNIT = """<testsuites>
+  <testsuite name="pictura-codec::oracle_one" tests="1">
+    <testcase name="same" classname="pictura-codec::oracle_one"/>
+  </testsuite>
+  <testsuite name="pictura-codec::oracle_two" tests="1">
+    <testcase name="same" classname="pictura-codec::oracle_two"/>
+  </testsuite>
+  <testsuite name="pictura-codec::oracle_bad" tests="1" failures="1">
+    <testcase name="bad" classname="pictura-codec::oracle_bad">
+      <failure message="boom">assertion failed</failure>
+    </testcase>
+  </testsuite>
+</testsuites>"""
+
+ORACLE_AMBIGUOUS_JUNIT = """<testsuites>
+  <testsuite name="pictura-codec::oracle_one">
+    <testcase name="same" classname="pictura-codec::oracle_one"/>
+    <testcase name="same" classname="pictura-codec::oracle_one"/>
+  </testsuite>
+</testsuites>"""
+
+ORACLE_SKIP = (
+    "pictura oracle: SKIP magick pictura-codec::oracle_one::same "
+    "RSVG coder not available\n"
+)
 
 QT_JUNIT = """<testsuite name="SmokeTest" tests="3" failures="1">
   <testcase name="initTestCase" classname="SmokeTest" time="0.414"/>
@@ -774,6 +876,77 @@ def run_self_check():
         times=suite_seconds,
     )
     assert "1.5s" in render([timed], [], False), render([timed], [], False)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        junit_path = os.path.join(tmpdir, "oracle.xml")
+        skip_path = os.path.join(tmpdir, "oracle-skips.log")
+        with open(junit_path, "w", encoding="utf-8") as handle:
+            handle.write(ORACLE_JUNIT)
+        with open(skip_path, "w", encoding="utf-8") as handle:
+            handle.write(ORACLE_SKIP)
+        oracle_errors = []
+        oracle_layers, oracle_failures = build_layers(
+            _parse_args(["--junit", junit_path, "--oracle-skips", skip_path]),
+            oracle_errors,
+        )
+        assert oracle_errors == [], oracle_errors
+        assert len(oracle_layers) == 1, oracle_layers
+        assert (
+            oracle_layers[0].totals.passed,
+            oracle_layers[0].totals.failed,
+            oracle_layers[0].totals.skipped,
+        ) == (1, 1, 1), oracle_layers[0].totals
+        assert oracle_layers[0].entries[0] == (
+            "pictura-codec",
+            "pictura-codec::oracle_one::same",
+            "skip",
+            "magick: RSVG coder not available",
+        ), oracle_layers[0].entries
+        rendered_oracle = render(oracle_layers, oracle_failures, False)
+        assert "pictura-codec::oracle_one::same" in rendered_oracle, rendered_oracle
+        assert "magick: RSVG coder not available" in rendered_oracle, rendered_oracle
+        assert "1 passed" in rendered_oracle and "1 skipped" in rendered_oracle
+
+        invalid_oracle_tokens = {
+            "malformed": "pictura oracle: SKIP magick\n",
+            "duplicate": ORACLE_SKIP + ORACLE_SKIP,
+            "unmatched": "pictura oracle: SKIP magick pictura-codec::missing::same nope\n",
+            "unknown_tool": "pictura oracle: SKIP other pictura-codec::oracle_one::same nope\n",
+            "failure": "pictura oracle: SKIP magick pictura-codec::oracle_bad::bad nope\n",
+        }
+        for name, capture in invalid_oracle_tokens.items():
+            with open(skip_path, "w", encoding="utf-8") as handle:
+                handle.write(capture)
+            token_errors = []
+            token_layers, token_failures = build_layers(
+                _parse_args(["--junit", junit_path, "--oracle-skips", skip_path]),
+                token_errors,
+            )
+            assert token_errors, (name, token_errors)
+            assert exit_code(token_failures, token_errors) == 1, name
+            if name == "failure":
+                assert token_layers[0].totals.failed == 1, token_layers[0].totals
+                assert token_layers[0].totals.skipped == 0, token_layers[0].totals
+
+        with open(junit_path, "w", encoding="utf-8") as handle:
+            handle.write(ORACLE_AMBIGUOUS_JUNIT)
+        with open(skip_path, "w", encoding="utf-8") as handle:
+            handle.write(ORACLE_SKIP)
+        ambiguous_errors = []
+        build_layers(
+            _parse_args(["--junit", junit_path, "--oracle-skips", skip_path]),
+            ambiguous_errors,
+        )
+        assert any("matches 2 Rust tests" in error for error in ambiguous_errors), ambiguous_errors
+
+        with open(skip_path, "w", encoding="utf-8") as handle:
+            handle.write("")
+        empty_errors = []
+        build_layers(
+            _parse_args(["--junit", junit_path, "--oracle-skips", skip_path]),
+            empty_errors,
+        )
+        assert empty_errors == [], empty_errors
 
     suites, entries, failures = parse_qt_junit(QT_JUNIT)
     assert suites["SmokeTest"].total() == 1, suites

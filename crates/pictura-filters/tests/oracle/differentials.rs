@@ -1,6 +1,7 @@
 //! The filters with a faithful ImageMagick operator, diffed differentially.
 
 use pictura_filters::{Filter, MorphologyPreserve};
+use pictura_testkit::oracle;
 
 use crate::common::differential;
 
@@ -217,6 +218,10 @@ fn mosaic_matches_imagemagick() {
 
 #[test]
 fn shape_blur_matches_imagemagick() {
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
+        return;
+    }
     for (shape, radius) in [(1, 5), (2, 4)] {
         let kernel = pictura_filters::blur::shape_kernel(shape, radius);
         let weights: Vec<String> = kernel.iter().map(u8::to_string).collect();

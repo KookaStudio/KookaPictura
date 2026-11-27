@@ -1,7 +1,6 @@
-use std::process::Command;
-
 use pictura_codec::{read_psd, write_psb, write_psd};
 use pictura_core::{Document, PsdRect};
+use pictura_testkit::oracle;
 
 const COVERAGE: [u8; 6] = [0, 64, 255, 192, 128, 32];
 
@@ -109,12 +108,8 @@ fn mask_link_toggles_survive_psd_and_psb() {
 
 #[test]
 fn psd_tools_reads_both_mask_link_states() {
-    if !Command::new("python3")
-        .args(["-c", "import psd_tools"])
-        .output()
-        .is_ok_and(|out| out.status.success())
-    {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let script = r#"
@@ -142,7 +137,7 @@ print(' '.join(str(x) for x in layer.mask.topil().tobytes()))
                 std::process::id()
             ));
             std::fs::write(&path, bytes).unwrap();
-            let out = Command::new("python3")
+            let out = oracle::Command::new("python3")
                 .args(["-c", script])
                 .arg(&path)
                 .output()

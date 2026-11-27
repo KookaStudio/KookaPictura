@@ -6,8 +6,8 @@ use super::*;
 /// reads the original layer tree from.
 #[test]
 fn opaque_resources_survive_write_and_psd_tools_still_opens() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -39,7 +39,7 @@ print(len(list(psd)))
 for layer in psd:
     print(layer.name)
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

@@ -71,6 +71,8 @@ done
 # `cmake --build`, and reconfiguring an existing tree keeps its generator.
 [ "$build" -eq 0 ] || configure=1
 
+python3 scripts/report_tests.py --self-check
+
 tmp="$(mktemp -d)"
 stage_pids=()
 
@@ -182,6 +184,8 @@ reap_stage() { # <pid|empty> <label>; sets STAGE_RC
 }
 
 junit="target/nextest/default/junit.xml"
+oracle_skips="$tmp/oracle-skips.log"
+: > "$oracle_skips"
 
 nextest_rc=0
 configure_rc=0
@@ -196,7 +200,7 @@ if [ "$qt_only" -eq 1 ]; then
     print_timing nextest skipped
 else
     echo "== nextest =="
-    start_stage nextest - cargo nextest run --workspace --no-fail-fast
+    start_stage nextest - env PICTURA_ORACLE_SKIPS="$oracle_skips" cargo nextest run --workspace --no-fail-fast
     reap_stage "$STAGE_PID" nextest
     nextest_rc=$STAGE_RC
 fi
@@ -358,7 +362,7 @@ else
     fi
 fi
 
-report_args=()
+report_args=(--oracle-skips "$oracle_skips")
 [ "$qt_only" -eq 1 ] || report_args+=(--junit "$junit")
 report_args+=("${selftest_args[@]+"${selftest_args[@]}"}")
 report_args+=("${qt_args[@]+"${qt_args[@]}"}")

@@ -13,3 +13,6 @@ pictura-core = { path = "../pictura-core" }
 i_overlay = { version = "9.2.0", default-features = false }
 rayon = "1"
 thiserror.workspace = true
+
+[dev-dependencies]
+pictura-testkit = { path = "../pictura-testkit" }
