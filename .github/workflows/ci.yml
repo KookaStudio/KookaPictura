@@ -1,6 +1,12 @@
 name: CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      force_cold:
+        description: Bypass the Qt build-tree cache restore
+        type: boolean
+        default: false
   push:
     branches: [master]
     paths-ignore:
@@ -35,6 +41,7 @@ jobs:
     outputs:
       cpp_only: ${{ steps.bucket.outputs.cpp_only }}
       render: ${{ steps.filter.outputs.render }}
+      change_classes: ${{ steps.bucket.outputs.change_classes }}
     steps:
       # Explicit, not *checkout: this job precedes the anchor's definition.
       - uses: actions/checkout@v7
@@ -43,6 +50,7 @@ jobs:
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           list-files: shell
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           filters: |
             changed:
               - '**'
@@ -64,10 +72,35 @@ jobs:
               - 'rust-toolchain.toml'
               - '.cargo/**'
               - '.github/workflows/ci.yml'
+            rust:
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'crates/**/*.rs'
+            shell_headers:
+              - 'crates/pictura-app/cpp/**/*.h'
+            qt_tests:
+              - 'crates/pictura-app/cpp/tests/**'
+            build_inputs:
+              - 'CMakeLists.txt'
+              - 'cmake/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.cargo/**'
+              - 'crates/*/Cargo.toml'
+              - 'crates/pictura-app/build.rs'
+              - 'crates/pictura-app/bridge_sources.txt'
+              - 'crates/pictura-app/cpp/tests/CMakeLists.txt'
+              - '.github/workflows/ci.yml'
+              - 'scripts/ci_build_cache.py'
       - name: Classify the change
         id: bucket
         env:
           FILES: ${{ steps.filter.outputs.changed_files }}
+          RUST_CHANGED: ${{ steps.filter.outputs.rust }}
+          SHELL_HEADERS_CHANGED: ${{ steps.filter.outputs.shell_headers }}
+          QT_TESTS_CHANGED: ${{ steps.filter.outputs.qt_tests }}
+          BUILD_INPUTS_CHANGED: ${{ steps.filter.outputs.build_inputs }}
         run: |
           cpp_only=false
           if [ -n "$FILES" ]; then
@@ -82,6 +115,32 @@ jobs:
             done
           fi
           echo "cpp_only=$cpp_only" >> "$GITHUB_OUTPUT"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          changed = os.environ["FILES"].split()
+          bridges = {
+              line.strip()
+              for line in Path("crates/pictura-app/bridge_sources.txt").read_text().splitlines()
+              if line.strip() and not line.lstrip().startswith("#")
+          }
+          classes = []
+          if os.environ["BUILD_INPUTS_CHANGED"] == "true":
+              classes.append("build-input")
+          if any(f"crates/pictura-app/{path}" in changed for path in bridges):
+              classes.append("bridge-file")
+          if os.environ["RUST_CHANGED"] == "true":
+              classes.append("rust")
+          if os.environ["SHELL_HEADERS_CHANGED"] == "true":
+              classes.append("shell-header")
+          if os.environ["QT_TESTS_CHANGED"] == "true":
+              classes.append("qt-test")
+          if changed and not classes:
+              classes.append("other")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("change_classes=" + ",".join(classes or ["none"]) + "\n")
+          PY
 
   lint:
     runs-on: ubuntu-24.04
@@ -319,6 +378,10 @@ jobs:
 
   qt-headless:
     runs-on: ubuntu-24.04
+    needs: changes
+    permissions:
+      contents: read
+      actions: read
     # Cold dependency setup and the build can fill 30 minutes before CTest starts.
     timeout-minutes: 45
     steps:
@@ -333,6 +396,79 @@ jobs:
           cache: true
       - *sccache
       - *rustcache
+
+      - name: Build cache helper self-test
+        run: python3 scripts/ci_build_cache.py --self-test
+
+      - name: Build cache identity
+        id: identity
+        run: |
+          python3 scripts/ci_build_cache.py identity \
+            --runner-image ubuntu-24.04 \
+            --fingerprint-file "$RUNNER_TEMP/qt-build-fingerprint.txt" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Start Qt build cache restore timer
+        if: ${{ !inputs.force_cold }}
+        run: date +%s%N > "$RUNNER_TEMP/qt-cache-restore-start"
+
+      - name: Restore Qt build tree
+        id: build_cache
+        if: ${{ !inputs.force_cold }}
+        continue-on-error: true
+        uses: actions/cache/restore@v6
+        with:
+          path: build
+          key: ${{ steps.identity.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ steps.identity.outputs.prefix }}
+
+      - name: Record Qt build cache restore time
+        id: restore_time
+        if: always()
+        env:
+          CACHE_MATCHED_KEY: ${{ steps.build_cache.outputs.cache-matched-key }}
+        run: |
+          seconds=0
+          if [ -n "$CACHE_MATCHED_KEY" ] && [ -f "$RUNNER_TEMP/qt-cache-restore-start" ]; then
+            start=$(cat "$RUNNER_TEMP/qt-cache-restore-start")
+            end=$(date +%s%N)
+            seconds=$(python3 -c 'import sys; print((int(sys.argv[2]) - int(sys.argv[1])) / 1_000_000_000)' "$start" "$end")
+          fi
+          echo "seconds=$seconds" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Qt build tree cache
+        id: cache_state
+        env:
+          CACHE_MATCHED_KEY: ${{ steps.build_cache.outputs.cache-matched-key }}
+          FORCE_COLD: ${{ inputs.force_cold }}
+          FINGERPRINT: ${{ steps.identity.outputs.fingerprint }}
+        run: |
+          state=miss
+          validation_seconds=0
+          restored_bytes=0
+          if [ "$FORCE_COLD" = "true" ]; then
+            state=forced-cold
+            rm -rf build
+          elif [ -n "$CACHE_MATCHED_KEY" ]; then
+            restored_bytes=0
+            if [ -d build ]; then
+              restored_bytes=$(du -sb build | awk '{print $1}')
+            fi
+            start=$(date +%s%N)
+            if python3 scripts/ci_build_cache.py restore --fingerprint "$FINGERPRINT"; then
+              state=hit
+            else
+              state=stale-rejected
+              rm -rf build
+            fi
+            end=$(date +%s%N)
+            validation_seconds=$(python3 -c 'import sys; print((int(sys.argv[2]) - int(sys.argv[1])) / 1_000_000_000)' "$start" "$end")
+          fi
+          {
+            echo "state=$state"
+            echo "validation_seconds=$validation_seconds"
+            echo "restored_bytes=$restored_bytes"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Provide the TIFF runtime for Qt
         # The runtime must exist before the shared executor reaches CTest,
@@ -358,9 +494,38 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="$RUNNER_TEMP/qt-tiff/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export PICTURA_CPU_BUDGET_PERCENT=100
+          export PICTURA_CTEST_REGISTRATION_FILE="$RUNNER_TEMP/qt-ctest.json"
+          set -o pipefail
           bash scripts/test-report.sh never --qt-only --configure --build \
+            --cmake-arg -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            --cmake-arg -DBUILD_TESTING=ON \
             --cmake-arg -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
-            --cmake-arg -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
+            --cmake-arg -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
+            --cmake-arg "-DFETCHCONTENT_BASE_DIR=$GITHUB_WORKSPACE/build/fetchcontent" \
+            2>&1 | tee "$RUNNER_TEMP/qt-build.log"
+
+      - name: Measure Qt build
+        id: build_measure
+        if: ${{ always() && !cancelled() }}
+        run: |
+          if [ ! -f "$RUNNER_TEMP/qt-build.log" ]; then exit 0; fi
+          python3 scripts/ci_build_cache.py build-summary \
+            --log "$RUNNER_TEMP/qt-build.log" --github-output "$GITHUB_OUTPUT"
+          stats="$RUNNER_TEMP/qt-sccache-stats.txt"
+          sccache --show-stats >"$stats" 2>&1 || true
+          cat "$stats"
+          hits=$(awk '$1=="Cache" && $2=="hits" && $3 ~ /^[0-9]+$/ {print $3}' "$stats")
+          misses=$(awk '$1=="Cache" && $2=="misses" && $3 ~ /^[0-9]+$/ {print $3}' "$stats")
+          rate=$(python3 - "${hits:-0}" "${misses:-0}" <<'PY'
+          import sys
+          hits, misses = map(int, sys.argv[1:])
+          total = hits + misses
+          print(f"{100 * hits / total:.3f}" if total else "0")
+          PY
+          )
+          echo "sccache_hits=${hits:-0}" >> "$GITHUB_OUTPUT"
+          echo "sccache_misses=${misses:-0}" >> "$GITHUB_OUTPUT"
+          echo "sccache_hit_rate_percent=$rate" >> "$GITHUB_OUTPUT"
 
       - name: Upload Qt Test timing evidence
         if: always()
@@ -381,3 +546,138 @@ jobs:
 
       - name: Control e2e
         run: bash scripts/verify-control.sh
+
+      - name: Prepare Qt build tree cache
+        id: cache_prep
+        if: ${{ github.ref == 'refs/heads/master' }}
+        env:
+          CACHE_KEY: ${{ steps.identity.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+          FINGERPRINT: ${{ steps.identity.outputs.fingerprint }}
+        run: |
+          rm -rf build/qt-test-results build/Testing
+          python3 scripts/ci_build_cache.py write-manifest \
+            --fingerprint "$FINGERPRINT" \
+            --cache-key "$CACHE_KEY" \
+            --source-commit "$GITHUB_SHA" \
+            --ctest-json "$RUNNER_TEMP/qt-ctest.json"
+          du -sb build | awk '{print "saved_bytes=" $1}' >> "$GITHUB_OUTPUT"
+
+      - name: Start Qt build cache save timer
+        if: ${{ github.ref == 'refs/heads/master' }}
+        run: date +%s%N > "$RUNNER_TEMP/qt-cache-save-start"
+
+      - name: Save Qt build tree
+        id: cache_save
+        if: ${{ github.ref == 'refs/heads/master' }}
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: build
+          key: ${{ steps.identity.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Record Qt build cache save timing
+        id: save_time
+        if: always()
+        run: |
+          upload_seconds=0
+          if [ -f "$RUNNER_TEMP/qt-cache-save-start" ]; then
+            start=$(cat "$RUNNER_TEMP/qt-cache-save-start")
+            end=$(date +%s%N)
+            upload_seconds=$(python3 -c 'import sys; print((int(sys.argv[2]) - int(sys.argv[1])) / 1_000_000_000)' "$start" "$end")
+          fi
+          echo "upload_seconds=$upload_seconds" >> "$GITHUB_OUTPUT"
+
+      - name: Record saved Qt cache archive size
+        id: cache_size
+        if: ${{ github.ref == 'refs/heads/master' && steps.cache_save.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_KEY: ${{ steps.identity.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          size=""
+          for delay in 5 10 20 30; do
+            size=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/caches" \
+              -f key="$CACHE_KEY" -f per_page=100 \
+              --jq '.actions_caches[] | select(.key == env.CACHE_KEY) | .size_in_bytes' || true)
+            if [ -n "$size" ]; then
+              break
+            fi
+            sleep "$delay"
+          done
+          echo "archive_bytes=${size:-unavailable}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Qt build cache measurements
+        if: always()
+        env:
+          CHANGE_CLASSES: ${{ needs.changes.outputs.change_classes }}
+          CACHE_STATE: ${{ steps.cache_state.outputs.state }}
+          CACHE_MATCHED_KEY: ${{ steps.build_cache.outputs.cache-matched-key }}
+          CACHE_KEY: ${{ steps.identity.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+          RESTORED_BYTES: ${{ steps.cache_state.outputs.restored_bytes }}
+          SAVED_BYTES: ${{ steps.cache_prep.outputs.saved_bytes }}
+          ARCHIVE_BYTES: ${{ steps.cache_size.outputs.archive_bytes }}
+          RESTORE_SECONDS: ${{ steps.restore_time.outputs.seconds }}
+          VALIDATION_SECONDS: ${{ steps.cache_state.outputs.validation_seconds }}
+          UPLOAD_SECONDS: ${{ steps.save_time.outputs.upload_seconds }}
+          CACHE_SAVE_OUTCOME: ${{ steps.cache_save.outcome }}
+          BUILD_DURATION_SECONDS: ${{ steps.build_measure.outputs.duration_seconds }}
+          NINJA_EDGES: ${{ steps.build_measure.outputs.ninja_edges }}
+          SCCACHE_HITS: ${{ steps.build_measure.outputs.sccache_hits }}
+          SCCACHE_MISSES: ${{ steps.build_measure.outputs.sccache_misses }}
+          SCCACHE_HIT_RATE: ${{ steps.build_measure.outputs.sccache_hit_rate_percent }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          def integer(name):
+              value = os.environ.get(name, "")
+              return int(value) if value.isdigit() else None
+
+          def decimal(name):
+              value = os.environ.get(name, "")
+              try:
+                  return float(value) if value else None
+              except ValueError:
+                  return None
+
+          metrics = {
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "sha": os.environ["GITHUB_SHA"],
+              "ref": os.environ["GITHUB_REF"],
+              "change_classes": os.environ.get("CHANGE_CLASSES") or "unavailable",
+              "cache_state": os.environ.get("CACHE_STATE") or "unavailable",
+              "cache_matched_key": os.environ.get("CACHE_MATCHED_KEY") or None,
+              "cache_key": os.environ.get("CACHE_KEY") or None,
+              "restored_uncompressed_bytes": integer("RESTORED_BYTES"),
+              "saved_uncompressed_bytes": integer("SAVED_BYTES"),
+              "saved_archive_bytes": integer("ARCHIVE_BYTES"),
+              "restore_seconds": decimal("RESTORE_SECONDS"),
+              "validation_seconds": decimal("VALIDATION_SECONDS"),
+              "upload_seconds": decimal("UPLOAD_SECONDS"),
+              "cache_save_outcome": os.environ.get("CACHE_SAVE_OUTCOME") or "skipped",
+              "build_duration_seconds": decimal("BUILD_DURATION_SECONDS"),
+              "ninja_edges": integer("NINJA_EDGES"),
+              "sccache_hits": integer("SCCACHE_HITS"),
+              "sccache_misses": integer("SCCACHE_MISSES"),
+              "sccache_hit_rate_percent": decimal("SCCACHE_HIT_RATE"),
+          }
+          output = Path(os.environ["RUNNER_TEMP"]) / "qt-build-cache-metrics.json"
+          output.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as handle:
+              handle.write("### Qt build-tree cache\n\n")
+              handle.write("| Metric | Value |\n|---|---|\n")
+              for name, value in metrics.items():
+                  handle.write(f"| {name} | {value if value is not None else 'n/a'} |\n")
+          PY
+
+      - name: Upload Qt build cache measurements
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: qt-build-cache-metrics
+          path: ${{ runner.temp }}/qt-build-cache-metrics.json
+          if-no-files-found: error
