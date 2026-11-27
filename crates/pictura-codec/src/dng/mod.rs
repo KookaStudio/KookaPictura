@@ -37,6 +37,7 @@ mod orf;
 mod orf_meta;
 mod raf;
 mod raf_compressed;
+mod raf_sr;
 mod raf_superccd;
 mod rw2;
 mod rw2_decode;

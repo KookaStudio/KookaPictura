@@ -18,6 +18,7 @@ mod raw_orf;
 mod raw_raf;
 mod raw_raf_colour;
 mod raw_raf_compressed;
+mod raw_raf_sr;
 mod raw_raf_superccd;
 mod raw_rw2;
 mod raw_rw2_codings;

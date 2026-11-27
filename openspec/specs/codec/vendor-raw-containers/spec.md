@@ -711,7 +711,9 @@ fail without a panic and without an allocation beyond the image budget.
 The RAF reader SHALL read the big-endian header's section offsets and
 lengths (camera JPEG at `0x54`, directory at `0x5C`, sensor section at
 `0x64`) and SHALL read the primary frame whether or not the header names a
-second directory at `0x78`. A sensor section that is a TIFF SHALL be read
+second directory at `0x78`. The header SHALL name a second directory only
+when `0x78` is not 0 and the camera JPEG's offset is above `0x78`, as LibRaw
+checks; a shorter header's bytes at `0x78` SHALL be ignored. A sensor section that is a TIFF SHALL be read
 through its entry `0xF000`, which points at the raw directory. The plane SHALL be
 `0xF001` by `0xF002` photosites of `0xF003` bits, its data the `0xF008` bytes
 at `0xF007` from the section's start. For `n` photosites, `2n` bytes SHALL be
@@ -766,6 +768,11 @@ is allocated.
 
 - **WHEN** a TIFF-section RAF names a second directory at `0x78`
 - **THEN** it decodes to the same image as without it
+
+#### Scenario: A short header names no second directory [raf_short_header]
+
+- **WHEN** a SuperCCD word-section RAF with the layout's top bit set has non-zero bytes at `0x78` but its camera JPEG starts at `0x6C`
+- **THEN** its rows hold the width once, as without a second directory
 
 ### Requirement: A RAF is normalized with its directory's layout and levels
 
@@ -923,5 +930,62 @@ SHALL be the whole upright image the demosaic produces.
 
 #### Scenario: Real SuperCCD files match LibRaw [raf_superccd_libraw]
 
-- **WHEN** `PICTURA_RAW_CORPUS` holds SuperCCD RAFs and python3 with rawpy is available
+- **WHEN** `PICTURA_RAW_CORPUS` holds SuperCCD RAFs and python3 with rawpy is available, the SR files read with header offset `0x80` cleared so only their primary frame is read, as LibRaw reads them
 - **THEN** each grid has LibRaw's size and equals LibRaw's raw plane, repacked with LibRaw's margins and normalized by LibRaw's black and white, within 1
+
+### Requirement: A SuperCCD SR file merges its R frame into extended highlight range
+
+For a SuperCCD layout in a word section whose header names a second
+directory and whose header offset at `0x80` is not 0, the RAF reader SHALL
+read a second frame of the same size and row stride from that offset,
+bounded by the file; rows or
+samples the file does not hold SHALL be missing. The second frame's black
+SHALL come from the second directory's `0x4000`. Both frames SHALL be
+repacked onto LibRaw's grid with the same active area. With `s` and `r`
+each frame's black-subtracted sample over the primary frame's range, for
+each grid CFA colour the ratio `k` SHALL be the median of `s / r` over
+samples with `s` from 0.25 to 0.75 and `r` at least 16 counts, falling back,
+with fewer than 256 such samples, to record `0x9200`'s first value in the
+primary directory over that in the second, or 16 when either is absent or
+0. The merged value SHALL be `s` below 0.80, `k·r` from 0.95, and linear
+between the two from 0.80 to 0.95, and no less than `s` where `s` reaches
+the range, a clipped sample being a lower bound; a missing second sample
+SHALL keep `s`.
+With `h` the larger of 1 and the largest merged value, each sample SHALL be
+`65535 · m / h` rounded and `BaselineExposure` SHALL grow by `log2 h`. Any
+other layout SHALL keep the primary frame alone.
+
+#### Scenario: Unclipped samples keep the primary frame [raf_sr_unclipped]
+
+- **WHEN** an SR RAF of each layout bit has S samples below 0.80 of its range and R samples a sixteenth of them
+- **THEN** it decodes to the same samples and `BaselineExposure` as without the R frame
+
+#### Scenario: Clipped samples come from the R frame [raf_sr_clipped]
+
+- **WHEN** an SR RAF's R samples are a per-colour fraction (1/12, 1/16, 1/20) of a scene that clips its S samples, the R frame's black differs from the S frame's, and some clipped photosites have R at black
+- **THEN** the fitted ratio recovers each fraction, clipped samples decode to the scene over the headroom within 1 count, those with R at black to the S range over it, and `BaselineExposure` grows by `log2` of the largest merged value over the S range
+
+#### Scenario: The blend is continuous [raf_sr_blend]
+
+- **WHEN** S samples ramp from 0.75 to 0.99 of the range, unclipped, with R samples 4 % above S over the fitted ratio
+- **THEN** the merged samples equal `s + t·(k·r − s)`, `t` rising linearly from 0 at 0.80 to 1 at 0.95, over the headroom within 1 count, and rise monotonically with `s`
+
+#### Scenario: Too few samples fall back to the nominal ratio [raf_sr_nominal]
+
+- **WHEN** an SR RAF's S samples are all clipped, with `0x9200` 256 in the primary directory and 32 in the second, then without `0x9200`
+- **THEN** they merge with ratios of 8 and 16
+
+#### Scenario: Missing R rows keep the S frame [raf_sr_missing_rows]
+
+- **WHEN** an S3 Pro-style RAF, R in a section of its own, is cut short of its R frame's last row, and that row is clipped
+- **THEN** it decodes, and that row's samples equal the primary frame's over the headroom within 1 count
+
+#### Scenario: Upright layouts keep the primary frame [raf_sr_upright]
+
+- **WHEN** a Bayer word section has a second directory and a second frame at `0x80`, and an SR RAF has a second directory but `0x80` is 0
+- **THEN** each decodes to its primary samples alone
+
+#### Scenario: Real SR files gain highlight range [raf_sr_corpus]
+
+- **WHEN** `PICTURA_RAW_CORPUS` holds the S3 Pro, S5 Pro or F700 samples
+- **THEN** each reads as with `0x80` cleared except that `BaselineExposure` grows by `log2 h` > 0, samples where that primary read is below 0.80 of its range equal it over `h` within 1 count, and samples where it clips decode to at least the range over `h`

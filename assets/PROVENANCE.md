@@ -364,6 +364,14 @@ decode (bytes last first, low two bits the colour) is ours, confirmed
 against LibRaw's raw pattern on every upright sample, as is `0xF006`
 selecting most-significant-bit-first 12-bit packing (the S1 and SL1000).
 
+The SuperCCD SR merge (#1648, `crates/pictura-codec/src/dng/raf_sr.rs`) is
+our own design. Where the R frame sits (header `0x80`, LibRaw's second-shot
+offset) and LibRaw's guard on `0x78` follow LibRaw 0.22.1's observable
+behaviour; the ratio fit, blend and headroom are not taken from any
+converter (Fujifilm's and Adobe's merges are closed, and LibRaw reads one
+frame at a time). Record `0x9200`'s nominal ratio of 16 was read from the
+S3 Pro, S5 Pro and F700 sample files.
+
 ## Fujifilm SuperCCD geometry (`crates/pictura-codec/src/dng/raf_superccd.rs`, `crates/pictura-codec/src/dng/demosaic/superccd.rs`)
 
 **Ported code, not an independent implementation.** By owner decision

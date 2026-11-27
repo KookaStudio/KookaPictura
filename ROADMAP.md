@@ -541,7 +541,13 @@ gaps are the CS6 Extended 3D object and camera tools.
       LibRaw); 14 more bodies open with camera-JPEG-fitted colour; Save Image
       writes SuperCCD as linear (#1621). `crates/pictura-codec/src/dng/raf_superccd.rs`,
       `crates/pictura-codec/src/dng/demosaic/superccd.rs`.
-- [ ] Merge SuperCCD SR frames for highlight range (#1648)
+- [x] **SuperCCD SR highlight range** — the S3 Pro, S5 Pro and F700 merge
+      their low-sensitivity R frame into extended highlight range, the S/R
+      ratio fitted per image and colour, the headroom carried by
+      `BaselineExposure` (approximate: the reference merges are closed); the
+      raw Exposure now applies in linear light before the develop's clip, so
+      negative Exposure recovers highlights in every raw (#1648).
+      `crates/pictura-codec/src/dng/raf_sr.rs`.
 - [ ] Colour for the remaining Fujifilm RAF bodies (#1622)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Olympus-compressed ORF sensor data, most bodies since 2007 (#1535)
