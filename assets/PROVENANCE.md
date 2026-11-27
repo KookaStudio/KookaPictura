@@ -6,7 +6,7 @@ here.
 
 ## Vector artwork (`assets/icons`, `assets/cursors`)
 
-- 325 SVG icons and cursors (242 under `assets/icons`, 83 under `assets/cursors`).
+- 326 SVG icons and cursors (243 under `assets/icons`, 83 under `assets/cursors`).
 - Except where noted below, generated with an AI model (DeepSeek v4.1 Flash)
   and released by the project under **CC0-1.0 / MIT** (reuse under either).
 - The `actions.record`, `actions.play`, `actions.stop`, `actions.newSet`,
@@ -17,6 +17,7 @@ here.
   `actions.modalOff` and `actions.modalPartial` are original project artwork
   based on the Lucide `panel-top` dialog-box shape, released under
   **CC0-1.0 / MIT**.
+- `icons/layers.blend-if.svg` is original project artwork drawn by OpenAI Codex as slider handles, released under **CC0-1.0 / MIT**.
 - Carry no Adobe/Illustrator/XMP metadata; none are traced from Photoshop.
 - `cursors/tool.pen.close.svg` is `tool.pen.svg` with a small circle added by
   hand (the Pen's close-path cursor), under the same licenses.

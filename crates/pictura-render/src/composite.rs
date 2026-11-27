@@ -479,12 +479,49 @@ pub(crate) fn blend_if_factor(view: Option<&BlendIf>, cs: [f32; 3], backdrop: [f
         return 1.0;
     }
     let gate = |(black, white): (u16, u16), value: f32| {
+        let [b0, b1] = black.to_be_bytes();
+        let [w0, w1] = white.to_be_bytes();
+        if b0 > b1 || b1 > w0 || w0 > w1 {
+            return 1.0;
+        }
+        let value = value.clamp(0.0, 1.0);
+        let x = value * 255.0;
+        let lower = if b0 == b1 {
+            if value >= f32::from(b0) / 255.0 {
+                1.0
+            } else {
+                0.0
+            }
+        } else {
+            ((x - f32::from(b0)) / f32::from(b1 - b0)).clamp(0.0, 1.0)
+        };
+        let upper = if w0 == w1 {
+            if value <= f32::from(w1) / 255.0 {
+                1.0
+            } else {
+                0.0
+            }
+        } else {
+            ((f32::from(w1) - x) / f32::from(w1 - w0)).clamp(0.0, 1.0)
+        };
+        lower * upper
+    };
+    // Anchor the luma at green so neutral samples stay exact at hard thresholds.
+    let gray = |[r, g, b]: [f32; 3]| g + 0.299 * (r - g) + 0.114 * (b - g);
+    let mut factor =
+        gate(view.composite_source, gray(cs)) * gate(view.composite_dest, gray(backdrop));
+    for (i, (source, dest)) in view.channel_ranges.iter().enumerate().take(3) {
+        factor *= gate(*source, cs[i]) * gate(*dest, backdrop[i]);
+    }
+    factor
+}
+
+pub(crate) fn legacy_blend_if_factor(view: &BlendIf, cs: [f32; 3], backdrop: [f32; 3]) -> f32 {
+    let gate = |(black, white): (u16, u16), value: f32| {
         if (black, white) == (0, 65535) || black > white {
             return 1.0;
         }
-        let lo = black as f32 / 65535.0;
-        let hi = white as f32 / 65535.0;
-        if value <= lo || value >= hi {
+        if value <= black as f32 / 65535.0 || value >= white as f32 / 65535.0 {
             0.0
         } else {
             1.0

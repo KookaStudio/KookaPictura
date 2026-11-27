@@ -645,7 +645,7 @@ fn blend_if_absent_or_default_is_identity() {
 fn blend_if_source_gate_hides_below_black_and_keeps_above() {
     // Source black at 0.5: a dark source is gated out, a light one blends.
     let view = BlendIf {
-        composite_source: (32768, 65535),
+        composite_source: (0x8080, 65535),
         composite_dest: (0, 65535),
         channel_ranges: Vec::new(),
     };
@@ -661,7 +661,7 @@ fn blend_if_source_gate_hides_below_black_and_keeps_above() {
 fn blend_if_dest_gate_gates_on_backdrop() {
     let view = BlendIf {
         composite_source: (0, 65535),
-        composite_dest: (32768, 65535),
+        composite_dest: (0x8080, 65535),
         channel_ranges: Vec::new(),
     };
     let source = [0.5, 0.5, 0.5];
@@ -675,7 +675,7 @@ fn blend_if_per_channel_gate_gates_that_channel() {
     let view = BlendIf {
         composite_source: (0, 65535),
         composite_dest: (0, 65535),
-        channel_ranges: vec![((32768, 65535), (0, 65535))],
+        channel_ranges: vec![((0x8080, 65535), (0, 65535))],
     };
     let backdrop = [0.0, 0.0, 0.0];
     assert_eq!(blend_if_factor(Some(&view), [0.2, 0.9, 0.9], backdrop), 0.0);
@@ -740,7 +740,7 @@ fn blend_if_source_gate_changes_composite_output() {
     );
     // A source white endpoint below the source gray hides the layer entirely.
     let hidden = BlendIf {
-        composite_source: (0, 40000),
+        composite_source: (0, 0x9c9c),
         composite_dest: (0, 65535),
         channel_ranges: Vec::new(),
     };
@@ -1185,4 +1185,37 @@ fn deep_group_knockout_punches_through_the_intervening_layer() {
         [127, 0, 128, 255],
         "deep reveals the document background, got {deep:?}"
     );
+}
+
+#[test]
+fn split_blend_if() {
+    let mut view = default_blend_if();
+    view.composite_source = (u16::from_be_bytes([32, 96]), u16::from_be_bytes([160, 224]));
+    let gray = |v: f32| [v / 255.0; 3];
+    for (v, expected) in [
+        (0.0, 0.0),
+        (32.0, 0.0),
+        (64.0, 0.5),
+        (96.0, 1.0),
+        (160.0, 1.0),
+        (192.0, 0.5),
+        (224.0, 0.0),
+        (255.0, 0.0),
+    ] {
+        let actual = blend_if_factor(Some(&view), gray(v), gray(128.0));
+        assert!((actual - expected).abs() < 0.0001, "{v}: {actual}");
+    }
+    view.composite_dest = view.composite_source;
+    view.composite_source = (0, 65535);
+    assert!((blend_if_factor(Some(&view), gray(128.0), gray(64.0)) - 0.5).abs() < 0.0001);
+    assert_eq!(
+        blend_if_factor(Some(&default_blend_if()), gray(0.0), gray(255.0)),
+        1.0
+    );
+    view.composite_dest = (
+        u16::from_be_bytes([128, 128]),
+        u16::from_be_bytes([200, 200]),
+    );
+    assert_eq!(blend_if_factor(Some(&view), gray(128.0), gray(128.0)), 1.0);
+    assert_eq!(blend_if_factor(Some(&view), gray(128.0), gray(200.0)), 1.0);
 }

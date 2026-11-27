@@ -161,7 +161,7 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
 - [ ] Pattern preset library and `Edit > Define Pattern` (#262, #599)
 - [x] Vector-mask path authoring: Current Path from the selected path, the Paths
   panel vector-mask row, and the outlined mask thumbnail (#261)
-- [ ] A Blend-If editor UI (#264)
+- [ ] Blend-If editor: RGB and grayscale layer controls ship; pass-through groups and other color modes remain (#264)
 - [ ] Relink and convert-to-linked for smart objects (#113)
 - [x] The Layers panel thumbnail-size option (#586).
   `crates/pictura-app/cpp/panels/layers_panel.cpp`

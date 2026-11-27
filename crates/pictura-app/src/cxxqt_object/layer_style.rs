@@ -115,6 +115,24 @@ pub mod ffi {
             source_white: i32,
         ) -> bool;
 
+        fn layer_style_blend_if_status(view: &PictureView, path: &QString) -> i32;
+        fn layer_style_blend_if_word(
+            view: &PictureView,
+            path: &QString,
+            channel: i32,
+            dest: bool,
+            white: bool,
+        ) -> i32;
+        fn layer_style_blend_if_range(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            channel: i32,
+            dest: bool,
+            black: i32,
+            white: i32,
+        ) -> bool;
+        fn layer_style_replace_blend_if(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
         /// The built-in patterns a Pattern Overlay offers, in `patternOverlay.pattern` order.
         fn layer_style_pattern_names() -> QStringList;
 

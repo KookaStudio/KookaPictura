@@ -2454,9 +2454,9 @@ clipping-mask indicator for a clipped layer, the clipping indentation and base
 underline, the layer-mask thumbnail when a mask is present, an adjustment badge
 when adjustment content is present, a layer-style `fx` badge when the layer's
 style carries at least one effect, and a compact
-**`Blend If` text chip** when the layer's advanced blending is customised — a
+**`Blend If` icon** when the layer's advanced blending is customised — a
 non-default `Blend If` view, or a raw `blending_ranges` block present without a
-typed view. The chip SHALL be a text-only badge (no icon asset) drawn in the
+typed view. The icon SHALL be an original, provenance-recorded asset drawn in the
 row's right-edge badge run left of the `fx` and lock badges, and its advance
 SHALL be reserved by the same right-edge walk that lays out the mask thumbnails
 and the name rect so nothing overlaps. A layer whose lock
@@ -2686,21 +2686,21 @@ rather than fail.
 - **WHEN** a layer whose advanced blending is customised (its Blend If view is
   not the full `(0, 65535)` default, or a raw `blending_ranges` block is
   present without a typed view) is shown
-- **THEN** its row draws a compact `Blend If` text chip in the right-edge badge
-  run, and the name elides before the chip so no rect overlaps
+- **THEN** its row draws a compact `Blend If` icon in the right-edge badge
+  run, and the name elides before the icon so no rect overlaps
 
 #### Scenario: A default Blend If shows no badge [lpr_blendif_badge_absent]
 
 - **WHEN** a layer with no Blend If view and no `blending_ranges` block, or one
   whose every range is the full default, is shown
-- **THEN** no `Blend If` chip is drawn on its row and the name keeps the full
+- **THEN** no `Blend If` icon is drawn on its row and the name keeps the full
   right-edge run
 
 #### Scenario: A raw blending-ranges block without a typed view still badges [lpr_blendif_raw]
 
 - **WHEN** a layer carries a non-empty `blending_ranges` block that cannot be
   parsed into a typed Blend If view
-- **THEN** its row still draws the `Blend If` chip
+- **THEN** its row still draws the `Blend If` icon
 
 #### Scenario: An icon-only row draws no outline [lpr_thumb_icon_no_outline]
 

@@ -738,6 +738,9 @@ free	layer_smart_object_stack_mode	layer_smart_object_stack_mode	api/layers_brid
 free	layer_style_any_visible	layer_style_any_visible	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_apply_pattern	layer_style_apply_pattern	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_apply_preset	layer_style_apply_preset	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
+free	layer_style_blend_if_range	layer_style_blend_if_range	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
+free	layer_style_blend_if_status	layer_style_blend_if_status	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
+free	layer_style_blend_if_word	layer_style_blend_if_word	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_can_copy	layer_style_can_copy	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_can_create_layers	layer_style_can_create_layers	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_can_edit	layer_style_can_edit	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
@@ -757,6 +760,7 @@ free	layer_style_gradient	layer_style_gradient	api/layers_bridge.h	pictura_app/s
 free	layer_style_has	layer_style_has	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_paste	layer_style_paste	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_pattern_names	layer_style_pattern_names	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
+free	layer_style_replace_blend_if	layer_style_replace_blend_if	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_scale	layer_style_scale	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_set	layer_style_set	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h
 free	layer_style_set_all_visible	layer_style_set_all_visible	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_style.cxxqt.h

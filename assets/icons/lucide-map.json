@@ -466,6 +466,11 @@
       "note": "toggle with the knob filled (on state)",
       "base": "toggle-right"
     },
+    "layers.blend-if": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "original tonal slider handles for Blend If"
+    },
     "layers.fx": {
       "kind": "custom",
       "match": "custom",

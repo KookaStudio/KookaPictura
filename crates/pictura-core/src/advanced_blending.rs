@@ -30,7 +30,7 @@ impl Knockout {
 /// 8-byte channel groups of source + destination pairs. The raw
 /// [`crate::Layer::blending_ranges`] field remains the serialization source
 /// when unmodified.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub struct BlendIf {
     pub composite_source: (u16, u16),
     pub composite_dest: (u16, u16),
