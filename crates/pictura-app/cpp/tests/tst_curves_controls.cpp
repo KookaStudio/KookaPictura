@@ -30,6 +30,8 @@
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
 
+#include <array>
+
 class CurvesControlsTest : public QObject {
     Q_OBJECT
 
@@ -180,10 +182,12 @@ void CurvesControlsTest::curvesDisplayOptionsTransactions()
 {
     QVERIFY(openPatch());
     const auto exercise = [](QWidget& owner, pictura::CurveWidget* graph, QSpinBox* input,
-                             const auto& openOptions) {
+                             bool factoryDefaults, const auto& openOptions) {
         QVERIFY(graph && input);
         graph->selectFirstPoint();
-        QCOMPARE(input->maximum(), 255);
+        std::array<bool, 6> opening{false, false, false, true, true, false};
+        // Properties survives document changes, so another case can leave its grid set.
+        bool captureOpening = !factoryDefaults;
         const QString points = graph->pointsText();
         QSignalSpy edits(graph, &pictura::CurveWidget::curveChanged);
         const auto choose = [&](bool applied, QDialogButtonBox::StandardButton result) {
@@ -201,31 +205,35 @@ void CurvesControlsTest::curvesDisplayOptionsTransactions()
             auto* guides = options->findChild<QCheckBox*>(QStringLiteral("curvesIntersectionLine"));
             auto* buttons = options->findChild<QDialogButtonBox*>();
             QVERIFY(light && ink && standard && detailed && overlays && histogram && baseline && guides && buttons);
-            QCOMPARE(light->isChecked(), !applied);
-            QCOMPARE(ink->isChecked(), applied);
-            QCOMPARE(standard->isChecked(), !applied);
-            QCOMPARE(detailed->isChecked(), applied);
-            QCOMPARE(overlays->isChecked(), applied);
-            QCOMPARE(histogram->isChecked(), !applied);
-            QCOMPARE(baseline->isChecked(), !applied);
-            QCOMPARE(guides->isChecked(), applied);
-            (applied ? light : ink)->click();
-            (applied ? standard : detailed)->click();
-            overlays->setChecked(!applied);
-            histogram->setChecked(applied);
-            baseline->setChecked(applied);
-            guides->setChecked(!applied);
-            QCOMPARE(input->maximum(), applied ? 100 : 255);
+            const std::array current{ink->isChecked(), detailed->isChecked(),
+                                     overlays->isChecked(), histogram->isChecked(),
+                                     baseline->isChecked(), guides->isChecked()};
+            if (captureOpening) {
+                opening = current;
+                captureOpening = false;
+            }
+            for (std::size_t i = 0; i < opening.size(); ++i) {
+                QCOMPARE(current[i], opening[i] != applied);
+            }
+            QCOMPARE(light->isChecked(), !current[0]);
+            QCOMPARE(standard->isChecked(), !current[1]);
+            (current[0] ? light : ink)->click();
+            (current[1] ? standard : detailed)->click();
+            overlays->setChecked(!current[2]);
+            histogram->setChecked(!current[3]);
+            baseline->setChecked(!current[4]);
+            guides->setChecked(!current[5]);
+            QCOMPARE(input->maximum(), current[0] ? 100 : 255);
             QCOMPARE(graph->pointsText(), points);
             buttons->button(result)->click();
             QTRY_VERIFY(options.isNull());
         };
         choose(false, QDialogButtonBox::Cancel);
-        QCOMPARE(input->maximum(), 255);
+        QCOMPARE(input->maximum(), opening[0] ? 100 : 255);
         choose(false, QDialogButtonBox::Ok);
-        QCOMPARE(input->maximum(), 100);
+        QCOMPARE(input->maximum(), opening[0] ? 255 : 100);
         choose(true, QDialogButtonBox::Cancel);
-        QCOMPARE(input->maximum(), 100);
+        QCOMPARE(input->maximum(), opening[0] ? 255 : 100);
         QCOMPARE(graph->pointsText(), points);
         QCOMPARE(edits.count(), 0);
     };
@@ -235,7 +243,7 @@ void CurvesControlsTest::curvesDisplayOptionsTransactions()
     auto* button = dialog->findChild<QToolButton*>(QStringLiteral("curvesDisplayToggle"));
     QVERIFY(button);
     exercise(*dialog, dialog->findChild<pictura::CurveWidget*>(QStringLiteral("curve")),
-             dialog->findChild<QSpinBox*>(QStringLiteral("curvesInput")), [button] { button->click(); });
+             dialog->findChild<QSpinBox*>(QStringLiteral("curvesInput")), true, [button] { button->click(); });
     QCOMPARE(dialog->block(), opening);
     dialog->reject();
 
@@ -251,7 +259,7 @@ void CurvesControlsTest::curvesDisplayOptionsTransactions()
     const QByteArray layerOpening = capture();
     QVERIFY(!layerOpening.isEmpty());
     exercise(*panel, panel->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve")),
-             panel->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveInput")), [this] {
+             panel->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveInput")), false, [this] {
                  window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::PanelPropertiesCurvesDisplay));
              });
     panel->flushPending();
