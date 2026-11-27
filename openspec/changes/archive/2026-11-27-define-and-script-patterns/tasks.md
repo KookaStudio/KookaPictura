@@ -14,4 +14,4 @@
 ## 3. Review and delivery
 
 - [x] 3.1 Review implementation, update ROADMAP.md and PARITY.md for actual shipped scope, archive the change and retain the test plan.
-- [ ] 3.2 Run the required build, tests and validation in the later authorized build phase; report actual results.
+- [x] 3.2 Build the Arch x86-64 release in local Docker. The packaged headless self-test, focused Paint Bucket, command catalogue and scripted geometry Rust tests, Pattern Authoring, Fill Tools and Tool Options Persistence Qt suites, Rust formatting, affected-package Clippy and strict OpenSpec validation passed.
