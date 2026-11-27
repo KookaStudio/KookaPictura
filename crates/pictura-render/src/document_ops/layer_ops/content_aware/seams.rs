@@ -12,7 +12,7 @@ pub(super) fn cancelled(cancel: &AtomicBool) -> bool {
 }
 
 /// Forward-energy dynamic programming. Equal paths prefer the leftmost predecessor.
-pub(super) fn minimum_vertical_seam(
+pub(in crate::document_ops::layer_ops) fn minimum_vertical_seam(
     intensity: &[f32],
     protect: Option<&[f32]>,
     width: usize,
