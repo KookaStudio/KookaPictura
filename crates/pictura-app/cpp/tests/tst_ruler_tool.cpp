@@ -11,6 +11,7 @@
 #include "api/filters_bridge.h"
 #include "api/paint_bridge.h"
 #include "image_view.h"
+#include "localization.h"
 #include "qt_test_support.h"
 #include "panels/info_panel.h"
 #include "selftest_paint_fixture.h"
@@ -66,10 +67,14 @@ void RulerToolTest::protractorCreate()
     QVERIFY(f.ok());
     window_->setActiveTool(pictura::ToolId::Ruler);
     const int history = f.view->history_count();
+    auto* info = window_->findChild<pictura::InfoPanel*>();
+    QVERIFY(info);
+    info->setMeasurementUnitForTest(0, QStringLiteral("Pixels"));
+    const auto locale = pictura::uiNumericLocale();
     for (const bool first : {false, true}) {
         pictura::set_ruler(*f.view, 10, 10, 30, 10, false);
         drag(f.canvas, first ? QPointF(10, 10) : QPointF(30, 10),
-             first ? QPointF(10, 30) : QPointF(30, 30), Qt::AltModifier);
+             first ? QPointF(10, 34) : QPointF(30, 34), Qt::AltModifier);
         const auto primary = pictura::ruler_line(*f.view);
         const auto arm = pictura::ruler_protractor(*f.view);
         const auto m = pictura::ruler_measurement(*f.view);
@@ -82,11 +87,11 @@ void RulerToolTest::protractorCreate()
         QCOMPARE(m.size(), std::size_t(7));
         QVERIFY(std::abs(m[4] - 90.0) < 0.1);
         QVERIFY(std::abs(m[5] - 20.0) < 0.1);
-        QVERIFY(std::abs(m[6] - 20.0) < 0.1);
-        auto* info = window_->findChild<pictura::InfoPanel*>();
-        QVERIFY(info);
-        QVERIFY(info->rulerTextForTest().contains(QStringLiteral("90.0")));
-        QVERIFY(info->rulerTextForTest().contains(QStringLiteral("20.0")));
+        QVERIFY(std::abs(m[6] - 24.0) < 0.1);
+        QCOMPARE(info->rulerTextForTest(),
+                 QStringLiteral("%1°  %2  %3").arg(locale.toString(90.0, 'f', 1),
+                                                  locale.toString(20.0, 'f', 1),
+                                                  locale.toString(24.0, 'f', 1)));
     }
     pictura::set_ruler(*f.view, 10, 10, 30, 10, false);
     drag(f.canvas, {30, 10}, {40, 11}, Qt::AltModifier | Qt::ShiftModifier);
@@ -195,7 +200,7 @@ void RulerToolTest::straighten()
     original.fill(Qt::white);
     {
         QPainter painter(&original);
-        painter.setPen(QPen(Qt::black, 3));
+        painter.setPen(QPen(Qt::red, 3));
         painter.drawLine(QPoint(5, 5), QPoint(45, 15));
     }
     paint_fixture::Fixture f(*window_, original, QStringLiteral("ruler_straighten"));
@@ -214,14 +219,17 @@ void RulerToolTest::straighten()
     for (int y = 0; y < f.view->document_height(); ++y) {
         for (int x = 0; x < f.view->document_width(); ++x) {
             const QColor pixel = QColor::fromRgba(f.view->sample_argb(x, y));
-            if (pixel.alpha() > 200 && pixel.red() < 64 && pixel.green() < 64 && pixel.blue() < 64) {
-                minX = qMin(minX, x); maxX = qMax(maxX, x);
-                minY = qMin(minY, y); maxY = qMax(maxY, y);
+            if (pixel.alpha() > 200 && pixel.red() > 192 && pixel.green() < 64 && pixel.blue() < 64) {
+                minX = qMin(minX, x);
+                maxX = qMax(maxX, x);
+                minY = qMin(minY, y);
+                maxY = qMax(maxY, y);
             }
         }
     }
     QVERIFY(maxX - minX > 30);
-    QVERIFY(maxY - minY <= 5);
+    QVERIFY2(maxY - minY <= 5,
+             qPrintable(QStringLiteral("Leveled red stroke spans %1 rows").arg(maxY - minY + 1)));
     f.view->undo();
     QCOMPARE(f.view->document_width(), 80);
     QCOMPARE(f.view->document_height(), 60);
