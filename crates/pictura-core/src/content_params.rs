@@ -371,9 +371,36 @@ pub struct ColorLookupParams {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AutoKind {
+    BrightnessContrast,
     Tone,
     Contrast,
     Color,
+}
+
+/// Options shared by the Levels/Curves Auto fit and configured direct Auto.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AutoOptions {
+    pub algorithm: AutoKind,
+    pub shadow_clip: f64,
+    pub highlight_clip: f64,
+    pub shadow: [u8; 3],
+    pub midtone: [u8; 3],
+    pub highlight: [u8; 3],
+    pub snap_midtones: bool,
+}
+
+impl Default for AutoOptions {
+    fn default() -> Self {
+        Self {
+            algorithm: AutoKind::Tone,
+            shadow_clip: 0.1,
+            highlight_clip: 0.1,
+            shadow: [0; 3],
+            midtone: [128; 3],
+            highlight: [255; 3],
+            snap_midtones: false,
+        }
+    }
 }
 
 /// A single destructive adjustment.
@@ -394,6 +421,7 @@ pub enum Adjustment {
     ColorBalance(ColorBalanceParams),
     SelectiveColor(SelectiveColorParams),
     Auto(AutoKind),
+    ConfiguredAuto(AutoOptions),
     Invert,
     Posterize(u8),
     Threshold(u8),

@@ -344,6 +344,10 @@ GPU-Treiber: %5</translation>
         <translation>Auto-Kontrast</translation>
     </message>
     <message>
+        <source>Auto Options…</source>
+        <translation>Automatikoptionen…</translation>
+    </message>
+    <message>
         <source>Auto Tone</source>
         <translation>Auto-Tonwert</translation>
     </message>

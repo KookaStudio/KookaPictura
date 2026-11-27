@@ -310,7 +310,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] Merge native-depth exposure sources and persist the HDR preview white
       point across PSD/PSB/TIFF reopen (#558)
 - [ ] The Local Adaptation Toning Curve and Corner option (follow-up to #557)
-- [ ] The Auto Color Correction Options dialog (#559)
+- [x] The Auto Color Correction Options dialog (#559)
 - [x] Levels eyedroppers and the Alt-drag clipping preview for RGB and Grayscale (#560)
 - [ ] The Curves secondary UI: on-image, pencil and smooth, sliders and
       eyedroppers, display options, and the CMYK and Lab graphs (#561)

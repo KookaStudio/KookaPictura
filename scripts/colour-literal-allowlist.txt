@@ -36,6 +36,7 @@ crates/pictura-app/cpp/image_view.cpp  QColor(204, 204, 204)  # data
 crates/pictura-app/cpp/image_view.cpp  QColor(255, 255, 255)  # data
 crates/pictura-app/cpp/image_view_overlays.cpp  QColor(40, 40, 40)  # data
 crates/pictura-app/cpp/levels_dialog.cpp  QColor(128, 128, 128)  # data
+crates/pictura-app/cpp/panels/adjustment_controls.cpp  QColor(128, 128, 128)  # data: neutral point on the Levels input scale
 crates/pictura-app/cpp/levels_dialog.cpp  QColor(150, 150, 150)  # data
 crates/pictura-app/cpp/levels_dialog.cpp  QColor(90, 90, 90)  # data
 crates/pictura-app/cpp/lighting_canvas.cpp  QColor(120, 120, 120)  # data

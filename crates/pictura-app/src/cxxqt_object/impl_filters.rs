@@ -255,17 +255,19 @@ pub(super) fn apply_op_active_region(
         }
     };
     let native = match (op, rust.session.doc.as_ref()) {
+        (
+            ActiveOp::ApplyImage(_)
+            | ActiveOp::Adjustment(pictura_render::Adjustment::ConfiguredAuto(_)),
+            Some(doc),
+        ) => match pictura_render::apply_image_native(doc, &path) {
+            Ok(native) => native,
+            Err(error) => {
+                rust.filter_error = Some(error.to_string());
+                return None;
+            }
+        },
         (ActiveOp::Adjustment(adjustment), Some(doc)) => {
             match pictura_render::adjustment_native_target(doc, &path, adjustment) {
-                Ok(native) => native,
-                Err(error) => {
-                    rust.filter_error = Some(error.to_string());
-                    return None;
-                }
-            }
-        }
-        (ActiveOp::ApplyImage(_), Some(doc)) => {
-            match pictura_render::apply_image_native(doc, &path) {
                 Ok(native) => native,
                 Err(error) => {
                     rust.filter_error = Some(error.to_string());
@@ -386,6 +388,9 @@ pub(super) fn apply_op_active_region(
     // whole layer, which shares its planes until they are written.
     let baseline = (!commit).then(|| PreviewBaseline::save(layer, section.filter(|_| !native)));
     let applied = match op {
+        ActiveOp::Adjustment(pictura_render::Adjustment::ConfiguredAuto(options)) if native => {
+            pictura_render::apply_configured_auto_native(layer, options, mask.as_ref())
+        }
         ActiveOp::Adjustment(adjustment) => pictura_render::apply_adjustment_region_with_native(
             layer,
             adjustment,

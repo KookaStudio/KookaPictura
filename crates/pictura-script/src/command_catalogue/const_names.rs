@@ -426,6 +426,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("ParagraphSingleLineComposer", "paragraph.singleLineComposer"),
     ("ParagraphEveryLineComposer", "paragraph.everyLineComposer"),
     ("ParagraphReset", "paragraph.reset"),
+    ("PanelPropertiesAutoOptions", "panel.properties.autoOptions"),
     ("PanelPropertiesSavePreset", "panel.properties.savePreset"),
     ("PanelPropertiesLoadPreset", "panel.properties.loadPreset"),
     ("PanelPropertiesClipToggle", "panel.properties.clipToggle"),

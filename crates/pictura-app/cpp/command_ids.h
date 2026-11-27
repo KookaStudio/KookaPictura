@@ -426,6 +426,7 @@ inline constexpr char ParagraphJustification[] = "paragraph.justification";
 inline constexpr char ParagraphSingleLineComposer[] = "paragraph.singleLineComposer";
 inline constexpr char ParagraphEveryLineComposer[] = "paragraph.everyLineComposer";
 inline constexpr char ParagraphReset[] = "paragraph.reset";
+inline constexpr char PanelPropertiesAutoOptions[] = "panel.properties.autoOptions";
 inline constexpr char PanelPropertiesSavePreset[] = "panel.properties.savePreset";
 inline constexpr char PanelPropertiesLoadPreset[] = "panel.properties.loadPreset";
 inline constexpr char PanelPropertiesClipToggle[] = "panel.properties.clipToggle";

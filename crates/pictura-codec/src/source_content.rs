@@ -65,6 +65,7 @@ pub(crate) fn adjustment(layer: &Layer) -> Result<Option<AdjustmentData>, PsdErr
         | Adjustment::Vibrance(_)
         | Adjustment::ColorLookup(_)
         | Adjustment::Auto(_)
+        | Adjustment::ConfiguredAuto(_)
         | Adjustment::Desaturate
         | Adjustment::Equalize
         | Adjustment::ReplaceColor(_)

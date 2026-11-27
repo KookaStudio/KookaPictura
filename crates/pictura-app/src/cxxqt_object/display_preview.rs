@@ -32,6 +32,11 @@ pub(super) struct DisplayPreview {
     pub(super) level: Option<u32>,
     pub(super) generation: u64,
     pub(super) hdr_merged_before: bool,
+    pub(super) exact_fallback: bool,
+    dirty_before: bool,
+    history_before: Option<u64>,
+    saved_before: Option<u64>,
+    metadata_before: u64,
 }
 
 impl DisplayPreview {
@@ -105,6 +110,11 @@ impl PictureViewRust {
             level: None,
             generation,
             hdr_merged_before,
+            exact_fallback: false,
+            dirty_before: self.session.dirty,
+            history_before: self.session.history.current_id(),
+            saved_before: self.session.saved_id,
+            metadata_before: self.session.persisted_metadata_revision,
         });
     }
 
@@ -168,10 +178,19 @@ impl PictureViewRust {
 
     /// Abandon the live preview: put the pre-gesture layers back, then restore
     /// the exact display from the unchanged document composite.
-    pub(super) fn cancel_display_preview(&mut self) {
+    pub(super) fn cancel_display_preview(&mut self) -> bool {
         let Some(preview) = self.display_preview.take() else {
-            return;
+            return false;
         };
+        if preview.generation != self.session.document_generation {
+            return false;
+        }
+        if preview.history_before == self.session.history.current_id()
+            && preview.saved_before == self.session.saved_id
+            && preview.metadata_before == self.session.persisted_metadata_revision
+        {
+            self.session.dirty = preview.dirty_before;
+        }
         if let Some(doc) = self.session.doc.as_mut() {
             for (path, before) in &preview.pre_layers {
                 if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
@@ -181,6 +200,7 @@ impl PictureViewRust {
         }
         self.hdr_merged_current = preview.hdr_merged_before;
         self.reset_pyramid();
+        preview.exact_fallback
     }
 
     pub(super) fn display_preview_active(&self) -> bool {

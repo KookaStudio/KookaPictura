@@ -1042,6 +1042,37 @@ fn auto_tone_uses_selection_histogram() {
 }
 
 #[test]
+fn configured_auto_uses_selection_histogram() {
+    let mut layer = step_layer(5, 1, 255);
+    for ch in layer.channels_mut().iter_mut().filter(|c| c.id >= 0) {
+        ch.data
+            .as_mut_slice()
+            .copy_from_slice(&[5, 40, 60, 140, 251]);
+    }
+    let alpha = chan(&layer, -1).to_vec();
+    let region = rect(0, 0, 1, 5);
+    let mask = LayerMask {
+        rect: region,
+        data: Some(vec![0, 255, 128, 255, 0].into()),
+        ..Default::default()
+    };
+    let options = pictura_core::AutoOptions {
+        shadow: [20; 3],
+        highlight: [220; 3],
+        ..pictura_core::AutoOptions::default()
+    };
+    apply_adjustment_region(
+        &mut layer,
+        &Adjustment::ConfiguredAuto(options),
+        mask.edit_coverage().as_ref(),
+        region,
+    )
+    .unwrap();
+    assert_eq!(chan(&layer, 0), &[5, 20, 60, 220, 251]);
+    assert_eq!(chan(&layer, -1), alpha.as_slice());
+}
+
+#[test]
 fn position_and_transparency_locks_do_not_block_a_filter() {
     for flag in [LockFlags::POSITION, LockFlags::TRANSPARENCY] {
         let mut layer = step_layer(8, 8, 255);

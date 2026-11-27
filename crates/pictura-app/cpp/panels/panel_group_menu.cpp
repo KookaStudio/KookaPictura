@@ -317,11 +317,13 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Save Preset…")), QStringLiteral("savePreset")),
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Load Preset…")), QStringLiteral("loadPreset")),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Save Black & White Preset"))),
-             dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto Options…")), true),
-             dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Curves Display Options…"))),
-             chk(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Show Clipping For Black/White Points")), true),
-             chk(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Parameter"))),
-             chk(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Targeted Adjustment Tool"))),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto Options…")), QStringLiteral("autoOptions"), true),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Curves Display Options…")), QStringLiteral("properties.curvesDisplay")),
+             chkAction(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Show Clipping For Black/White Points")), QStringLiteral("properties.showClipping"), true),
+             chkAction(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Parameter")), QStringLiteral("properties.autoParameter")),
+             chkAction(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Targeted Adjustment Tool")), QStringLiteral("properties.autoTarget")),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Delete Current Preset")), QStringLiteral("properties.deletePreset")),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Reset Adjustment")), QStringLiteral("properties.reset")),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Apply Mask")), true),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Delete Mask"))),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Disable Mask"))),
@@ -384,6 +386,7 @@ QString panelCommandId(const QString& panel, const QString& action)
     }
     if (panel == QStringLiteral("propertiesPanel")) {
         static const QHash<QString, const char*> map = {
+            {QStringLiteral("autoOptions"), command_ids::PanelPropertiesAutoOptions},
             {QStringLiteral("savePreset"), command_ids::PanelPropertiesSavePreset},
             {QStringLiteral("loadPreset"), command_ids::PanelPropertiesLoadPreset},
         };

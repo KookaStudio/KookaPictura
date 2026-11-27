@@ -13,7 +13,19 @@ pub(super) use imp::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
+    #[namespace = "pictura"]
+    struct AutoCorrectionSettings {
+        algorithm: i32,
+        snap: bool,
+        shadow_clip: f64,
+        highlight_clip: f64,
+        shadow: u32,
+        midtone: u32,
+        highlight: u32,
+    }
     unsafe extern "C++" {
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qstringlist.h");
@@ -26,6 +38,30 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        type AutoCorrectionSource;
+
+        fn adjustment_auto_source(view: &PictureView, path: &QString) -> Box<AutoCorrectionSource>;
+        fn adjustment_input_image(
+            view: &PictureView,
+            path: &QString,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+        ) -> QImage;
+        fn adjustment_input_argb(view: &PictureView, path: &QString, x: i32, y: i32) -> u32;
+        fn adjustment_input_histogram(source: &AutoCorrectionSource, channel: i32) -> Vec<u32>;
+        fn adjustment_auto_block(
+            source: &AutoCorrectionSource,
+            opening: &[u8],
+            settings: &AutoCorrectionSettings,
+        ) -> Vec<u8>;
+        fn image_auto_configured(
+            view: Pin<&mut PictureView>,
+            kind: &QString,
+            settings: &AutoCorrectionSettings,
+        ) -> bool;
+
         /// The Properties page for the adjustment layer at `path`, one tab-separated row each: `title`, optional `threshold-histogram` marker, `note`, `groups` (`|`-joined), `curves`, then a `slider` (key, label, group, value, default, min, max, decimals), `check` / `color` (key, label, group, value, default), or `choice` (… options `|`-joined) per control; group -1 shows in every group. Empty for anything else.
         fn adjustment_page(view: &PictureView, path: &QString) -> QStringList;
 

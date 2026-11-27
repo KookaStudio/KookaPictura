@@ -109,9 +109,12 @@ impl Adjustment {
             Self::ShadowsHighlights(_) => AdjustmentKind::ShadowsHighlights,
             Self::ColorBalance(_) => AdjustmentKind::ColorBalance,
             Self::SelectiveColor(_) => AdjustmentKind::SelectiveColor,
-            Self::Auto(auto) => match auto {
+            Self::Auto(auto)
+            | Self::ConfiguredAuto(crate::AutoOptions {
+                algorithm: auto, ..
+            }) => match auto {
                 AutoKind::Tone => AdjustmentKind::AutoTone,
-                AutoKind::Contrast => AdjustmentKind::AutoContrast,
+                AutoKind::Contrast | AutoKind::BrightnessContrast => AdjustmentKind::AutoContrast,
                 AutoKind::Color => AdjustmentKind::AutoColor,
             },
             Self::Invert => AdjustmentKind::Invert,

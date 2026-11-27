@@ -4,18 +4,25 @@
 
 #include "commands.h"
 #include "frame.h"
+#include "levels_dialog.h"
 #include "selftest_paint_fixture.h"
 #include "panels/histogram_panel.h"
 #include "panels/layers_panel.h"
+#include "panels/panel_column.h"
 #include "panels/properties_panel.h"
 #include "api/layers_bridge.h"
 
 #include "panels/numeric_field.h"
+#include "panels/adjustment_controls.h"
+#include "panels/curve_widget.h"
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QFormLayout>
+#include <QtWidgets/QDoubleSpinBox>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
@@ -23,8 +30,37 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtGui/QImage>
+#include <QtGui/QAction>
 
 #include "qt_test_support.h"
+
+#include <type_traits>
+#include <utility>
+
+template<typename Curve, typename = void>
+struct HasDenseCurveApi : std::false_type {};
+
+template<typename Curve>
+struct HasDenseCurveApi<Curve, std::void_t<decltype(std::declval<Curve&>().hasDenseCurve())>> : std::true_type {};
+
+template<typename Curve>
+void checkPencilIntegration(Curve* curve, QWidget* panel)
+{
+    if constexpr (HasDenseCurveApi<Curve>::value) {
+        auto* pencil = panel->findChild<QToolButton*>(QStringLiteral("curvesPencil"));
+        auto* smooth = panel->findChild<QToolButton*>(QStringLiteral("curvesSmooth"));
+        QVERIFY(pencil && smooth);
+        pencil->click();
+        QTest::mousePress(curve, Qt::LeftButton, Qt::NoModifier, curve->rect().center());
+        QTest::mouseRelease(curve, Qt::LeftButton, Qt::NoModifier, curve->rect().center());
+        QVERIFY(curve->hasDenseCurve());
+        QVERIFY(smooth->isEnabled());
+        smooth->click();
+    } else {
+        QVERIFY(!panel->findChild<QToolButton*>(QStringLiteral("curvesPencil")));
+    }
+}
+
 
 class PropertiesPanelTest : public QObject {
     Q_OBJECT
@@ -41,6 +77,11 @@ private slots:
     void thresholdHistogramTracksSelectionMove();
     void thresholdHistogramRespectsGroupBoundaries();
     void groupsCurvesAndFooter();
+    void curvesPointFields();
+    void curvesControlsAndMenu();
+    void autoSelectParameter();
+    void curvesPencilIntegration();
+    void levelsHandlesAndMenu();
     void channelMixerMonochrome();
     void channelMixerCmykGroups();
     void canvasSectionReadsAndResizes();
@@ -87,6 +128,120 @@ void PropertiesPanelTest::cleanup()
 
 // No document reads No Properties; a plain layer gets the read-only summary
 // (a post-CS6 page ported from photorust, #70).
+void PropertiesPanelTest::autoSelectParameter()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("levels")));
+    const auto panelName = QStringLiteral("propertiesPanel");
+    auto* column = window_->columnForPanel(panelName);
+    QVERIFY(column);
+    window_->show();
+    window_->setScreenMode(pictura::PicturaMainWindow::ScreenMode::Standard);
+    window_->setPanelsHidden(false);
+    column->setRailMode(false);
+    QVERIFY(column->showPanel(panelName, true));
+    window_->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(window_.get()));
+    QTRY_VERIFY(panel_->isVisible());
+    QMenu menu;
+    auto* action = menu.addAction(QStringLiteral("Auto-Select Parameter"));
+    action->setCheckable(true);
+    action->setData(QStringLiteral("properties.autoParameter"));
+    panel_->updatePanelMenu(&menu);
+    QVERIFY(action->isEnabled());
+    action->trigger();
+    auto* black = panel_->controlForTest(QStringLiteral("inputBlack"));
+    QVERIFY(black);
+    auto* field = black->parentWidget()->findChild<QDoubleSpinBox*>();
+    QVERIFY(field);
+    QTRY_VERIFY(field->hasFocus() || field->findChild<QLineEdit*>()->hasFocus());
+    QVERIFY(setupAdjustment(QStringLiteral("curves")));
+    auto* output = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveOutput"));
+    QVERIFY(output);
+    QTRY_VERIFY(output->hasFocus() || output->findChild<QLineEdit*>()->hasFocus());
+}
+
+void PropertiesPanelTest::curvesPencilIntegration()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("curves")));
+    auto* graph = panel_->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve"));
+    QVERIFY(graph);
+    checkPencilIntegration(graph, panel_);
+}
+
+void PropertiesPanelTest::levelsHandlesAndMenu()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("levels")));
+    auto* histogram = panel_->findChild<pictura::LevelsStrip*>(QStringLiteral("propertiesLevelsHistogram"));
+    auto* input = panel_->findChild<pictura::TriangleSlider*>(QStringLiteral("propertiesLevelsInput"));
+    auto* output = panel_->findChild<pictura::TriangleSlider*>(QStringLiteral("propertiesLevelsOutput"));
+    QVERIFY(histogram && input && output);
+    for (int point = 0; point < 3; ++point)
+        QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("propertiesLevelsPoint%1").arg(point)));
+    auto* black = qobject_cast<QSlider*>(panel_->controlForTest(QStringLiteral("inputBlack")));
+    QVERIFY(black);
+    QVERIFY(QMetaObject::invokeMethod(input, "valueChanged", Q_ARG(int, 0), Q_ARG(int, 32)));
+    QCOMPARE(black->value(), 32);
+    QMenu menu;
+    auto* clipping = menu.addAction(QStringLiteral("Show Clipping"));
+    clipping->setCheckable(true);
+    clipping->setData(QStringLiteral("properties.showClipping"));
+    panel_->updatePanelMenu(&menu);
+    QVERIFY(clipping->isEnabled());
+    clipping->trigger();
+    panel_->updatePanelMenu(&menu);
+    QVERIFY(clipping->isChecked());
+}
+
+void PropertiesPanelTest::curvesControlsAndMenu()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("curves")));
+    auto* graph = panel_->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve"));
+    auto* black = panel_->findChild<QSlider*>(QStringLiteral("curvesBlackSlider"));
+    QVERIFY(graph && black);
+    auto* target = panel_->findChild<QToolButton*>(QStringLiteral("curvesTarget"));
+    auto* controls = panel_->findChild<pictura::AdjustmentControls*>(QStringLiteral("propertiesControls"));
+    QVERIFY(target && controls);
+    QSignalSpy requested(controls, &pictura::AdjustmentControls::curvesCanvasRequested);
+    target->click();
+    QCOMPARE(requested.count(), 1);
+    QCOMPARE(requested.takeFirst().at(0).toInt(), 0);
+    QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("curvesBlackPoint")));
+    QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("curvesGrayPoint")));
+    QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("curvesWhitePoint")));
+    QVERIFY(graph->selectTone(128));
+    auto* input = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveInput"));
+    auto* output = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveOutput"));
+    QVERIFY(input && output && input->isEnabled() && output->isEnabled());
+    QCOMPARE(input->value(), 128);
+    output->setValue(150);
+    QCOMPARE(qRound(graph->points()[graph->selected()].y() * 255), 150);
+    black->setValue(20);
+    QCOMPARE(qRound(graph->points().first().x() * 255), 20);
+    QMenu menu;
+    auto* display = menu.addAction(QStringLiteral("Display"));
+    display->setData(QStringLiteral("properties.curvesDisplay"));
+    auto* clipping = menu.addAction(QStringLiteral("Clipping"));
+    clipping->setData(QStringLiteral("properties.showClipping"));
+    clipping->setCheckable(true);
+    panel_->updatePanelMenu(&menu);
+    QVERIFY(display->isEnabled());
+    QVERIFY(clipping->isEnabled());
+    auto* options = panel_->findChild<QWidget*>(QStringLiteral("curvesDisplayOptions"));
+    QVERIFY(options && options->isHidden());
+    display->trigger();
+    QVERIFY(!options->isHidden());
+}
+
+void PropertiesPanelTest::curvesPointFields()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("curves")));
+    auto* input = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveInput"));
+    auto* output = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveOutput"));
+    QVERIFY(input && output);
+    QVERIFY(!input->isEnabled());
+    QVERIFY(!output->isEnabled());
+}
+
 void PropertiesPanelTest::plainDocumentShowsNoProperties()
 {
     panel_ = window_->findChild<pictura::PropertiesPanel*>(QStringLiteral("propertiesPanel"));

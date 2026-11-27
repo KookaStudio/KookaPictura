@@ -94,6 +94,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         }
     });
     panels_->pathsPanel()->setToolServices(tools_);
+    panels_->propertiesPanel()->setTools(tools_);
 
     // A tool commit (marquee release, wand click, lasso close) reaches the
     // picture view without a `changed` emission, so refresh the overlay directly.

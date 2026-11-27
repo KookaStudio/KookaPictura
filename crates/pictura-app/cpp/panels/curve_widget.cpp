@@ -285,6 +285,45 @@ void CurveWidget::moveSelected(int input, int output)
     emit curveChanged();
 }
 
+void CurveWidget::selectFirstPoint()
+{
+    if (!points_.isEmpty()) select(0);
+}
+
+int CurveWidget::outputAt(int input) const
+{
+    return qRound(curve_[qBound(0, input, 255)] * 255.0f);
+}
+
+bool CurveWidget::selectTone(int input)
+{
+    if (input < 0 || input > 255 || points_.size() < 2) return false;
+    int index = 0;
+    while (index < points_.size() && qRound(points_[index].x() * 255.0) < input) ++index;
+    if (index == points_.size() || qRound(points_[index].x() * 255.0) != input) {
+        if (index == 0 || index == points_.size() || points_.size() >= kMaxPoints) return false;
+        points_.insert(index, QPointF(input / 255.0, outputAt(input) / 255.0));
+        interpolate();
+        emit curveChanged();
+    }
+    select(index);
+    return true;
+}
+
+void CurveWidget::setEndpoint(bool white, int input)
+{
+    if (points_.size() < 2) return;
+    const int index = white ? int(points_.size()) - 1 : 0;
+    const int low = white ? qRound(points_[index - 1].x() * 255) + 1 : 0;
+    const int high = white ? 255 : qRound(points_[1].x() * 255) - 1;
+    points_[index].setX(qBound(low, input, high) / 255.0);
+    points_[index].setY(white ? 1.0 : 0.0);
+    select(index);
+    interpolate();
+    update();
+    emit curveChanged();
+}
+
 QRectF CurveWidget::plot() const
 {
     // An endpoint's square overhangs the face by 4 px, so inset by that much.
