@@ -191,8 +191,8 @@ void LayerZeroShortcutsTest::eligibilityAndNoOp()
 
 void LayerZeroShortcutsTest::singleDigits()
 {
-    QCOMPARE(view_->set_layers_opacity({layer_}, 128), 1);
-    QCOMPARE(view_->set_layers_fill({layer_}, 128), 1);
+    QCOMPARE(view_->set_layers_opacity({layer_}, 117), 1);
+    QCOMPARE(view_->set_layers_fill({layer_}, 117), 1);
     select({layer_});
     for (const bool fill : {false, true}) {
         QWidget* source = fill ? static_cast<QWidget*>(tree_)
@@ -204,17 +204,20 @@ void LayerZeroShortcutsTest::singleDigits()
         const int otherBefore = other();
         for (int digit = 0; digit <= 9; ++digit) {
             const int before = value();
-            const int history = view_->history_count();
+            const int history = view_->history_index();
             QTest::keyClick(source, Qt::Key(Qt::Key_0 + digit),
                             fill ? Qt::ShiftModifier : Qt::NoModifier);
             // Process queued events well before the 500 ms deadline to catch early commits.
             QTest::qWait(100);
             QCOMPARE(value(), before);
-            QCOMPARE(view_->history_count(), history);
+            QCOMPARE(view_->history_index(), history);
             QTRY_COMPARE_WITH_TIMEOUT(value(), percentByte(digit == 0 ? 100 : digit * 10),
                                       2000);
             QCOMPARE(other(), otherBefore);
-            QCOMPARE(view_->history_count(), history + 1);
+            QCOMPARE(view_->history_index(), history + 1);
+            QVERIFY(view_->undo());
+            QCOMPARE(value(), before);
+            QCOMPARE(view_->history_index(), history);
         }
     }
 }
