@@ -1,5 +1,6 @@
-//! Colour for Fujifilm RAF files (`codec/camera-matrices`, #1473): the
-//! table's Fujifilm rows on synthetic RAFs, and, opt-in, real camera files.
+//! Colour for Fujifilm RAF files (`codec/camera-matrices`, #1473, #1621):
+//! the table's Fujifilm rows on synthetic RAFs, and, opt-in, real camera
+//! files.
 
 use pictura_codec::{as_shot_transform, decode_raw_source, read_raw, DngColor, ImageBudget};
 use pictura_color::chroma::{self, Mat3};
@@ -18,9 +19,10 @@ use builder::noise_plane;
 use raf_builder::{raf, Coding, Exif, Raf};
 
 /// Every Fujifilm body the table colours, with the EXIF `LightSource` codes
-/// of its matrices: the D65 preset, then the Standard A one when paired. The
-/// X-E1 and X100S samples failed the fit and have no row.
-const BODIES: [(&str, &[u16]); 10] = [
+/// of its matrices: the D65 preset, then the Standard A one when paired, or,
+/// for word-section bodies (#1621), Fine Weather then Tungsten. The X-E1,
+/// X100S, X-S1, XF1 and S2 Pro samples failed the fit and have no row.
+const BODIES: [(&str, &[u16]); 24] = [
     ("FinePix X100", &[21, 17]),
     ("GFX 50S", &[21, 17]),
     ("X-A1", &[21, 17]),
@@ -31,6 +33,20 @@ const BODIES: [(&str, &[u16]); 10] = [
     ("X-T1", &[21, 17]),
     ("X-T2", &[21, 17]),
     ("X-T3", &[21, 17]),
+    ("X10", &[21, 17]),
+    ("FinePix F550EXR", &[21, 17]),
+    ("FinePix HS20EXR", &[21, 17]),
+    ("FinePix HS50EXR", &[21, 17]),
+    ("FinePix E550", &[9, 3]),
+    ("FinePix E900", &[9, 3]),
+    ("FinePix F700", &[9, 3]),
+    ("FinePix S100FS", &[9, 3]),
+    ("FinePix S200EXR", &[9]),
+    ("FinePix S3Pro", &[9, 3]),
+    ("FinePix S5600", &[9, 3]),
+    ("FinePix S5Pro", &[9, 3]),
+    ("FinePix S7000", &[9]),
+    ("FinePix S9500", &[9, 3]),
 ];
 
 fn file(model: &'static str, wb: [u32; 3]) -> Vec<u8> {
@@ -57,6 +73,8 @@ fn matrix(v: [f64; 9]) -> Mat3 {
 
 fn kelvin(code: u16) -> f64 {
     match code {
+        3 => 2850.0,
+        9 => 5500.0,
         17 => 2856.0,
         21 => 6504.0,
         other => panic!("unexpected illuminant {other}"),
@@ -115,6 +133,27 @@ fn known_fujifilm_raf_decodes() {
     let want = as_shot_transform(&image.color).unwrap().white_balance;
     assert_eq!(source.as_shot, want);
     assert!((2000.0..=12000.0).contains(&want.temperature), "{want:?}");
+}
+
+// raf_superccd_decodes
+#[test]
+fn fitted_superccd_raf_decodes_upright() {
+    let (width, height) = (16, 24);
+    let mut r = Raf::words(width, height, noise_plane(width, height, 15872, 41).samples);
+    r.crop = None;
+    r.layout = [0x80, 0x81, 0x82, 0x83];
+    r.exif = Some(Exif {
+        make: "FUJIFILM",
+        model: "FinePix S7000",
+        orientation: 1,
+    });
+    r.record(0x0121, &[12, 32]);
+    r.record(0x2FF0, &[80, 167, 80, 119]);
+    let source = decode_raw_source(&raf(&r), &ImageBudget::default()).expect("S7000 decodes");
+    // fw 16 on a 28 × 27 grid: ⌊15 / √½⌋ × ⌊12 / √½⌋.
+    assert_eq!((source.camera.width, source.camera.height), (21, 16));
+    let t = source.as_shot.temperature;
+    assert!((2000.0..=12000.0).contains(&t), "{t} K");
 }
 
 // raf_colour_corpus

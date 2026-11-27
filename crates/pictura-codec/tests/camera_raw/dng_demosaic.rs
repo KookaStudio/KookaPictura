@@ -42,6 +42,7 @@ fn image(width: usize, height: usize, samples: Vec<u16>, cfa: CfaPattern) -> Dng
         height,
         samples,
         cfa,
+        fuji_width: None,
         default_crop: DngCrop {
             x: 0.0,
             y: 0.0,

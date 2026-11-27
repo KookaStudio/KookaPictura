@@ -448,8 +448,7 @@ void InfoPanel::refreshColorBlock(Readout* readout, const QColor& color)
     }
 }
 
-// ponytail: the engine samples 8-bit; 16/32-bit readouts scale the 8-bit sample
-// rather than reading a true deep-color document.
+// The legacy readout scales the 8-bit sample. Native HDR cursor values take the scene path.
 QString InfoPanel::formatChannel(int value, int bits) const
 {
     switch (bits) {
@@ -649,10 +648,36 @@ void InfoPanel::refresh(bool full)
     if (inside) {
         // The readout follows the pointer; a pending Move composite must not
         // stall it. It catches up on the next refresh after the worker lands.
-        const QColor color = QColor::fromRgba(QRgb(view_->composite_argb(x, y)));
-        refreshColorBlock(topLeft_, color);
+        const auto wantsSceneColor = [](const Readout* readout) {
+            const auto mode = readout->colorMode;
+            return readout->bits == 32 && (mode == ColorReadout::ActualColor
+                || mode == ColorReadout::Rgb || mode == ColorReadout::Grayscale);
+        };
+        const bool leftNative = wantsSceneColor(topLeft_);
+        const bool rightNative = !rulerMode_ && wantsSceneColor(topRight_);
+        const auto scene = leftNative || rightNative ? hdr_scene_pixel(*view_, x, y)
+                                                     : ::rust::Vec<double>{};
+        QColor legacy;
+        const auto refreshReadout = [&](Readout* readout, bool native) {
+            if (native && scene.size() == 4) {
+                const auto format = [](double value) {
+                    return uiNumericLocale().toString(value, 'g', 7);
+                };
+                if (readout->colorMode == ColorReadout::Grayscale) {
+                    setValues(readout, {format(0.2126 * scene[0] + 0.7152 * scene[1] + 0.0722 * scene[2])});
+                } else {
+                    setValues(readout, {format(scene[0]), format(scene[1]), format(scene[2])});
+                }
+                return;
+            }
+            if (!legacy.isValid()) {
+                legacy = QColor::fromRgba(QRgb(view_->composite_argb(x, y)));
+            }
+            refreshColorBlock(readout, legacy);
+        };
+        refreshReadout(topLeft_, leftNative);
         if (!rulerMode_) {
-            refreshColorBlock(topRight_, color);
+            refreshReadout(topRight_, rightNative);
         }
     } else {
         setValues(topLeft_, {});

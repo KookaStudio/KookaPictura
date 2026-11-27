@@ -58,6 +58,9 @@ if [ "${1:-}" = "--build" ]; then
     case "${FAKE_FAIL:-}" in
         "$target") log "$target-failed" build; exit 9 ;;
     esac
+    if [ "${FAKE_CARGO_JSON:-}" = "1" ]; then
+        printf '{"reason":"build-finished","success":true,"target":"%s"}\\n' "$target"
+    fi
     exit 0
 fi
 log configure-start build
@@ -393,10 +396,31 @@ def failure_identity_and_single_capture() -> None:
         box.close()
 
 
+def app_build_log_excludes_qt_build_tail() -> None:
+    box = Sandbox()
+    try:
+        capture = box.root / "app build.log"
+        result = box.run(
+            "--qt-only", "--build", "--app-build-log", str(capture), FAKE_CARGO_JSON="1"
+        )
+        _assert(result.returncode == 0, "staged run failed", result.stderr)
+        app = '{"reason":"build-finished","success":true,"target":"pictura"}'
+        tail = '{"reason":"build-finished","success":true,"target":"tail"}'
+        _assert(app in result.stdout and tail in result.stdout,
+                "both build stages should keep their console output", result.stdout)
+        _assert(capture.read_text().splitlines() == [app],
+                "audit capture includes output from the wrong stage", capture.read_text())
+    finally:
+        box.close()
+
+
 def build_failure_stops_later_stages() -> None:
     box = Sandbox()
     try:
-        result = box.run("--configure", "--build", FAKE_FAIL="pictura")
+        result = box.run(
+            "--configure", "--build", "--app-build-log", str(box.root / "app.log"),
+            FAKE_FAIL="pictura",
+        )
         _assert(result.returncode == 9, "the pictura build status did not win",
                 result.returncode)
         names = box.names()
@@ -694,6 +718,7 @@ CHECKS = {
         "ctest_waits_for_build",
         "one_ninja_writer",
         "failure_identity_and_single_capture",
+        "app_build_log_excludes_qt_build_tail",
         "build_failure_stops_later_stages",
         "signal_cleanup_reaps_children",
         "stale_junit_cleanup",

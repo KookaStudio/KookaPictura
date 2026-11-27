@@ -184,6 +184,11 @@ cxx_qt_import_crate(
     QT_MODULES Qt::Core Qt::Gui Qt::Widgets
 )
 
+option(PICTURA_CARGO_JSON_REPORT "Emit Cargo JSON messages for CI audits" OFF)
+if(PICTURA_CARGO_JSON_REPORT)
+    corrosion_set_cargo_flags(pictura_app --message-format=json)
+endif()
+
 # A generator clean (`ninja -t clean`) deletes the exported initializer object,
 # whose real producer is the crate's build script, and cargo still calls that
 # script fresh, so the next link fails. The build script watches a stamp in the

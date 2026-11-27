@@ -27,6 +27,8 @@
 #include "panels/actions_engine_bridge.h"
 #include "panels/actions_panel.h"
 
+#include <QtWidgets/QSlider>
+
 #include <QtWidgets/QProgressBar>
 #include "panels/brush_preset_picker.h"
 #include "panels/numeric_field.h"
@@ -110,25 +112,26 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     ColorState* colorState = panels_->colorState();
     tools_->setForeground(colorState->foreground());
     tools_->setBackground(colorState->background());
+    colorState->setHdrPickerContext([this] { return activeView(); }, [this] {
+        auto* canvas = imageView();
+        return canvas ? canvas->hdrExposure() : 0;
+    });
     connect(colorState, &ColorState::foregroundChanged, tools_,
-            &ToolController::setForeground);
+            [this](const QColor& color) {
+                if (tools_->foreground() != color) {
+                    tools_->setForeground(color, true);
+                }
+            });
     connect(colorState, &ColorState::backgroundChanged, tools_,
-            &ToolController::setBackground);
-    // The tool hint carries the foreground colour, so it follows it.
+            [this](const QColor& color) {
+                if (tools_->background() != color) {
+                    tools_->setBackground(color, true);
+                }
+            });
     connect(colorState, &ColorState::foregroundChanged, this,
             [this](const QColor&) { updateToolHint(); });
-    // A tool or preset that changes a colour (e.g. a brush preset) reaches
-    // the controller, not ColorState; mirror it back so the toolbox swatch
-    // and the Color panel follow.
-    connect(tools_, &ToolController::colorsChanged, this, [this]() {
-        ColorState* state = panels_->colorState();
-        if (state->foreground() != tools_->foreground()) {
-            state->setForeground(tools_->foreground());
-        }
-        if (state->background() != tools_->background()) {
-            state->setBackground(tools_->background());
-        }
-    });
+    connect(tools_, &ToolController::foregroundSelected, colorState, &ColorState::setForeground);
+    connect(tools_, &ToolController::backgroundSelected, colorState, &ColorState::setBackground);
 
     auto* toolbox = new Toolbox(tools_, colorState, this);
     toolbox_ = toolbox;
@@ -542,6 +545,7 @@ void PicturaMainWindow::buildStatusBar()
         statusReadoutTimer_->start();
         updateStatus();
     });
+    buildHdrStatus(bar, optionsMenu, group);
     statusOptionsButton_->setMenu(optionsMenu);
 
     backendLabel_ = new QLabel(QStringLiteral("—"), bar);
@@ -577,6 +581,7 @@ void PicturaMainWindow::buildStatusBar()
     bar->addWidget(zoomField_);
     bar->addWidget(makeSeparator());
     bar->addWidget(sizeLabel_);
+    bar->addWidget(hdrExposureSlider_);
     backgroundSaveProgress_ = new QProgressBar(bar);
     backgroundSaveProgress_->setObjectName(QStringLiteral("backgroundSaveProgress"));
     backgroundSaveProgress_->setRange(0, 100);

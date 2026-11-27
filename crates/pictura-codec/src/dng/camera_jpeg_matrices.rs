@@ -329,6 +329,217 @@ pub(super) const JPEG_CAMERAS: &[CameraMatrices] = &[
             ]),
         ],
     },
+    // Fitted from the camera JPEG in RAW_FUJI_E550.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX E550"],
+        matrices: &[
+            (9, [
+                1.144700, -0.408100, -0.107200,
+                0.043500, 0.809700, 0.161700,
+                0.210200, -0.014400, 0.625200,
+            ]),
+            (3, [
+                1.526500, -0.818300, 0.032800,
+                -0.051300, 0.867900, 0.530300,
+                0.135300, -0.061800, 1.064800,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in E900_RAW_FUJI_E900.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX E900"],
+        matrices: &[
+            (9, [
+                1.330300, -0.487300, -0.168800,
+                -0.058500, 0.866500, 0.205800,
+                0.180800, 0.003400, 0.735700,
+            ]),
+            (3, [
+                1.800500, -0.980800, -0.141900,
+                -0.143700, 0.936200, 0.623500,
+                0.128100, -0.057500, 1.298500,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in F550EXR_DSCF6714.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX F550EXR"],
+        matrices: &[
+            (21, [
+                1.305300, -0.627000, -0.021900,
+                -0.014200, 0.878900, 0.123600,
+                0.078600, 0.198200, 0.318900,
+            ]),
+            (17, [
+                1.989500, -1.411400, 0.607700,
+                -0.121600, 0.954700, 0.500800,
+                0.042100, 0.108200, 0.695100,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in F700_RAW_FUJI_F700.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX F700"],
+        matrices: &[
+            (9, [
+                1.333600, -0.603500, -0.100500,
+                -0.038300, 0.792100, 0.265700,
+                0.002200, 0.242700, 0.496500,
+            ]),
+            (3, [
+                1.816200, -1.173000, 0.116900,
+                -0.113600, 0.846400, 0.783200,
+                0.001500, 0.126600, 0.799700,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in HS20EXR_RAW_FUJIFILM_HS20EXR.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX HS20EXR"],
+        matrices: &[
+            (21, [
+                1.339600, -0.586500, -0.061100,
+                0.026900, 0.808700, 0.152300,
+                0.088800, 0.173700, 0.348800,
+            ]),
+            (17, [
+                1.947400, -1.284200, 0.414000,
+                -0.071500, 0.827300, 0.570600,
+                0.043900, 0.074600, 0.647900,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in HS50EXR_DSCF0016.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX HS50EXR"],
+        matrices: &[
+            (21, [
+                1.212800, -0.479900, -0.102600,
+                0.038600, 0.769900, 0.177700,
+                0.078900, 0.137800, 0.378400,
+            ]),
+            (17, [
+                1.790600, -1.088700, 0.146500,
+                -0.057900, 0.821000, 0.679400,
+                0.047700, 0.056200, 0.765900,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in S100FS_DSCF8410.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX S100FS"],
+        matrices: &[
+            (9, [
+                1.144800, -0.213700, -0.236300,
+                -0.138600, 0.950000, 0.198400,
+                0.365500, -0.285600, 0.514700,
+            ]),
+            (3, [
+                1.508500, -0.492700, -0.459700,
+                -0.211700, 0.981400, 0.556000,
+                0.237800, -0.251000, 0.913000,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in S200EXR_DSCF4754.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX S200EXR"],
+        matrices: &[
+            (9, [
+                2.043600, -0.949400, -0.485100,
+                0.024700, 0.892500, 0.091100,
+                -0.807100, 0.514900, 0.899300,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in S3Pro_DSCF3694.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX S3PRO"],
+        matrices: &[
+            (9, [
+                1.683800, -0.848800, -0.154000,
+                -0.301500, 1.138000, 0.163300,
+                -0.113100, 0.249600, 0.674200,
+            ]),
+            (3, [
+                2.373500, -1.665700, 0.026600,
+                -0.389600, 1.263500, 0.462100,
+                -0.053800, 0.133800, 1.114800,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in S5600_RAW_FUJI_S5600S5200.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX S5600"],
+        matrices: &[
+            (9, [
+                1.191700, -0.458100, -0.067100,
+                0.026400, 0.787100, 0.203900,
+                0.239400, 0.036600, 0.531600,
+            ]),
+            (3, [
+                1.583900, -0.903800, 0.204000,
+                -0.060800, 0.840700, 0.636300,
+                0.150000, -0.024700, 0.962200,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in S5Pro_2018_06150003.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX S5PRO"],
+        matrices: &[
+            (9, [
+                1.820700, -0.949000, -0.135600,
+                -0.374000, 1.233700, 0.134700,
+                -0.065100, 0.212400, 0.648700,
+            ]),
+            (3, [
+                2.518700, -1.817700, 0.147900,
+                -0.445100, 1.318000, 0.356100,
+                -0.025100, 0.102200, 1.028800,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in fujifilm_finepix_s7000.raf; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX S7000"],
+        matrices: &[
+            (9, [
+                0.951400, -0.287400, -0.129900,
+                0.929600, 0.008600, 0.111100,
+                -0.367000, 0.436100, 0.626200,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in S9500_20170430_0041.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["FINEPIX S9500"],
+        matrices: &[
+            (9, [
+                1.432800, -0.630200, -0.100600,
+                -0.358700, 1.160300, 0.198700,
+                0.320100, -0.070300, 0.587700,
+            ]),
+            (3, [
+                1.990900, -1.258300, 0.161000,
+                -0.439600, 1.290100, 0.541800,
+                0.203800, -0.107800, 1.061000,
+            ]),
+        ],
+    },
     // Fitted from the camera JPEG in FinePix_X100_DSCF1676.RAF; approximate.
     CameraMatrices {
         make: "FUJIFILM",
@@ -496,6 +707,23 @@ pub(super) const JPEG_CAMERAS: &[CameraMatrices] = &[
                 1.861500, -1.233600, 0.039700,
                 -0.401100, 1.337500, 0.287500,
                 0.049600, -0.015800, 0.920100,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in X10_DSCF0514.RAF; approximate.
+    CameraMatrices {
+        make: "FUJIFILM",
+        models: &["X10"],
+        matrices: &[
+            (21, [
+                1.013000, -0.384900, -0.097600,
+                0.106800, 0.758800, 0.128400,
+                0.045000, 0.121800, 0.429400,
+            ]),
+            (17, [
+                1.657800, -0.976200, 0.069700,
+                -0.002700, 0.807400, 0.547900,
+                0.032300, 0.041500, 0.813500,
             ]),
         ],
     },

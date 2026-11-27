@@ -273,6 +273,7 @@ pub(super) fn read_nef(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         height,
         samples,
         cfa,
+        fuji_width: None,
         default_crop: DngCrop {
             x: 0.0,
             y: 0.0,

@@ -176,6 +176,10 @@ GPU-Treiber: %5</translation>
 <context>
     <name>PicturaCommands</name>
     <message>
+        <source>32-Bit Preview Options…</source>
+        <translation>32-Bit-Vorschauoptionen…</translation>
+    </message>
+    <message>
         <source>100%</source>
         <translation>100%</translation>
     </message>

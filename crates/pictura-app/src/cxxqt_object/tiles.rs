@@ -21,6 +21,8 @@
 //! which drops it: every path that damages, repairs or invalidates composite
 //! tiles runs through [`PictureViewRust::drop_file_preview`] first.
 
+mod rebuild;
+
 use super::helpers::paint_timing;
 use super::helpers_composite::{
     crop_planar, current_buffer_with_blend_time, into_rgba_frame, level_display_image,
@@ -37,6 +39,7 @@ use pictura_render::{
     patch_buffer_region, CompositeScope, DocumentComposite, FilterProxy, FrameTileSample,
     FrameTileSamples, PyramidLevel, Ticket, TileKey, TilePyramid, TileSource, TILE_SIDE,
 };
+use rebuild::build_keys;
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -124,6 +127,8 @@ struct TileJob {
     mask: Option<LayerMask>,
     painting: bool,
     preview: Option<pictura_codec::MergedPreview>,
+    hdr: Option<pictura_codec::hdr_preview::PreviewOptions>,
+    hdr_merged: bool,
     ticket: Ticket,
     /// The cache's current tiles as of `ticket`, which coarser keys fold
     /// from (#1321).
@@ -141,53 +146,12 @@ impl TileJob {
             self.mask.as_ref(),
             self.painting,
             self.preview.as_ref(),
+            self.hdr,
+            self.hdr_merged,
             &mut self.local,
             &self.keys,
         )
     }
-}
-
-/// Build `keys` into `local`, finer levels first, folding coarser tiles from
-/// the finer ones at hand; returns every tile built, the levels folded
-/// through included.
-fn build_keys(
-    doc: &Document,
-    mask: Option<&LayerMask>,
-    painting: bool,
-    preview: Option<&pictura_codec::MergedPreview>,
-    local: &mut TilePyramid,
-    keys: &[TileKey],
-) -> Vec<(TileKey, Arc<[u8]>)> {
-    let mut built = Vec::new();
-    for source in [TileSource::Composite, TileSource::Mask] {
-        let keys: Vec<TileKey> = keys
-            .iter()
-            .copied()
-            .filter(|k| k.source == source)
-            .collect();
-        if keys.is_empty() {
-            continue;
-        }
-        built.extend(match (source, mask, preview) {
-            (TileSource::Mask, Some(mask), _) => {
-                let level0 = |r: PsdRect| mask_region_plane(mask, r);
-                pictura_render::build_keys(local, &keys, &level0)
-            }
-            (_, _, Some(preview)) if !painting => {
-                let level0 = |r: PsdRect| {
-                    into_rgba_frame(
-                        pictura_codec::buffer_to_srgb(doc, &preview.region(r)).into_owned(),
-                    )
-                };
-                pictura_render::build_keys(local, &keys, &level0)
-            }
-            _ => {
-                let level0 = |r: PsdRect| display_region(doc, r, painting);
-                pictura_render::build_keys(local, &keys, &level0)
-            }
-        });
-    }
-    built
 }
 
 impl PictureViewRust {
@@ -265,6 +229,13 @@ impl PictureViewRust {
         self.fit_tiles();
         self.tiles.cache.get_mut().invalidate();
         self.tiles.wanted.get_mut().clear();
+    }
+
+    pub(in crate::cxxqt_object) fn refresh_hdr_tiles(&mut self) {
+        self.fit_tiles();
+        self.tiles.cache.get_mut().invalidate();
+        self.tiles.wanted.get_mut().clear();
+        self.canvas_revision = self.canvas_revision.wrapping_add(1);
     }
 
     /// The soloed mask changed as a whole (entered, restored): its tiles go
@@ -361,6 +332,8 @@ impl PictureViewRust {
             self.solo_mask(),
             self.painting(),
             self.tiles.preview.borrow().as_ref(),
+            self.hdr_preview_options(),
+            self.hdr_merged_current && !self.display_preview_active(),
             &mut local,
             keys,
         );
@@ -466,6 +439,7 @@ impl PictureViewRust {
         self.fit_tiles();
         let painting = self.painting();
         let cache = self.tiles.cache.get_mut();
+        cache.damage_hdr(clipped);
         if !cache.any_current_under(TileSource::Composite, clipped) {
             cache.damage(TileSource::Composite, clipped);
             return;
@@ -558,6 +532,7 @@ impl PictureViewRust {
             (doc.width, doc.height, doc.composite_is_authoritative())
         };
         let clipped = clip(rect, width, height)?;
+        self.tiles.cache.get_mut().damage_hdr(clipped);
         let aligned = self.tiles.cache.get_mut().repair_rect(clipped);
         let area = aligned.width() as u64 * aligned.height() as u64;
         let has_current = self
@@ -853,7 +828,7 @@ impl qobject::PictureView {
                 .wanted
                 .borrow_mut()
                 .drain()
-                .filter(|&key| key.source == TileSource::Composite || soloed)
+                .filter(|&key| key.source != TileSource::Mask || soloed)
                 .filter(|&key| !cache.contains(key) && (key.level as usize) < cache.level_count())
                 .collect();
             if keys.is_empty() {
@@ -868,6 +843,8 @@ impl qobject::PictureView {
             mask: rust.solo_mask().cloned(),
             painting: rust.painting(),
             preview: rust.tiles.preview.borrow().clone(),
+            hdr: rust.hdr_preview_options(),
+            hdr_merged: rust.hdr_merged_current && !rust.display_preview_active(),
             ticket,
             local,
             keys,
@@ -914,7 +891,7 @@ impl qobject::PictureView {
                 // Mask tiles built for a solo that has since ended are dropped.
                 for (key, data) in built
                     .into_iter()
-                    .filter(|(key, _)| key.source == TileSource::Composite || soloed)
+                    .filter(|(key, _)| key.source != TileSource::Mask || soloed)
                 {
                     if cache.install(key, ticket, data) {
                         landed = true;
@@ -1125,6 +1102,8 @@ impl PictureViewRust {
                 mask: self.solo_mask().cloned(),
                 painting: self.painting(),
                 preview: self.tiles.preview.borrow().clone(),
+                hdr: self.hdr_preview_options(),
+                hdr_merged: self.hdr_merged_current && !self.display_preview_active(),
                 ticket: cache.ticket(),
                 local: cache.snapshot(below),
                 keys: keys.to_vec(),

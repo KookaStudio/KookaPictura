@@ -23,6 +23,8 @@ use crate::image_resources::{
 pub struct RasterMetadata {
     pub exif: Option<Vec<u8>>,
     pub iptc: Option<Vec<u8>>,
+    pub hdr_preview: Option<crate::image_resources::ImageResource>,
+    pub tiff_resources: Vec<crate::image_resources::ImageResource>,
     pub xmp: Option<Vec<u8>>,
     /// The planes resource's data, for the Photoshop resource block.
     pub vanishing_point: Option<Vec<u8>>,
@@ -34,6 +36,8 @@ impl RasterMetadata {
     pub fn is_empty(&self) -> bool {
         self.exif.is_none()
             && self.iptc.is_none()
+            && self.hdr_preview.is_none()
+            && self.tiff_resources.is_empty()
             && self.xmp.is_none()
             && self.vanishing_point.is_none()
             && self.icc.is_none()
@@ -41,7 +45,7 @@ impl RasterMetadata {
 
     /// The image-resource section a JPEG's APP13 or a TIFF's Photoshop tag
     /// carries: IPTC-IIM, then the planes. `None` when it holds neither.
-    fn photoshop_block(&self) -> Option<Vec<u8>> {
+    fn photoshop_block(&self, tiff: bool) -> Option<Vec<u8>> {
         let mut resources = Vec::new();
         if let Some(iptc) = &self.iptc {
             resources.push(frame_image_resource(IPTC_NAA, "", iptc));
@@ -52,6 +56,10 @@ impl RasterMetadata {
                 VANISHING_POINT_NAME,
                 planes,
             ));
+        }
+        if tiff {
+            resources.extend(self.hdr_preview.clone());
+            resources.extend(self.tiff_resources.iter().cloned());
         }
         (!resources.is_empty()).then(|| encode_image_resources(&resources))
     }
@@ -66,6 +74,10 @@ pub fn raster_metadata(document: &Document) -> RasterMetadata {
         ..RasterMetadata::default()
     };
     for resource in decode_image_resources(document) {
+        if crate::hdr_preview::is_preview(&resource) && metadata.hdr_preview.is_none() {
+            metadata.hdr_preview = Some(resource);
+            continue;
+        }
         match resource.id {
             EXIF_DATA_1 | EXIF_DATA_3 if metadata.exif.is_none() && !resource.data.is_empty() => {
                 metadata.exif = Some(resource.data);
@@ -76,8 +88,14 @@ pub fn raster_metadata(document: &Document) -> RasterMetadata {
             XMP_METADATA if metadata.xmp.is_none() && !resource.data.is_empty() => {
                 metadata.xmp = Some(resource.data);
             }
-            _ => {}
+            ICC_PROFILE | EXIF_DATA_1 | EXIF_DATA_3 | IPTC_NAA | XMP_METADATA | VANISHING_POINT => {
+            }
+            _ => metadata.tiff_resources.push(resource),
         }
+    }
+    // Only carry opaque Photoshop resources alongside explicit HDR preview settings.
+    if metadata.hdr_preview.is_none() {
+        metadata.tiff_resources.clear();
     }
     metadata
 }
@@ -96,7 +114,14 @@ pub fn embed_raster_metadata(
         || format.eq_ignore_ascii_case("jpeg")
         || format.eq_ignore_ascii_case("jpe")
     {
-        jpeg::embed(bytes, metadata)
+        let mut jpeg_metadata = metadata.clone();
+        jpeg_metadata.hdr_preview = None;
+        jpeg_metadata.tiff_resources.clear();
+        if jpeg_metadata.is_empty() {
+            Ok(bytes.to_vec())
+        } else {
+            jpeg::embed(bytes, &jpeg_metadata)
+        }
     } else if format.eq_ignore_ascii_case("tif") || format.eq_ignore_ascii_case("tiff") {
         tiff::embed(bytes, metadata)
     } else {
@@ -178,6 +203,35 @@ mod tests {
             assert_eq!(resources[0].id, XMP_METADATA);
             assert_eq!(resources[0].data.as_slice(), packet);
         }
+    }
+
+    #[test]
+    fn tiff_preview_resource_round_trip() {
+        use crate::hdr_preview::{get, set, PreviewOptions};
+
+        let options = PreviewOptions::new(1, -2.5, 1.25).unwrap();
+        let mut doc = Document::new(
+            1,
+            1,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::ThirtyTwo,
+        );
+        let iptc = frame_image_resource(IPTC_NAA, "", b"iptc");
+        let opaque = frame_image_resource(4200, "opaque", b"preserve me");
+        doc.image_resources = encode_image_resources(&[iptc.clone(), opaque.clone()]).into();
+        set(&mut doc, options);
+        let metadata = raster_metadata(&doc);
+        let tiff = b"II\x2a\0\x08\0\0\0\0\0\0\0\0\0";
+        let saved = embed_raster_metadata(tiff, "tiff", &metadata).unwrap();
+        doc.image_resources = raster_image_resources(&saved).unwrap().into();
+        assert_eq!(get(&doc), options);
+        assert!(decode_image_resources(&doc).contains(&iptc));
+        assert!(decode_image_resources(&doc).contains(&opaque));
+        let jpeg = embed_raster_metadata(&[0xff, 0xd8, 0xff, 0xd9], "jpeg", &metadata).unwrap();
+        let jpeg_resources = raster_image_resources(&jpeg).unwrap_or_default();
+        let (resources, _) = decode_section(&jpeg_resources);
+        assert!(!resources.iter().any(crate::hdr_preview::is_preview));
+        assert!(!resources.contains(&opaque));
     }
 
     #[test]

@@ -30,6 +30,7 @@ private slots:
     void mixedLegacyProfileSplits();
     void interruptedMigrationRetries();
     void busyLegacyMigrationDefersPatch();
+    void failedInterpolationSaveRestoresChoice();
     void deletedPreferencesStayReset();
     void corruptPreferencesRecoverWithOneNotice();
     void isolatedLaunchesProtectRealConfig();
@@ -168,6 +169,21 @@ void PreferencesStoreTest::busyLegacyMigrationDefersPatch()
     QCOMPARE(restored.brightnessLevel, 3);
     QVERIFY(!restored.gpuCompute);
     QCOMPARE(restored.uiScalePercent, 120);
+}
+
+void PreferencesStoreTest::failedInterpolationSaveRestoresChoice()
+{
+    QVERIFY(writeProfileJson(sessionFilePath(), {{QStringLiteral("brightnessLevel"), 3}}));
+    QLockFile lock(sessionFilePath() + QStringLiteral(".lock"));
+    QVERIFY(lock.tryLock());
+    const auto before = loadPreferences();
+    auto after = before;
+    after.imageInterpolation = QStringLiteral("nearest");
+    QVERIFY(!savePreferences(before, after));
+    QCOMPARE(loadPreferences().imageInterpolation, before.imageInterpolation);
+    lock.unlock();
+    QVERIFY(savePreferences(before, after));
+    QCOMPARE(loadPreferences().imageInterpolation, QStringLiteral("nearest"));
 }
 
 void PreferencesStoreTest::deletedPreferencesStayReset()

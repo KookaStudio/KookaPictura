@@ -313,12 +313,12 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] The Shadows/Highlights local-surround operator and its eight controls
       (#562)
 - [x] The Threshold histogram under the slider (#563)
-- [ ] Vibrance Auto and presets (#564)
+- [x] Vibrance Auto and presets (#564)
 - [x] Smoother, Sharper and Automatic image-size kernels, Scale Styles, Auto
       resolution, picas and columns, and float resample (#565)
 - [x] Picas and columns in Canvas Size, and extension-fill availability gating
       (#566)
-- [ ] The arbitrary rotation dialog, the interpolation preference, and the
+- [x] The arbitrary rotation dialog, the interpolation preference, and the
       ruler-straighten prefill (#567)
 - [x] Convert to Profile options, mismatch and missing-profile warnings, and
       the embed toggle (#568)
@@ -327,7 +327,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       and profile warnings (#569)
 - [ ] Color Settings `.csf` save/load, Gray/Spot working spaces, and installed
       profile discovery (#569)
-- [ ] 32-bit Preview Options, the HDR colour picker, and the 32-bit Info
+- [x] 32-bit Preview Options, the HDR colour picker, and the 32-bit Info
       readout (#570)
 - [x] The Channel Mixer Monochrome UI, and the CMYK and Gray output channels
       (#571)
@@ -433,7 +433,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] Color-picker gamut and web alerts, and the picker preference (#600)
 - [ ] Color Libraries (PANTONE) (#600)
 - [ ] The HUD colour picker (#601)
-- [ ] The HDR colour picker at 32 bpc (#602)
+- [x] The HDR colour picker at 32 bpc (#602)
 - [x] The out-of-gamut triangle and CMYK to working space (#604)
 - [ ] The 16/32-bit picker fields (#604)
 - [ ] `.aco` and `.ase` swatch libraries, rename, and display modes (#605)
@@ -531,7 +531,13 @@ gaps are the CS6 Extended 3D object and camera tools.
       compressed RAFs of X-Trans and Bayer bodies at 12, 14 and 16 bits
       decode sample for sample as LibRaw does, ported from LibRaw (#1620).
       `crates/pictura-codec/src/dng/raf_compressed.rs`.
-- [ ] Fujifilm SuperCCD and EXR RAF sensors (#1621)
+- [x] **Fujifilm SuperCCD and EXR RAF sensors** — word sensor sections,
+      second directories (primary frame), the EXR layout and SuperCCD's 45°
+      lattice, repacked and turned upright as LibRaw does (ported from
+      LibRaw); 14 more bodies open with camera-JPEG-fitted colour; Save Image
+      writes SuperCCD as linear (#1621). `crates/pictura-codec/src/dng/raf_superccd.rs`,
+      `crates/pictura-codec/src/dng/demosaic/superccd.rs`.
+- [ ] Merge SuperCCD SR frames for highlight range (#1648)
 - [ ] Colour for the remaining Fujifilm RAF bodies (#1622)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Olympus-compressed ORF sensor data, most bodies since 2007 (#1535)
@@ -733,7 +739,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] View ▸ Show/Extras, Show Extra Options, Grid, Pixel Grid, Layer Edges,
       Target Path, Lock/Clear Slices, 200% and Print Size (#503)
 - [ ] The remaining View menu items: Gamut Warning and Pixel Aspect Ratio
-      (#503); Snap To (#305); 32-bit Preview Options (#570)
+      (#503); Snap To (#305)
 - [x] File ▸ Scripts ▸ Load Files into Stack: the Load Layers dialog, one
       native-size layer per file on a new canvas, Auto-Align, and the embedded
       smart-object option (#1277)

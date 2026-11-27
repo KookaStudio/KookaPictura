@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Audit an existing normal Cargo build report; never initiate a Cargo build.
+"""Audit an existing normal Cargo build report or mixed CMake log; never initiate a Cargo build.
 
-Usage: check-view-oracle.py --profile release|dev-app <cargo-json-report>
+Usage: check-view-oracle.py --profile release|dev-app <cargo-json-report-or-cmake-log>
        check-view-oracle.py --self-check
 """
 from __future__ import annotations
@@ -13,17 +13,30 @@ import subprocess
 import tempfile
 
 
-def renderer_artifact(report: str, profile: str) -> Path:
-    records = [json.loads(line) for line in report.splitlines() if line.strip()]
-    if not records or any(not isinstance(record, dict) for record in records):
+def cargo_records(report: str) -> list[dict]:
+    records = []
+    for line in report.splitlines():
+        if not line.lstrip().startswith("{"):
+            continue
+        record = json.loads(line)
+        if not isinstance(record, dict):
+            raise ValueError("expected Cargo JSON objects")
+        records.append(record)
+    if not records:
         raise ValueError("expected Cargo JSON objects")
+    return records
+
+
+def renderer_artifact(report: str, profile: str) -> Path:
+    records = cargo_records(report)
     finished = [record for record in records if record.get("reason") == "build-finished"]
     if len(finished) != 1 or finished[0].get("success") is not True:
         raise ValueError("report has no unique successful build-finished record")
     artifacts = [
         record for record in records
         if record.get("reason") == "compiler-artifact"
-        and record.get("target", {}).get("name") == "pictura_render"
+        and isinstance(record.get("target"), dict)
+        and record["target"].get("name") == "pictura_render"
     ]
     if len(artifacts) != 1:
         raise ValueError("expected exactly one pictura_render compiler artifact")
@@ -50,6 +63,18 @@ def renderer_artifact(report: str, profile: str) -> Path:
     return library
 
 
+def dependency_dirs(report: str, library: Path) -> list[Path]:
+    # Cargo with --target puts procedural macros in the host profile directory.
+    directories = {library.parent}
+    for record in cargo_records(report):
+        if record.get("reason") != "compiler-artifact":
+            continue
+        target = record.get("target")
+        if isinstance(target, dict) and target.get("kind") == ["proc-macro"]:
+            directories.update(Path(filename).resolve().parent for filename in record["filenames"])
+    return [library.parent, *sorted(directories - {library.parent})]
+
+
 def oracle_imports_are_missing(result: subprocess.CompletedProcess[str]) -> bool:
     if result.returncode == 0:
         return False
@@ -60,17 +85,27 @@ def oracle_imports_are_missing(result: subprocess.CompletedProcess[str]) -> bool
     if any(not isinstance(item, dict) for item in diagnostics):
         return False
     errors = [item for item in diagnostics if item.get("level") == "error"]
-    imports = [item for item in errors if (item.get("code") or {}).get("code") == "E0432"]
+    imports = [
+        item for item in errors
+        if isinstance(item.get("code"), dict) and item["code"].get("code") == "E0432"
+    ]
     unexpected = [
         item for item in errors
-        if item not in imports and not item.get("message", "").startswith("aborting due to")
+        if item not in imports
+        and not (
+            isinstance(item.get("message"), str)
+            and item["message"].startswith("aborting due to")
+        )
     ]
-    messages = " ".join(item.get("message", "") for item in imports)
+    messages = " ".join(
+        item["message"] for item in imports if isinstance(item.get("message"), str)
+    )
     return not unexpected and all(name in messages for name in ("Planes", "ViewPyramid"))
 
 
 def check_profile(report: Path, profile: str, rustc: str = "rustc") -> None:
-    library = renderer_artifact(report.read_text(encoding="utf-8"), profile)
+    report_text = report.read_text(encoding="utf-8")
+    library = renderer_artifact(report_text, profile)
     with tempfile.TemporaryDirectory(prefix="pictura-view-oracle-") as directory:
         work = Path(directory)
         source = work / "probe.rs"
@@ -78,8 +113,10 @@ def check_profile(report: Path, profile: str, rustc: str = "rustc") -> None:
             rustc, "--edition=2021", "--crate-type=lib", "--emit=metadata",
             "--crate-name=view_oracle_probe", "--error-format=json",
             "--extern", f"pictura_render={library}",
-            "-L", f"dependency={library.parent}", "--out-dir", str(work), str(source),
         ]
+        for deps in dependency_dirs(report_text, library):
+            command.extend(["-L", f"dependency={deps}"])
+        command.extend(["--out-dir", str(work), str(source)])
         source.write_text(
             "use pictura_render::{PyramidLevel, SMALLEST_SIDE, TILE};\n"
             "pub fn shared(level: &PyramidLevel) -> (u32, u32, u32, i32) {\n"
@@ -101,22 +138,51 @@ def check_profile(report: Path, profile: str, rustc: str = "rustc") -> None:
 
 def self_check() -> None:
     with tempfile.TemporaryDirectory(prefix="pictura-view-oracle-check-") as directory:
-        library = Path(directory) / "release/deps/libpictura_render.rlib"
-        library.parent.mkdir(parents=True)
-        library.touch()
-        artifact = {
-            "reason": "compiler-artifact", "target": {"name": "pictura_render"},
-            "features": [], "profile": {"test": False}, "filenames": [str(library)],
-        }
+        artifacts = {}
+        libraries = {}
+        for profile in ("release", "dev-app"):
+            library = Path(directory) / profile / "deps/libpictura_render.rlib"
+            library.parent.mkdir(parents=True)
+            library.touch()
+            libraries[profile] = library
+            artifacts[profile] = {
+                "reason": "compiler-artifact", "target": {"name": "pictura_render"},
+                "features": [], "profile": {"test": False}, "filenames": [str(library)],
+            }
         finished = {"reason": "build-finished", "success": True}
 
         def report(*records: dict) -> str:
             return "\n".join(json.dumps(record) for record in records)
 
-        assert renderer_artifact(report(artifact, finished), "release") == library
+        for profile, library in libraries.items():
+            assert renderer_artifact(report(artifacts[profile], finished), profile) == library
+        mixed = (
+            "[1/2] Building pictura_render\n"
+            + report(artifacts["dev-app"], finished)
+            + "\n[2/2] Linking pictura_app\n"
+        )
+        assert renderer_artifact(mixed, "dev-app") == libraries["dev-app"]
+
+        host_deps = libraries["dev-app"].parent
+        target_library = Path(directory) / "x86_64-unknown-linux-gnu/dev-app/deps/libpictura_render.rlib"
+        target_library.parent.mkdir(parents=True)
+        target_library.touch()
+        proc_macro = {
+            "reason": "compiler-artifact", "target": {"kind": ["proc-macro"]},
+            "filenames": [str(host_deps / "libthiserror_impl.so")],
+        }
+        target_report = report(
+            dict(artifacts["dev-app"], filenames=[str(target_library)]), proc_macro, finished,
+        )
+        assert renderer_artifact(target_report, "dev-app") == target_library
+        assert dependency_dirs(target_report, target_library) == [target_library.parent, host_deps]
+        assert dependency_dirs(report(artifacts["dev-app"], proc_macro, finished), libraries["dev-app"]) == [host_deps]
+
+        artifact = artifacts["release"]
         invalid = [
-            "not JSON", report(finished), report(artifact),
+            "not JSON", '{"reason":', report(finished), report(artifact),
             report(artifact, artifact, finished),
+            report(dict(artifact, target=None), finished),
             report(dict(artifact, features=["test-oracle"]), finished),
             report(dict(artifact, features=None), finished),
             report(dict(artifact, profile={"test": True}), finished),
@@ -124,6 +190,7 @@ def self_check() -> None:
             report(dict(artifact, filenames=[]), finished),
             report(dict(artifact, filenames=[None]), finished),
             report(artifact, dict(finished, success=False)),
+            mixed + '{"reason":',
         ]
         for value in invalid:
             try:
@@ -132,30 +199,35 @@ def self_check() -> None:
                 pass
             else:
                 raise AssertionError(f"accepted an invalid report: {value}")
-        try:
-            renderer_artifact(report(artifact, finished), "dev-app")
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("accepted the wrong profile")
-        library.unlink()
-        try:
-            renderer_artifact(report(artifact, finished), "release")
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("accepted a missing artifact")
+        for profile, other in (("release", "dev-app"), ("dev-app", "release")):
+            try:
+                renderer_artifact(report(artifacts[profile], finished), other)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("accepted the wrong profile")
+        for profile, library in libraries.items():
+            library.unlink()
+            try:
+                renderer_artifact(report(artifacts[profile], finished), profile)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("accepted a missing artifact")
 
-    def diagnostic(code: str, message: str) -> str:
+    def diagnostic(code: object, message: object) -> str:
         return json.dumps({"level": "error", "code": {"code": code}, "message": message})
 
     missing = diagnostic("E0432", "unresolved imports pictura_render::Planes, pictura_render::ViewPyramid")
     assert oracle_imports_are_missing(subprocess.CompletedProcess([], 1, "", missing))
+    malformed_code = json.dumps({"level": "error", "code": "E0432", "message": missing})
     for result in [
         subprocess.CompletedProcess([], 0, "", missing),
         subprocess.CompletedProcess([], 1, "", "compiler unavailable"),
         subprocess.CompletedProcess([], 1, "", diagnostic("E0463", "cannot find crate")),
         subprocess.CompletedProcess([], 1, "", diagnostic("E0432", "unresolved import Planes")),
+        subprocess.CompletedProcess([], 1, "", diagnostic("E0432", None)),
+        subprocess.CompletedProcess([], 1, "", malformed_code),
         subprocess.CompletedProcess([], 1, "", missing + "\n" + diagnostic("E0463", "cannot find crate")),
     ]:
         assert not oracle_imports_are_missing(result)

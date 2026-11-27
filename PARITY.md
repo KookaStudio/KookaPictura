@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 214 | 77 | 54 | 4 | 349 | 61.3% | 8 |
-| CS6 Standard, in scope | 214 | 77 | 48 | 2 | 341 | 62.8% | 8 |
-| CS6 Extended | 215 | 77 | 70 | 4 | 366 | 58.7% | 23 |
-| CS6 Extended, in scope | 215 | 77 | 49 | 2 | 343 | 62.7% | 23 |
-| CC 28.0 | 216 | 79 | 75 | 4 | 374 | 57.8% | 20 |
-| CC 28.0, in scope | 216 | 79 | 57 | 2 | 354 | 61.0% | 20 |
+| CS6 Standard | 214 | 79 | 52 | 4 | 349 | 61.3% | 8 |
+| CS6 Standard, in scope | 214 | 79 | 46 | 2 | 341 | 62.8% | 8 |
+| CS6 Extended | 215 | 79 | 68 | 4 | 366 | 58.7% | 23 |
+| CS6 Extended, in scope | 215 | 79 | 47 | 2 | 343 | 62.7% | 23 |
+| CC 28.0 | 216 | 81 | 73 | 4 | 374 | 57.8% | 20 |
+| CC 28.0, in scope | 216 | 81 | 55 | 2 | 354 | 61.0% | 20 |
 
 ## Baselines
 
@@ -81,7 +81,7 @@ Source list: CS6 and CC supported-format lists plus named File-menu, metadata, p
 | P-FMT-23 | HEIC/HEIF read and write | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:1; src:6 | #1509 |
 | P-FMT-24 | AVIF read and write | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:1; src:6 | #1510 |
 | P-FMT-25 | DICOM read and analysis | N/A | Y | Y | Missing | non-goal | — | none | edition:Extended-only; DICOM is an intentional non-goal | non-goal:feasibility:74 |
-| P-FMT-26 | Camera raw open and demosaic | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/dng/develop.rs; crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs | manual:tst_raw_open covers the raw open route | DNG/CR2/CR3/NEF/ARW, uncompressed ORF, RW2 and RAF File > Open route; CR3 decodes lossless and C-RAW frames, ported from LibRaw (#1474); approximate parity; ORF colour comes from the embedded matrix (#1471) and compressed ORF remains (#1535); RW2 decodes in every observed coding, the compressed ones ported from rawspeed (#1472, #1541), and 10 Panasonic bodies open with colour, nine from camera-JPEG fits (#1542; the rest #1558); per-camera matrices for 41 Canon (18 CR3 and 1 CR2 from camera-JPEG fits, #1574, #1579, #1583), 11 Nikon (plus 3 proxies) and 11 Sony bodies ship (#1465, #1469, #1470); RAF reads X-Trans and Bayer bodies, X-Trans through an edge-directed demosaic of Pictura's own design, and 10 Fujifilm bodies open with camera-JPEG-fitted colour (#1473); compressed RAF, lossless and lossy, decodes as LibRaw does, ported from LibRaw (#1620); SuperCCD/EXR (#1621) and other Fujifilm bodies' colour (#1622) remain; smart-object open remains (#1466) | — |
+| P-FMT-26 | Camera raw open and demosaic | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/dng/develop.rs; crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs | manual:tst_raw_open covers the raw open route | DNG/CR2/CR3/NEF/ARW, uncompressed ORF, RW2 and RAF File > Open route; CR3 decodes lossless and C-RAW frames, ported from LibRaw (#1474); approximate parity; ORF colour comes from the embedded matrix (#1471) and compressed ORF remains (#1535); RW2 decodes in every observed coding, the compressed ones ported from rawspeed (#1472, #1541), and 10 Panasonic bodies open with colour, nine from camera-JPEG fits (#1542; the rest #1558); per-camera matrices for 41 Canon (18 CR3 and 1 CR2 from camera-JPEG fits, #1574, #1579, #1583), 11 Nikon (plus 3 proxies) and 11 Sony bodies ship (#1465, #1469, #1470); RAF reads X-Trans and Bayer bodies, X-Trans through an edge-directed demosaic of Pictura's own design, and 24 Fujifilm bodies open with camera-JPEG-fitted colour (#1473, #1621); compressed RAF, lossless and lossy, decodes as LibRaw does, ported from LibRaw (#1620); SuperCCD and EXR bodies read, the SuperCCD lattice repacked and turned upright as LibRaw does, ported from LibRaw (#1621); merging SuperCCD SR frames (#1648) and other Fujifilm bodies' colour (#1622) remain; smart-object open remains (#1466) | — |
 | P-FMT-27 | DNG output | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/dng/write/ | none | Mosaic and linear DNG output with `crs:` settings; JPEG, TIFF and PSD from Save Options remain (#633) | — |
 | P-FMT-28 | Print | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Print colour management, proofing, marks, and persisted defaults remain | #634 |
 | P-FMT-29 | EXIF, IPTC, and XMP metadata | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
@@ -101,7 +101,7 @@ Source list: CS6 and CC supported-format lists plus named File-menu, metadata, p
 | P-FMT-43 | 3D file import (U3D, 3DS, OBJ, KMZ, Collada) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-FMT-44 | Video frame import | Y | Y | Y | Missing | non-goal | — | none | Video is an intentional non-goal; src:1; src:7 | non-goal:feasibility:73 |
 | P-FMT-45 | Content Credentials | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1512 |
-| P-FMT-46 | Per-camera colour matrices for CR2 and vendor raw | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src/dng/camera_matrices.rs; crates/pictura-codec/src/dng/camera_jpeg_matrices.rs | none | 14 Canon CR2 and 8 Canon CR3 (plus 4 same-sensor aliases), 11 Nikon NEF and 11 Sony ARW bodies (plus 3 Sony same-sensor aliases) fit from spectral sensitivities, 3 Nikon bodies by same-sensor proxy; 9 Panasonic RW2 (#1542), 18 Canon CR3 (#1574, #1579, #1583), 1 Canon CR2 (#1583) and 10 Fujifilm RAF (#1473) bodies take approximate camera-JPEG fits; other cameras are refused; the EOS 600D CFA phase (#1476), unseeded Nikon (#1498), Sony (#1525) and Panasonic (#1558) and Fujifilm (#1622) bodies and the other vendor containers (#399) remain | follow-up: #1476, #1498, #1525, #1558, #1622 |
+| P-FMT-46 | Per-camera colour matrices for CR2 and vendor raw | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src/dng/camera_matrices.rs; crates/pictura-codec/src/dng/camera_jpeg_matrices.rs | none | 14 Canon CR2 and 8 Canon CR3 (plus 4 same-sensor aliases), 11 Nikon NEF and 11 Sony ARW bodies (plus 3 Sony same-sensor aliases) fit from spectral sensitivities, 3 Nikon bodies by same-sensor proxy; 9 Panasonic RW2 (#1542), 18 Canon CR3 (#1574, #1579, #1583), 1 Canon CR2 (#1583) and 24 Fujifilm RAF (#1473, #1621) bodies take approximate camera-JPEG fits; other cameras are refused; the EOS 600D CFA phase (#1476), unseeded Nikon (#1498), Sony (#1525) and Panasonic (#1558) and Fujifilm (#1622) bodies and the other vendor containers (#399) remain | follow-up: #1476, #1498, #1525, #1558, #1622 |
 | P-FMT-47 | Open a raw file as a Smart Object | Y | Y | Y | Missing | in-scope | — | none | Shift+Open Image raw open is not implemented | #1466 |
 
 ### Layers & compositing
@@ -171,7 +171,7 @@ Source list: CS6 toolbox slots (71 catalogue slots plus the two missing single r
 | P-TOOL-12 | Slice Select | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Slice style and modifiers, Divide/Combine/Duplicate, and the Slice Options dialog remain | TOOL-19 |
 | P-TOOL-13 | Eyedropper | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Modifiers and Shift-click sampler remain | TOOL-12 |
 | P-TOOL-14 | Color Sampler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Modifiers and Shift-click sampler remain | TOOL-12 |
-| P-TOOL-15 | Ruler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Protractor and Straighten from the ruler remain | TOOL-11 |
+| P-TOOL-15 | Ruler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Arbitrary rotation prefills from the ruler. Protractor and direct Straighten remain | TOOL-11 |
 | P-TOOL-16 | Note | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-17 | Count (Extended) | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-18 | Spot Healing Brush | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Healing Mode, Source, Sample All Layers, and depth/mode handling remain | TOOL-14 |
@@ -278,7 +278,7 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | P-IMG-02 | Levels | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/levels_dialog.cpp | automated:tst_levels_canvas_controls::levelsAltDragClips | RGB and Grayscale eyedroppers and clipping preview ship; CS6 and native-depth behavior remain unverified | #560 |
 | P-IMG-03 | Curves | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | On-image, pencil, smooth, sliders, display options, CMYK/Lab graphs remain | #561 |
 | P-IMG-04 | Exposure | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
-| P-IMG-05 | Vibrance | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Auto and presets remain | #564 |
+| P-IMG-05 | Vibrance | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Auto uses a bounded sample and presets use Pictura format | #564 |
 | P-IMG-06 | Hue/Saturation | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Colorize, range-band editing, eyedroppers, and on-image tool remain | #573 |
 | P-IMG-07 | Colour Balance | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | #572 |
 | P-IMG-08 | Black & White | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
@@ -381,7 +381,7 @@ Source list: Image > Mode, Color Settings, picker, and swatch capabilities.
 | P-CLR-08 | Multichannel colour mode | Y | Y | Y | Partial | in-scope | crates/pictura-render/src/document_ops/mode/multichannel.rs; crates/pictura-codec/src/multichannel.rs | none | 8/16-bit conversion and PSD/PSB plates; spot preview approximate; arbitrary rotation and perspective crop unavailable | #554 |
 | P-CLR-09 | 8-bit per channel | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | — | — |
 | P-CLR-10 | 16-bit per channel | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | — | — |
-| P-CLR-11 | 32-bit per channel | Y | Y | Y | Partial | in-scope | crates/pictura-core/src | none | 32-bit preview options and the Info readout remain | #570 |
+| P-CLR-11 | 32-bit per channel | Y | Y | Y | Partial | in-scope | crates/pictura-core/src; crates/pictura-app/cpp/frame_hdr.cpp | none | HDR preview and Info readout ship; native float Brush painting and full HDR TIFF round trips remain | #570 |
 | P-CLR-12 | Image mode conversion | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-CLR-13 | Colour Table, Indexed transparency, and Forced palette | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/color_table_dialog.cpp; crates/pictura-render/src/document_ops/mode/indexed.rs | automated:tst_image_mode::colorTableActRoundTrip | Entry and range edits, ACT files, forced colours, and a transparent palette index | #555 |
 | P-CLR-14 | Bitmap Halftone Screen and Custom Pattern | Y | Y | Y | Complete | in-scope | crates/pictura-render/src/document_ops/mode/flat.rs; crates/pictura-app/cpp/bitmap_mode_dialog.cpp | none | Screen geometry is a behavioral approximation | — |
@@ -391,14 +391,14 @@ Source list: Image > Mode, Color Settings, picker, and swatch capabilities.
 | P-CLR-18 | Colour picker and gamut alerts | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #600 |
 | P-CLR-19 | Colour Libraries (PANTONE) | Y | Y | Y | Missing | in-scope | — | none | Disabled in the picker | #600 |
 | P-CLR-20 | HUD colour picker | Y | Y | Y | Missing | in-scope | — | none | No HUD picker | #601 |
-| P-CLR-21 | HDR colour picker | Y | Y | Y | Missing | in-scope | — | none | Picker is 8-bit only | #602 |
+| P-CLR-21 | HDR colour picker | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/hdr_color_picker.cpp | none | Float picker and swatch conversion ship; native float Brush painting remains | #602 |
 | P-CLR-22 | 16/32-bit picker fields | Y | Y | Y | Missing | in-scope | — | none | No depth-aware fields | #604 |
 | P-CLR-23 | ACO and ASE swatch libraries | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src | none | Preset Manager imports and exports; the Swatches panel libraries, rename, and display modes remain | #605 |
 | P-CLR-24 | Gradient Editor | Y | Y | Y | Complete | in-scope | crates/pictura-paint/src | none | — | #598 |
 | P-CLR-25 | Define Pattern and .pat library | Y | Y | Y | Missing | in-scope | — | none | No Define Pattern or pattern library | #599 |
 | P-CLR-26 | Pattern Overlay Snap To Origin and Texture sub-options | Y | Y | Y | Partial | in-scope | crates/pictura-render/src | none | Snap To Origin and Texture remain | #606 |
 | P-CLR-27 | ICC colour management | Y | Y | Y | Complete | in-scope | crates/pictura-color/src | none | — | — |
-| P-CLR-28 | 32-bit preview options | Y | Y | Y | Missing | in-scope | — | none | View menu stub | #570 |
+| P-CLR-28 | 32-bit preview options | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_hdr.cpp | none | Preview controls and Pictura PSD/PSB persistence ship; Adobe resource interoperability remains unverified | #570 |
 | P-CLR-29 | Proof Setup and Gamut Warning | Y | Y | Y | Missing | in-scope | — | none | View menu stubs | #503 |
 
 ### Automation & extensibility
@@ -464,7 +464,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-PAN-26 | 3D panel | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-PAN-27 | Mini Bridge panel | Y | Y | Y | Unknown | non-goal | — | none | Cloud/Bridge service; CC presence unverified; src:1; src:7 | non-goal:feasibility:76 |
 | P-PAN-28 | Libraries panel | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
-| P-PREF-01 | General preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
+| P-PREF-01 | General preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Image Interpolation controls Arbitrary rotation. Other General options remain | #506 |
 | P-PREF-02 | Interface preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-03 | File Handling preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-04 | Performance preferences | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/preferences_performance.cpp; crates/pictura-app/cpp/status_readouts.cpp | manual:tst_performance_preferences covers the pane | Presets approximated; Cache Tile Size fixed at 256 px; no Basic/Normal/Advanced GPU modes (owner decision); Cache Levels default 8, not CS6's 4 | — |
@@ -478,7 +478,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-SHELL-01 | Application frame | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/frame.cpp | none | — | — |
 | P-SHELL-02 | Menu customization and enablement matrix | Y | Y | Y | Missing | in-scope | — | none | Edit > Menus, Show All Menu Items, and the enablement matrix remain | UI-5 |
 | P-SHELL-03 | Type menu | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/menu_type.cpp | none | Work path, convert to shape, find/replace, and the option rows ship; Google Fonts (#1442) and Check Spelling (#1443) stay open | #502 |
-| P-SHELL-04 | View menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_view.cpp | none | Show/Extras, grid, pixel grid, layer edges, target path, lock/clear slices, 200%, and print size ship; Gamut Warning, Pixel Aspect Ratio, Snap To (#305), and 32-bit Preview (#570) remain | #503 |
+| P-SHELL-04 | View menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_view.cpp | none | Show/Extras, grid, pixel grid, layer edges, target path, lock/clear slices, 200%, and print size ship; Gamut Warning, Pixel Aspect Ratio, and Snap To (#305) remain | #503 |
 | P-SHELL-05 | File menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_commands.cpp | none | Open As, File > Browse, and Statistics ship; the remaining Automate and Scripts leaves stay with #558, #617, #619, #620, and #630 | #504 |
 | P-SHELL-06 | Status bar readouts and options | Y | Y | Y | Missing | in-scope | — | none | Status bar readouts and options popup remain | UI-1 |
 | P-SHELL-07 | Active layer name in the title bar | Y | Y | Y | Missing | in-scope | — | none | Not shown | UI-2 |
@@ -498,7 +498,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-SHELL-21 | Rulers and guides | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-SHELL-22 | Smart guides | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-SHELL-23 | Isolation mode | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-SHELL-24 | Canvas rotation | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
+| P-SHELL-24 | Canvas rotation | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | Arbitrary supports direction, ruler prefill, and the General interpolation choice | — |
 | P-SHELL-25 | Panel column and rail | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 
 ## Worked examples

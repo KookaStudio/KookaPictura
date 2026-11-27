@@ -31,6 +31,7 @@ pub(super) struct DisplayPreview {
     /// The view-pyramid level the preview was last presented at.
     pub(super) level: Option<u32>,
     pub(super) generation: u64,
+    pub(super) hdr_merged_before: bool,
 }
 
 impl DisplayPreview {
@@ -94,6 +95,8 @@ impl PictureViewRust {
                 })
                 .collect()
         });
+        let hdr_merged_before = self.hdr_merged_current;
+        self.hdr_merged_current = false;
         self.display_preview = Some(DisplayPreview {
             paths,
             kind,
@@ -101,13 +104,17 @@ impl PictureViewRust {
             presented: false,
             level: None,
             generation,
+            hdr_merged_before,
         });
     }
 
     /// Composite and present the current preview at the level and rectangle the
     /// canvas last reported. `None` when the exact path must run instead.
     pub(super) fn present_display_preview(&mut self) -> Option<PsdRect> {
-        if self.has_active_session() || self.mask_solo.is_some() {
+        if self.has_active_session()
+            || self.mask_solo.is_some()
+            || self.hdr_preview_options().is_some()
+        {
             return None;
         }
         let preview = self.display_preview.as_ref()?;
@@ -172,6 +179,7 @@ impl PictureViewRust {
                 }
             }
         }
+        self.hdr_merged_current = preview.hdr_merged_before;
         self.reset_pyramid();
     }
 
@@ -214,6 +222,7 @@ pub(super) fn commit_display_preview_core(
     let edit = preview.exact_edit(doc);
     let presented = preview.presented;
     if unchanged {
+        rust.hdr_merged_current = preview.hdr_merged_before;
         return Some((
             false,
             Presentation {

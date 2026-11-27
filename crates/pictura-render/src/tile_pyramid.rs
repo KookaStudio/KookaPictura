@@ -61,6 +61,8 @@ pub fn set_cache_levels(levels: usize) {
 pub enum TileSource {
     /// The document composite in the display space.
     Composite,
+    /// Tone-mapped HDR canvas for the exposure offset in sixteenths of a stop.
+    Hdr(i16),
     /// The soloed raster mask as opaque grey.
     Mask,
 }
@@ -374,6 +376,18 @@ impl TilePyramid {
                     entry.record_sample(covered, None);
                 }
             }
+        }
+    }
+
+    /// The native composite changed under each cached HDR exposure.
+    pub fn damage_hdr(&mut self, rect: PsdRect) {
+        let sources: std::collections::HashSet<_> = self
+            .tiles
+            .keys()
+            .filter_map(|key| matches!(key.source, TileSource::Hdr(_)).then_some(key.source))
+            .collect();
+        for source in sources {
+            self.damage(source, rect);
         }
     }
 

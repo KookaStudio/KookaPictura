@@ -18,6 +18,7 @@ set(PICTURA_QT_TEST_DRIVERS
 set(PICTURA_QT_TEST_INCLUDED_SOURCES
     tst_actions_panel_cases.cpp
     tst_image_adjustments_shadows_highlights_cases.cpp
+    tst_image_adjustments_vibrance_cases.cpp
 )
 set(PICTURA_QT_TEST_DRIVER_shell
     tst_smoke
@@ -246,6 +247,7 @@ set(PICTURA_QT_TEST_DRIVER_ui
     tst_shared_widgets
     tst_value_input_enter
     tst_info_panel
+    tst_hdr_preview
     tst_histogram_panel
     tst_swatches_panel
     tst_preset_manager

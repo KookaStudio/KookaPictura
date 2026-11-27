@@ -4,6 +4,24 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Fujifilm SuperCCD and EXR RAF, #1621** (OpenSpec change
+  `vendor-raw-raf-superccd-exr`; `codec/vendor-raw-containers`,
+  `codec/raw-demosaic`, `codec/camera-matrices`, `document/raw-save-image`
+  modified). A sensor section that is not a TIFF is plain 16-bit words
+  (`0x0100` size, camera-JPEG Exif byte order; black `0x4000` per colour and
+  green row; white `0x3E00`, 4095 big-endian; neutral `0x2FF0`). `0x78` no
+  longer refuses: the primary frame is read; F700-style rows hold both SR
+  frames (merge is #1648). 2 × 2 layouts read last first, low two bits the
+  colour (EXR `08 09 0B 0A` = BGGR). `0xF006` = 1 selects MSB-first 12-bit
+  (fixed S1/SL1000, misread since #1473). SuperCCD (`0x0130` byte 1 bit 3
+  clear) ports LibRaw: `raf_superccd.rs` repacks onto the `fuji_width` grid
+  (CFA RGGB odd / GBRG even fw), `DngImage::fuji_width` carries it, and
+  `demosaic/superccd.rs` (`fuji_rotate`) turns the RGB upright for every
+  caller; Save Image writes SuperCCD as linear DNG. Oracles through rawpy:
+  10 SuperCCD grids within 1, renders ≥ 0.9995 per channel, 16 upright
+  files equal (`raw_raf_superccd.rs`). 14 more bodies fitted (word bodies
+  under 9/3); X-S1, XF1, S2 Pro scenes too grey (#1622). Samples:
+  `~/Downloads/PHOTOSHOP/RAW/FujiFilm/pixls-1621`.
 - **Fujifilm-compressed RAF, #1620** (OpenSpec change
   `vendor-raw-raf-compressed`; `codec/vendor-raw-containers` modified).
   `dng/raf_compressed.rs` ports LibRaw 0.22.1's `fuji_compressed.cpp` openly
@@ -30,7 +48,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   section is a TIFF whose `0xF000` points at the raw directory. Uncompressed
   only, by owner decision: 16-bit words (row length `0xF005` 0), 12-bit
   LSB-first, 14-bit MSB-first over LE words; compressed refused (#1620),
-  SuperCCD/EXR refused (#1621). `0x0131` reversed is the X-Trans CFA at the
+  SuperCCD/EXR refused (both since read: #1620, #1621). `0x0131` reversed is the X-Trans CFA at the
   plane origin (proven: the X100S RAF equals its Adobe DNG sample for sample,
   `raf_matches_its_dng_when_present`); Bayer is RGGB at the origin.
   `DemosaicMethod::Ahd` routes 6×6 X-Trans to `demosaic/xtrans.rs`, an

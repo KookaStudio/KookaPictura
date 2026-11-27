@@ -48,6 +48,14 @@ SliderDialog::SliderDialog(PictureView* view, const QByteArray& block, const QRe
 
 void SliderDialog::applyAuto()
 {
+    if (adjustmentPresetKind(block()) == QLatin1String("vibrance")) {
+        const QString key = QStringLiteral("vibrance");
+        const int amount = vibranceAutoAmount();
+        if (amount > 0 && amount != param(key) && setParam(key, amount)) {
+            reloadFromBlock();
+        }
+        return;
+    }
     bool brightnessRow = false;
     bool contrastRow = false;
     for (const Row& row : rows_) {

@@ -320,8 +320,9 @@ bool savePreferences(const Preferences& before, const Preferences& after, bool e
         unsaved().remove(root);
         return true;
     } catch (const rust::Error& error) {
-        // The language selector restores the last saved choice on failure.
+        // These selectors restore the last saved choice on failure.
         pending.remove(QStringLiteral("uiLanguage"));
+        pending.remove(QStringLiteral("imageInterpolation"));
         for (const auto& key : preferenceKeys()) {
             if (key.startsWith(QStringLiteral("agent"))) {
                 pending.remove(key);
@@ -329,6 +330,8 @@ bool savePreferences(const Preferences& before, const Preferences& after, bool e
         }
         if (!pending.isEmpty()) {
             unsaved().insert(root, pending);
+        } else {
+            unsaved().remove(root);
         }
         qWarning().noquote() << "pictura: preferences could not be saved:" << error.what();
         return false;

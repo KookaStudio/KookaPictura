@@ -8,7 +8,8 @@
 
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QTimer>
-#include <QtWidgets/QInputDialog>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QProgressDialog>
 #include <QtWidgets/QPushButton>
 
@@ -109,9 +110,14 @@ Seen DocumentJobsTest::watch(const std::function<void()>& action, bool cancel)
             fill->accept();
             return;
         }
-        if (auto* prompt = window_->findChild<QInputDialog*>(); prompt && prompt->isVisible()) {
-            prompt->setDoubleValue(15.0);
-            prompt->accept();
+        auto* prompt = window_->findChild<QDialog*>(QStringLiteral("rotateCanvasDialog"));
+        if (prompt && prompt->isVisible()) {
+            if (auto* angle = prompt->findChild<QLineEdit*>(QStringLiteral("rotateCanvasAngle"))) {
+                angle->setText(QStringLiteral("15"));
+                prompt->accept();
+            } else {
+                prompt->reject();
+            }
             return;
         }
         auto* d = window_->findChild<QProgressDialog*>(QStringLiteral("jobProgress"));

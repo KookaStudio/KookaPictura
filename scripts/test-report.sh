@@ -14,6 +14,7 @@
 #   --configure             configure the CMake tree before building
 #   --build                 build `pictura`, then the remaining targets
 #   --cmake-arg ARG         extra configure argument (repeatable)
+#   --app-build-log PATH    also write the pictura build output to PATH
 #
 # PICTURA_QT_SELFTEST_OVERLAP=1 lets the self-test overlap the Qt Test build
 # tail. It defaults off until #1570 measures it on four vCPUs.
@@ -40,6 +41,7 @@ color=auto
 qt_only=0
 configure=0
 build=0
+app_build_log=
 cmake_args=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -51,6 +53,11 @@ while [ "$#" -gt 0 ]; do
             shift
             [ "$#" -gt 0 ] || { echo "test-report.sh: --cmake-arg needs a value" >&2; exit 2; }
             cmake_args+=("$1")
+            ;;
+        --app-build-log)
+            shift
+            [ "$#" -gt 0 ] || { echo "test-report.sh: --app-build-log needs a path" >&2; exit 2; }
+            app_build_log=$1
             ;;
         -h | --help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)
@@ -230,10 +237,19 @@ fi
 build_ready=1
 [ "$configure_rc" -eq 0 ] || build_ready=0
 
+build_pictura() {
+    local -a command=(cmake --build build --target pictura
+        --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$PICTURA_JOBS}")
+    if [ -n "$app_build_log" ]; then
+        "${command[@]}" 2>&1 | tee -- "$app_build_log"
+    else
+        "${command[@]}"
+    fi
+}
+
 if [ "$build" -eq 1 ] && [ "$build_ready" -eq 1 ]; then
     echo "== pictura build =="
-    start_stage pictura_build - \
-        cmake --build build --target pictura --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$PICTURA_JOBS}"
+    start_stage pictura_build - build_pictura
     reap_stage "$STAGE_PID" pictura_build
     pictura_rc=$STAGE_RC
 elif [ "$build" -eq 1 ]; then

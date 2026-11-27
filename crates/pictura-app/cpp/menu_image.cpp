@@ -2,6 +2,9 @@
 #include "menu_registrar.h"
 
 #include "commands.h"
+#include "crop_grip.h"
+#include "preferences.h"
+#include <QtCore/QLocale>
 #include <QtCore/QSizeF>
 #include <QtCore/QRectF>
 #include <QtCore/QPointF>
@@ -21,12 +24,20 @@
 #include "document_command.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 #include "api/filters_bridge.h"
 
 #include "image_size_dialog.h"
 
 
-#include <QtWidgets/QInputDialog>
+#include <QtGui/QDoubleValidator>
+#include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QFormLayout>
+#include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QRadioButton>
+
+#include <cmath>
 
 namespace pictura {
 
@@ -319,38 +330,111 @@ void MenuRegistrar::wireImageMenu()
         return applied;
     });
 
-    commands_->setHandler(command_ids::ImageRotateArbitrary, [this]() {
-        PictureView* view = activeView();
+    const auto recordedInterpolation = [](const CommandParams& params) {
+        return params.values.value(QStringLiteral("interpolation"))
+            .toString(params.values.contains(QStringLiteral("interpolation"))
+                          ? QString() : QStringLiteral("bilinear"));
+    };
+    commands_->setContextHandler(command_ids::ImageRotateArbitrary,
+                                 [this, recordedInterpolation](const CommandContext& context) {
+        const QPointer<PictureView> view(activeView());
         if (!view || !view->has_document()) {
             return;
         }
-        bool ok = false;
-        const double angle = QInputDialog::getDouble(dialogParent(), tr("Rotate Image"),
-                                                     tr("Angle (degrees):"), 0.0, -359.99, 359.99, 2,
-                                                     &ok);
-        if (!ok || angle == 0.0) {
+        const bool replay = context.mode == CommandMode::Modal;
+        const QString interpolation = replay ? recordedInterpolation(context.params)
+                                             : loadPreferences().imageInterpolation;
+        double prefill = 0.0;
+        if (replay) {
+            prefill = context.params.values.value(QStringLiteral("angle")).toDouble();
+        } else {
+            const auto ruler = ruler_line(*view);
+            if (ruler.size() == 4) {
+                prefill = straightenAngle(QPointF(ruler[0], ruler[1]), QPointF(ruler[2], ruler[3]));
+            }
+        }
+        if (!std::isfinite(prefill) || std::abs(prefill) > 359.99) {
             return;
         }
-        // A large document's rotation runs as a job behind a progress window (#1294).
+
+        QDialog dialog(dialogParent());
+        dialog.setObjectName(QStringLiteral("rotateCanvasDialog"));
+        dialog.setWindowTitle(tr("Rotate Canvas"));
+        auto* layout = new QFormLayout(&dialog);
+        auto* angle = new QLineEdit(&dialog);
+        angle->setObjectName(QStringLiteral("rotateCanvasAngle"));
+        auto* validator = new QDoubleValidator(-359.99, 359.99, 2, angle);
+        validator->setNotation(QDoubleValidator::StandardNotation);
+        QLocale locale = dialog.locale();
+        locale.setNumberOptions(locale.numberOptions() | QLocale::RejectGroupSeparator);
+        validator->setLocale(locale);
+        angle->setValidator(validator);
+        angle->setText(locale.toString(std::abs(prefill), 'f', 2));
+        layout->addRow(tr("Angle (degrees)"), angle);
+
+        auto* direction = new QWidget(&dialog);
+        auto* choices = new QHBoxLayout(direction);
+        choices->setContentsMargins(0, 0, 0, 0);
+        auto* clockwise = new QRadioButton(tr("°CW"), direction);
+        auto* counterclockwise = new QRadioButton(tr("°CCW"), direction);
+        clockwise->setObjectName(QStringLiteral("rotateCanvasClockwise"));
+        counterclockwise->setObjectName(QStringLiteral("rotateCanvasCounterclockwise"));
+        choices->addWidget(clockwise);
+        choices->addWidget(counterclockwise);
+        (prefill < 0.0 ? counterclockwise : clockwise)->setChecked(true);
+        layout->addRow(tr("Direction"), direction);
+
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        auto* ok = buttons->button(QDialogButtonBox::Ok);
+        ok->setDefault(true);
+        connect(angle, &QLineEdit::textChanged, ok,
+                [angle, ok] { ok->setEnabled(angle->hasAcceptableInput()); });
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addRow(buttons);
+        angle->selectAll();
+        angle->setFocus();
+
+        if (runDialog(dialog, dialogParent()) != QDialog::Accepted || !view
+            || !angle->hasAcceptableInput()) {
+            return;
+        }
+        bool parsed = false;
+        const double magnitude = locale.toDouble(angle->text(), &parsed);
+        const double degrees = clockwise->isChecked() ? magnitude : -magnitude;
+        if (!parsed || degrees == 0.0) {
+            return;
+        }
         if (runDocumentCommand(dialogParent(), *view, tr("Rotate Canvas"),
-                               [&] { rotate_document_arbitrary(*view, angle); })) {
+                               [&] { rotate_document_arbitrary_with(*view, degrees, interpolation); })) {
+            if (!replay && view && ruler_line(*view).size() == 4) {
+                clear_ruler(*view);
+                refresh();
+            }
             CommandParams command;
-            command.values.insert(QStringLiteral("angle"), angle);
-            commands_->recordCommand(command_ids::ImageRotateArbitrary, command);
+            command.values.insert(QStringLiteral("angle"), degrees);
+            command.values.insert(QStringLiteral("interpolation"), interpolation);
+            if (replay) {
+                *context.outParams = command;
+                *context.applied = true;
+            } else {
+                commands_->recordCommand(command_ids::ImageRotateArbitrary, command);
+            }
         } else {
             reportCommitRefusal(dialogParent(), tr("rotate the canvas"));
         }
     });
     commands_->setEnabledProvider(command_ids::ImageRotateArbitrary, imageEnabled);
     commands_->setExecutor(command_ids::ImageRotateArbitrary,
-                           [this](const CommandParams& params) {
+                           [this, recordedInterpolation](const CommandParams& params) {
                                PictureView* view = activeView();
                                const double angle =
                                    params.values.value(QStringLiteral("angle")).toDouble(0.0);
                                if (!view || !view->has_document() || angle == 0.0) {
                                    return false;
                                }
-                               const bool applied = rotate_document_arbitrary(*view, angle);
+                               const bool applied =
+                                   rotate_document_arbitrary_with(*view, angle, recordedInterpolation(params));
                                if (applied) {
                                    refresh();
                                }

@@ -508,9 +508,12 @@ void ToolController::updateSamplingRing(const QPointF& imagePos)
 
 QColor ToolController::foreground() const { return foreground_; }
 
-void ToolController::setForeground(const QColor& color)
+void ToolController::setForeground(const QColor& color, bool reflected)
 {
     foreground_ = color;
+    if (!reflected) {
+        emit foregroundSelected(color);
+    }
     // Choosing a foreground colour loads the Mixer Brush (docs/03-tools/mixer-brush.md).
     MixerOptions mixer = mixer_->get();
     if (mixer.reservoir.rgba() != color.rgba()) {
@@ -529,9 +532,12 @@ void ToolController::setForeground(const QColor& color)
 
 QColor ToolController::background() const { return background_; }
 
-void ToolController::setBackground(const QColor& color)
+void ToolController::setBackground(const QColor& color, bool reflected)
 {
     background_ = color;
+    if (!reflected) {
+        emit backgroundSelected(color);
+    }
     emit colorsChanged();
 }
 

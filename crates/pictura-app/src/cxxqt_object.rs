@@ -27,6 +27,7 @@ mod filter_map;
 mod filter_tools;
 mod guides;
 mod hdr_conversion;
+mod hdr_preview;
 mod healing;
 mod helpers;
 mod helpers_composite;
@@ -321,7 +322,6 @@ pub mod qobject {
         /// Name of layer `i`, or empty when out of range.
         #[qinvokable]
         fn layer_name(&self, i: i32) -> QString;
-
         /// `"pixel"`/`"group"`/`"adjustment"`/`"background"` for layer `i`, or empty.
         #[qinvokable]
         fn layer_kind(&self, i: i32) -> QString;

@@ -1,7 +1,7 @@
 //! Lays out synthetic Fujifilm RAFs: the big-endian header, a camera JPEG
 //! holding only an Exif segment, the directory records, and the sensor
-//! section (a TIFF whose one entry points at the raw directory), with
-//! encoders for the uncompressed codings.
+//! section (a TIFF whose one entry points at the raw directory, or plain
+//! words), with encoders for the uncompressed codings.
 
 /// How the samples are stored.
 #[derive(Debug, Clone)]
@@ -13,6 +13,9 @@ pub enum Coding {
     /// 14-bit samples, most significant bit first over little-endian 32-bit
     /// words.
     Msb14,
+    /// 12-bit samples, most significant bit first over little-endian 32-bit
+    /// words, flagged by `0xF006` = 1.
+    Msb12,
     /// The data bytes as given, with this row length in 32-bit words.
     Bytes(Vec<u8>, Option<u32>),
 }
@@ -49,8 +52,13 @@ pub struct Raf {
     pub second_frame: bool,
     /// `0x9650`: numerator and denominator of the raw exposure bias.
     pub exposure_bias: Option<(i16, i16)>,
-    /// A raw directory in the sensor section, else a SuperCCD-style one.
+    /// A raw directory in the sensor section, else plain words in the
+    /// camera JPEG's byte order (`big_endian`).
     pub sensor_tiff: bool,
+    /// Word sections only: a second frame stored after each primary row.
+    pub second_samples: Option<Vec<u16>>,
+    /// Further directory records, written after the others.
+    pub extra: Vec<(u16, Vec<u8>)>,
 }
 
 pub const BAYER: [u8; 4] = [0x0A, 0x0B, 0x09, 0x08];
@@ -71,7 +79,7 @@ impl Raf {
     /// An X-Trans RAF of 14-bit words with a 6 × 6 black of 1024.
     pub fn new(width: usize, height: usize, samples: Vec<u16>, coding: Coding) -> Self {
         let bits = match coding {
-            Coding::Lsb12 => 12,
+            Coding::Lsb12 | Coding::Msb12 => 12,
             _ => 14,
         };
         Self {
@@ -96,7 +104,24 @@ impl Raf {
             second_frame: false,
             exposure_bias: Some((-72, 100)),
             sensor_tiff: true,
+            second_samples: None,
+            extra: Vec::new(),
         }
+    }
+
+    /// A Bayer word section of 14-bit samples with no camera levels.
+    pub fn words(width: usize, height: usize, samples: Vec<u16>) -> Self {
+        let mut r = Self::new(width, height, samples, Coding::Words).bayer();
+        r.sensor_tiff = false;
+        r.black = Vec::new();
+        r.wb = None;
+        r
+    }
+
+    /// Appends a record of big-endian 16-bit values.
+    pub fn record(&mut self, tag: u16, values: &[u16]) {
+        let bytes = values.iter().flat_map(|v| v.to_be_bytes()).collect();
+        self.extra.push((tag, bytes));
     }
 
     pub fn bayer(mut self) -> Self {
@@ -204,12 +229,12 @@ fn lsb12_row(samples: &[u16], stride: usize) -> Vec<u8> {
     out
 }
 
-fn msb14_row(samples: &[u16], stride: usize) -> Vec<u8> {
+fn msb_row(samples: &[u16], stride: usize, bits: u32) -> Vec<u8> {
     let mut stream = Vec::with_capacity(stride);
     let (mut acc, mut have) = (0u32, 0);
     for &v in samples {
-        acc = acc << 14 | u32::from(v & 0x3FFF);
-        have += 14;
+        acc = acc << bits | (u32::from(v) & ((1 << bits) - 1));
+        have += bits;
         while have >= 8 {
             have -= 8;
             stream.push((acc >> have) as u8);
@@ -240,24 +265,42 @@ fn data(r: &Raf) -> (Vec<u8>, Option<u32>) {
             rows.flat_map(|row| lsb12_row(row, r.stride())).collect(),
             Some((r.stride() / 4) as u32),
         ),
-        Coding::Msb14 => (
-            rows.flat_map(|row| msb14_row(row, r.stride())).collect(),
+        Coding::Msb14 | Coding::Msb12 => (
+            rows.flat_map(|row| msb_row(row, r.stride(), r.bits))
+                .collect(),
             Some((r.stride() / 4) as u32),
         ),
         Coding::Bytes(bytes, words) => (bytes.clone(), *words),
     }
 }
 
+/// Plain words, each primary row followed by the second frame's row when
+/// there is one.
+fn word_section(r: &Raf) -> Vec<u8> {
+    let mut out = Vec::new();
+    for (y, row) in r.samples.chunks(r.width).enumerate() {
+        for &v in row {
+            put16(&mut out, v, r.big_endian);
+        }
+        if let Some(second) = &r.second_samples {
+            for &v in &second[y * r.width..(y + 1) * r.width] {
+                put16(&mut out, v, r.big_endian);
+            }
+        }
+    }
+    out
+}
+
 fn sensor_section(r: &Raf) -> Vec<u8> {
+    if !r.sensor_tiff {
+        return word_section(r);
+    }
     let be = r.big_endian;
     let mut out = if be {
         b"MM\0*".to_vec()
     } else {
         b"II*\0".to_vec()
     };
-    if !r.sensor_tiff {
-        out = vec![0, 0x20, 0, 0x20];
-    }
     put32(&mut out, 8, be);
     let top = write_ifd(&mut out, &[longs(0xF000, &[0], be)], be);
     let raw_at = out.len() as u32;
@@ -270,6 +313,9 @@ fn sensor_section(r: &Raf) -> Vec<u8> {
     ];
     if let Some(words) = row_words {
         entries.push(longs(0xF005, &[words], be));
+    }
+    if matches!(r.coding, Coding::Msb12) {
+        entries.push(longs(0xF006, &[1], be));
     }
     entries.push(longs(0xF007, &[0], be));
     entries.push(longs(0xF008, &[bytes.len() as u32], be));
@@ -288,11 +334,15 @@ fn sensor_section(r: &Raf) -> Vec<u8> {
     out
 }
 
-fn jpeg(exif: Exif) -> Vec<u8> {
-    let mut tiff = b"II*\0".to_vec();
-    put32(&mut tiff, 8, false);
+fn jpeg(exif: Exif, be: bool) -> Vec<u8> {
+    let mut tiff = if be {
+        b"MM\0*".to_vec()
+    } else {
+        b"II*\0".to_vec()
+    };
+    put32(&mut tiff, 8, be);
     let mut orientation = Vec::new();
-    put16(&mut orientation, exif.orientation, false);
+    put16(&mut orientation, exif.orientation, be);
     write_ifd(
         &mut tiff,
         &[
@@ -305,7 +355,7 @@ fn jpeg(exif: Exif) -> Vec<u8> {
                 bytes: orientation,
             },
         ],
-        false,
+        be,
     );
     let mut out = vec![0xFF, 0xD8, 0xFF, 0xE1];
     out.extend(((tiff.len() + 8) as u16).to_be_bytes());
@@ -329,6 +379,7 @@ fn records(r: &Raf) -> Vec<u8> {
     if let Some((num, den)) = r.exposure_bias {
         list.push((0x9650, [num.to_be_bytes(), den.to_be_bytes()].concat()));
     }
+    list.extend(r.extra.iter().cloned());
     let mut out = (list.len() as u32).to_be_bytes().to_vec();
     for (tag, value) in list {
         out.extend(tag.to_be_bytes());
@@ -348,7 +399,7 @@ pub fn raf(r: &Raf) -> Vec<u8> {
     out.resize(0x94, 0);
     let mut sections = Vec::new();
     for body in [
-        r.exif.map(jpeg).unwrap_or_default(),
+        r.exif.map(|e| jpeg(e, r.big_endian)).unwrap_or_default(),
         records(r),
         sensor_section(r),
     ] {

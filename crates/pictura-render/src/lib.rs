@@ -91,7 +91,9 @@ pub use pyramid_level::{PyramidLevel, SMALLEST_SIDE, TILE};
 pub use view_pyramid::{Planes, ViewPyramid};
 
 mod composite_native;
+mod hdr_scene;
 pub use composite_native::{refresh_native_composite, restore_native_composite};
+pub use hdr_scene::{hdr_scene_region, supports_hdr_scene};
 pub use pictura_adjust::render_pictura_raw_rgb16;
 pub use pictura_adjust::{
     match_color_stats, replace_color_mask, replace_color_result, replace_color_shift_for,
@@ -267,11 +269,11 @@ pub use document_ops::{
     resize_document_with_styles, resize_shape, resized_plane_bytes, resolve_export_slices,
     resolve_path, resolve_path_mut, resolve_slices, restore_last_document_state, reveal_all,
     reverse_paths, reverse_paths_result, rotate_document, rotate_document_in,
-    rotate_document_in_offset, rotated_plane_bytes, save_view, scale_layer_effects, select_similar,
-    selection_transform_point, set_all_effects_visible, set_blend_paths, set_color_paths,
-    set_document_global_light, set_document_layer_style_value, set_fill_paths,
-    set_layer_live_shape, set_layer_mask_density, set_layer_mask_enabled, set_layer_mask_feather,
-    set_layer_mask_linked, set_layer_shape_paths, set_layer_style_contour,
+    rotate_document_in_offset, rotate_document_in_with, rotated_plane_bytes, save_view,
+    scale_layer_effects, select_similar, selection_transform_point, set_all_effects_visible,
+    set_blend_paths, set_color_paths, set_document_global_light, set_document_layer_style_value,
+    set_fill_paths, set_layer_live_shape, set_layer_mask_density, set_layer_mask_enabled,
+    set_layer_mask_feather, set_layer_mask_linked, set_layer_shape_paths, set_layer_style_contour,
     set_layer_style_gradient, set_layer_style_pattern, set_layer_style_value, set_lock_paths,
     set_opacity_paths, set_shape_fill, set_shape_fill_content, set_shape_stroke, set_slice,
     set_smart_object_stack_mode, set_vector_mask_density, set_vector_mask_enabled,

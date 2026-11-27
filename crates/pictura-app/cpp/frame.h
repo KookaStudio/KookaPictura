@@ -12,6 +12,7 @@
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
 #include <QtWidgets/QMainWindow>
+#include <array>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -575,8 +576,8 @@ private:
     QMenu* backgroundMenu_ = nullptr;
     // The FG/BG pair of the edit target that is not active: the image's while
     // a mask is edited, the mask's (initially white/black) otherwise.
-    QColor otherForeground_{Qt::white};
-    QColor otherBackground_{Qt::black};
+    std::array<double, 3> otherForeground_{1.0, 1.0, 1.0};
+    std::array<double, 3> otherBackground_{0.0, 0.0, 0.0};
     PreferencesDialog* preferencesDialog_ = nullptr;
     QString startupUiLanguage_;
     HistoryLogSettings historyLog_;
@@ -600,6 +601,8 @@ private:
     // The rule before the action label; hidden with the label.
     QFrame* actionSeparator_ = nullptr;
     QToolButton* statusOptionsButton_ = nullptr;
+    QAction* hdrExposureAction_ = nullptr;
+    QSlider* hdrExposureSlider_ = nullptr;
     QString statusReadout_ = QStringLiteral("sizes");
     // Scratch Sizes and Efficiency go stale without an event: this refreshes
     // them while one is shown (#636).
@@ -687,6 +690,10 @@ private:
     void refreshViewOverlays();
     void wireViewStateSignals();
     void registerViewHandlers();
+    void registerHdrPreviewHandler();
+    void showHdrPreviewOptions();
+    void buildHdrStatus(QStatusBar* bar, QMenu* menu, QActionGroup* group);
+    void updateHdrStatus(bool visible);
     void showExtrasOptions();
     bool extraMember(const QString& id) const;
     bool effectiveExtra(const QString& id, bool enabled, bool toolOwns = false) const;
