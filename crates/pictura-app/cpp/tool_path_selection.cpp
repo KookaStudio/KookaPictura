@@ -28,6 +28,7 @@
 #include <QtGui/QGuiApplication>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -107,8 +108,12 @@ public:
         if (v && selectionView_ == v && !pressView_
             && !static_cast<ToolController&>(ctx).pathTransformCommitInProgress()) {
             const auto outline = path_target_outline(*v);
-            stale = stale || outline.size() != selectionOutline_.size()
-                || !std::equal(outline.begin(), outline.end(), selectionOutline_.begin());
+            // The outline encoding starts each subpath with a NaN marker.
+            stale = stale || !std::equal(outline.begin(), outline.end(),
+                                         selectionOutline_.begin(), selectionOutline_.end(),
+                                         [](double a, double b) {
+                                             return a == b || (std::isnan(a) && std::isnan(b));
+                                         });
             if (v->history_index() > selectionHistory_) {
                 const QString label = v->history_label(v->history_index());
                 stale = stale || label == QLatin1String("New Path") || label == QLatin1String("Save Path")
