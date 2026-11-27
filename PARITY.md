@@ -1,7 +1,7 @@
 # Feature parity tracker
 
 Assessed: 2026-11-27
-Pictura commit: e7ca8f53
+Pictura commit: 73f469e1
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -529,7 +529,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
-| 2026-11-27 | working tree | 216/350 (61.7%) | 217/367 (59.1%) | 28.0 | 218/375 (58.1%) |
+| 2026-11-27 | 73f469e1 | 216/350 (61.7%) | 217/367 (59.1%) | 28.0 | 218/375 (58.1%) |
 | 2026-11-27 | e7ca8f53 | 215/350 (61.4%) | 216/367 (58.9%) | 28.0 | 217/375 (57.9%) |
 | 2026-11-27 | 616cce308 | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
 | 2026-11-27 | 934c214cf | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
