@@ -148,12 +148,20 @@ fn every_wired_filter_has_a_definition() {
 #[test]
 fn default_catalogue_shape_is_stable() {
     let catalogue = command_catalogue();
-    assert_eq!(catalogue.len(), 698);
+    let implemented = include_str!("golden/catalogue.tsv")
+        .lines()
+        .filter(|line| line.split('\t').nth(4) == Some("1"))
+        .count();
+    let names = include_str!("golden/const_names.tsv")
+        .lines()
+        .filter(|line| !line.is_empty())
+        .count();
+    assert_eq!(catalogue.len(), 699);
     assert_eq!(
         catalogue.iter().filter(|spec| spec.implemented).count(),
-        537
+        implemented
     );
-    assert_eq!(const_names().len(), 434);
+    assert_eq!(const_names().len(), names);
 }
 
 #[test]
