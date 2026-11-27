@@ -21,6 +21,9 @@ panel.channels.channelOptions Channels panel options menu
 panel.history.stepForward History panel action
 panel.history.stepBackward History panel action
 panel.history.newSnapshot History panel action
+panel.history.clear History panel action
+panel.history.newDocument History panel action
+panel.history.options History panel options menu
 actions.buttonMode Actions panel control
 actions.newAction Actions panel control
 actions.newSet Actions panel control

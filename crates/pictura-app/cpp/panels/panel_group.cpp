@@ -11,6 +11,7 @@
 #include <QtWidgets/QBoxLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QSizePolicy>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QTabWidget>
