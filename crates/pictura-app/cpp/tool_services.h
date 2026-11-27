@@ -28,6 +28,7 @@ struct ToolServices {
     // The current pointer pressure (0..1): a tablet event's pressure, or 1.0
     // for a mouse.
     virtual double pressure() const = 0;
+    virtual bool hasTabletPressure() const = 0;
     // The current pointer tilt (degrees) and rotation (degrees); zero for a
     // mouse.
     virtual double tiltX() const = 0;

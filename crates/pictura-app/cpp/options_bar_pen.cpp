@@ -19,7 +19,7 @@ namespace pictura {
 // Auto Add/Delete (on) and Rubber Band (off; CS6 keeps it in a pop-up); the
 // Freeform Pen adds Curve Fit (2 px). The Path Selection bar: Show Bounding
 // Box (off).
-// ponytail: no path operations or the Freeform Pen's Magnetic option.
+// ponytail: no path operations.
 QWidget* OptionsBar::buildPenPage(ToolId id)
 {
     auto* page = new QWidget(stack_);
@@ -82,6 +82,56 @@ QWidget* OptionsBar::buildPenPage(ToolId id)
         layout->addWidget(fit);
         connect(fit, &NumericField::valueChanged, this,
                 [update](double v) { update([v](PenOptions& o) { o.curveFit = v; }); });
+        auto* magnetic = new QCheckBox(QCoreApplication::translate("PicturaUi", "Magnetic"), page);
+        magnetic->setObjectName(QStringLiteral("optionsFreeformPenMagnetic"));
+        magnetic->setChecked(initial.magnetic);
+        layout->addWidget(magnetic);
+        auto* width = new NumericField(QCoreApplication::translate("PicturaUi", "Width"),
+            numericConfig(1, 256, 1, 0, QStringLiteral(" px"), true,
+                          QStringLiteral("optionsMagneticPenWidth")), page);
+        auto* contrast = new NumericField(QCoreApplication::translate("PicturaUi", "Contrast"),
+            numericConfig(1, 100, 1, 0, QStringLiteral("%"), true,
+                          QStringLiteral("optionsMagneticPenContrast")), page);
+        auto* frequency = new NumericField(QCoreApplication::translate("PicturaUi", "Frequency"),
+            numericConfig(0, 100, 1, 0, QString(), true,
+                          QStringLiteral("optionsMagneticPenFrequency")), page);
+        auto* pressure = new QCheckBox(QCoreApplication::translate("PicturaUi", "Pen Pressure"), page);
+        pressure->setObjectName(QStringLiteral("optionsMagneticPenPressure"));
+        width->setValue(initial.magneticWidth);
+        contrast->setValue(initial.magneticContrast);
+        frequency->setValue(initial.magneticFrequency);
+        pressure->setChecked(initial.magneticPressure);
+        for (QWidget* field : QList<QWidget*>{width, contrast, frequency, pressure}) {
+            layout->addWidget(field);
+            field->setVisible(initial.magnetic);
+            connect(magnetic, &QCheckBox::toggled, field, &QWidget::setVisible);
+        }
+        connect(magnetic, &QCheckBox::toggled, this,
+                [update](bool v) { update([v](PenOptions& o) { o.magnetic = v; }); });
+        connect(width, &NumericField::valueChanged, this,
+                [update](double v) { update([v](PenOptions& o) { o.magneticWidth = qRound(v); }); });
+        connect(contrast, &NumericField::valueChanged, this,
+                [update](double v) { update([v](PenOptions& o) { o.magneticContrast = qRound(v); }); });
+        connect(frequency, &NumericField::valueChanged, this,
+                [update](double v) { update([v](PenOptions& o) { o.magneticFrequency = qRound(v); }); });
+        connect(pressure, &QCheckBox::toggled, this,
+                [update](bool v) { update([v](PenOptions& o) { o.magneticPressure = v; }); });
+        if (controller_) {
+            connect(controller_, &ToolController::penOptionsChanged, page,
+                    [this, magnetic, width, contrast, frequency, pressure]() {
+                const PenOptions o = pen_->get();
+                const QSignalBlocker a(magnetic), b(width), c(contrast), d(frequency), e(pressure);
+                magnetic->setChecked(o.magnetic);
+                width->setValue(o.magneticWidth);
+                contrast->setValue(o.magneticContrast);
+                frequency->setValue(o.magneticFrequency);
+                pressure->setChecked(o.magneticPressure);
+                width->setVisible(o.magnetic);
+                contrast->setVisible(o.magnetic);
+                frequency->setVisible(o.magnetic);
+                pressure->setVisible(o.magnetic);
+            });
+        }
     }
     layout->addStretch(1);
     return page;

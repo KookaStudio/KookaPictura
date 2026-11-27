@@ -83,6 +83,17 @@ pub mod ffi {
             spacing: i32,
         ) -> bool;
 
+        /// Stroke a magnetic path while preserving its live rollback state.
+        fn paths_stroke_magnetic(
+            view: Pin<&mut PictureView>,
+            foreground: u32,
+            diameter: i32,
+            hardness: i32,
+            opacity: i32,
+            flow: i32,
+            spacing: i32,
+        ) -> bool;
+
         /// Load the targeted path's nonzero interior as a selection, feathered by `feather` px and combined by `mode` (`"new"`, `"add"`, `"subtract"`, `"intersect"`); records "Make Selection". False when it encloses nothing.
         fn paths_make_selection(view: Pin<&mut PictureView>, feather: f64, mode: &QString) -> bool;
     }

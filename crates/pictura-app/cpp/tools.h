@@ -302,6 +302,8 @@ public:
     QColor background() const override;
     void setBackground(const QColor& color, bool reflected = false);
     double pressure() const override { return pressure_; }
+    bool hasTabletPressure() const override { return tabletPressureAvailable_; }
+    void setTabletPressureAvailable(bool available) { tabletPressureAvailable_ = available; }
     double tiltX() const override { return tiltX_; }
     double tiltY() const override { return tiltY_; }
     double pointerRotation() const override { return rotation_; }
@@ -714,6 +716,7 @@ private:
     QColor foreground_{Qt::black};
     QColor background_{Qt::white};
     double pressure_ = 1.0;
+    bool tabletPressureAvailable_ = false;
     double tiltX_ = 0.0;
     double tiltY_ = 0.0;
     double rotation_ = 0.0;

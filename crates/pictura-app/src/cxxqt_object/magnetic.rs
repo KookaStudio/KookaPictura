@@ -25,6 +25,9 @@ pub mod ffi {
         /// Build and cache the edge field from the visible composite at `contrast` (1–100 %). False without a document or on a 32-bit document, where CS6 disables the tool.
         fn magnetic_begin(view: Pin<&mut PictureView>, contrast: i32) -> bool;
 
+        /// Build a field for Magnetic Pen, including on 32-bit documents.
+        fn magnetic_pen_begin(view: Pin<&mut PictureView>, contrast: i32) -> bool;
+
         /// The live wire from `(x0, y0)` to `(x1, y1)` within `width` px of the straight segment, as flat x,y pairs including both ends; a straight line without a cached field.
         fn magnetic_trace(
             view: &PictureView,

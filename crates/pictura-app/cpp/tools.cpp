@@ -568,6 +568,16 @@ bool ToolController::applyBrushShortcut(int key, quint32 nativeScanCode, bool sh
         selection_->setMagneticWidth(selection_->magneticWidth() + (step > 0 ? 1 : -1));
         return true;
     }
+    if (active_ == ToolId::FreeformPen && pen_->get().magnetic) {
+        const int step = v->brush_shortcut_delta(key, nativeScanCode, false, true);
+        if (step == 0) {
+            return false;
+        }
+        PenOptions options = pen_->get();
+        options.magneticWidth = std::clamp(options.magneticWidth + (step > 0 ? 1 : -1), 1, 256);
+        pen_->set(options);
+        return true;
+    }
     const bool paint = isBrushTool(active_);
     const int delta = v->brush_shortcut_delta(key, nativeScanCode, shift, paint);
     if (delta == 0) {
@@ -644,7 +654,11 @@ void ToolController::bindCanvas(ImageView* canvas)
         return;
     }
     connect(canvas_, &ImageView::mousePressed, this, &ToolController::handlePressed);
+    tabletPressureAvailable_ = false;
+    pressure_ = 1.0;
     connect(canvas_, &ImageView::pointerPressure, this, &ToolController::setPressure);
+    connect(canvas_, &ImageView::pointerTabletPressureAvailable, this,
+            &ToolController::setTabletPressureAvailable);
     connect(canvas_, &ImageView::pointerPose, this, &ToolController::setPointerPose);
     connect(canvas_, &ImageView::mouseMoved, this, &ToolController::handleMoved);
     connect(canvas_, &ImageView::modifierKeyChanged, this, &ToolController::handleModifiers);

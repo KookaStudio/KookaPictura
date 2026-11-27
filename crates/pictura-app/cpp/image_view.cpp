@@ -906,6 +906,7 @@ void ImageView::mousePressEvent(QMouseEvent* event)
         // A real mouse has no pressure; a mouse event synthesized from a
         // tablet keeps the pressure its tablet event just reported.
         if (!tabletActive_ && event->source() != Qt::MouseEventSynthesizedByQt) {
+            emit pointerTabletPressureAvailable(false);
             emit pointerPressure(1.0);
         }
         pressTrace_.clock.restart();
@@ -929,14 +930,17 @@ void ImageView::tabletEvent(QTabletEvent* event)
     switch (event->type()) {
     case QEvent::TabletPress:
         tabletActive_ = true;
+        emit pointerTabletPressureAvailable(true);
         emit pointerPressure(event->pressure());
         emit pointerPose(event->xTilt(), event->yTilt(), event->rotation(), 0.0);
         break;
     case QEvent::TabletMove:
+        emit pointerTabletPressureAvailable(true);
         emit pointerPressure(event->pressure());
         emit pointerPose(event->xTilt(), event->yTilt(), event->rotation(), 0.0);
         break;
     case QEvent::TabletRelease:
+        emit pointerTabletPressureAvailable(true);
         emit pointerPressure(event->pressure());
         emit pointerPose(event->xTilt(), event->yTilt(), event->rotation(), 0.0);
         tabletActive_ = false;
@@ -950,6 +954,10 @@ void ImageView::tabletEvent(QTabletEvent* event)
 void ImageView::mouseMoveEvent(QMouseEvent* event)
 {
     const FrameViewportTiming timing(*this);
+    if (!tabletActive_ && event->source() != Qt::MouseEventSynthesizedByQt) {
+        emit pointerTabletPressureAvailable(false);
+        emit pointerPressure(1.0);
+    }
     const Qt::MouseButtons buttons = event->buttons();
     if (panning_ && (buttons & (Qt::MiddleButton | Qt::LeftButton))) {
         // A screen-space drag moves the turned canvas along with the pointer.
