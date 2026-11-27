@@ -16,6 +16,14 @@
 ## 3. Integration
 
 - [x] 3.1 Review `ROADMAP.md` and `PARITY.md`, update coverage and issue links consistently, including the delivered #530 commands and remaining #531 and #532 work.
-- [ ] 3.2 After implementation is complete, run the permitted build and relevant Qt and catalogue tests, then project gates and strict OpenSpec validation; record results and resolve failures.
+- [x] 3.2 After implementation is complete, run the permitted build and relevant Qt and catalogue tests, then project gates and strict OpenSpec validation; record results and resolve failures.
 - [x] 3.3 Archive the change after tracker review.
-- [ ] 3.4 Include any manual plan rows in the PR checklist.
+- [x] 3.4 Include any manual plan rows in the PR checklist.
+
+Mac Docker verified source `7fcfd2f95470c88f284c86272d5300541f4f9fc3`.
+Arch Linux x86-64 RelWithDebInfo built with the Qt Test targets.
+CTest passed all 15 scoped suites. The scoped Rust runs passed 118 tests,
+with three profiling tests ignored. Strict OpenSpec validation passed all
+551 items. The archived scenario plan, archive, parity, file-size and
+repository guards passed. The packaged launcher self-test passed 466
+checks, with one skipped. The archived plan has no manual rows.
