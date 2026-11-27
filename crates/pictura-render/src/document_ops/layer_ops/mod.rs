@@ -10,7 +10,7 @@ mod clipboard;
 mod clipping;
 mod create;
 mod crossed_quad;
-mod kernel;
+pub(super) mod kernel;
 mod layer_comps;
 #[cfg(test)]
 mod layer_comps_tests;

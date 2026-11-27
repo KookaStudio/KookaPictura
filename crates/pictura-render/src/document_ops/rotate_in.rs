@@ -5,14 +5,15 @@
 //! store, and vector-mask subpath is resampled about a document-space pivot,
 //! the canvas grows to the rotated content's axis-aligned bounding box, and the
 //! document is translated so the box's top-left is the origin. Sampling is the
-//! same bilinear inverse map and clamp-to-edge rule as
-//! `pictura_ops::rotate_in`, over the shared [`pictura_core::Sample`] domain.
+//! same inverse map and clamp-to-edge rule as `pictura_ops::rotate_in`, over
+//! the shared [`pictura_core::Sample`] domain. Bilinear remains the legacy kernel.
 //! Every plane is resampled into spillable tiles a strip at a time (#1294); the
 //! dense inverse map stays as the tiled one's oracle.
 
 use pictura_core::memory::MemoryError;
 use pictura_core::{Document, Plane, PsdRect, Sample, Samples, SourceChannels, TileSample};
 
+use super::layer_ops::kernel::{self, Interpolation};
 use super::{for_each_layer, geometry_tiled, materialize_merged_composite, sync_vector_mask_block};
 
 /// The largest accepted magnitude, matching `pictura_ops::rotate_in`.
@@ -42,6 +43,7 @@ struct Rotation {
     /// Translation added after rotation so the rotated canvas' min lands on 0.
     ox: f64,
     oy: f64,
+    interpolation: Interpolation,
 }
 
 impl Rotation {
@@ -96,16 +98,13 @@ fn rotated_rect(rect: PsdRect, rot: &Rotation) -> PsdRect {
 /// at `+0.5`), reading each tap's unit value through `at(px, py)`; outside the
 /// source rectangle the sample is the zero of the domain. The dense and the
 /// tiled resamplers differ only in `at`, so their output is byte-identical.
-fn sample_with<T: Sample>(
+fn sample_bilinear<T: Sample>(
     sw: usize,
     sh: usize,
     x: f64,
     y: f64,
     at: impl Fn(usize, usize) -> f64,
 ) -> T {
-    if x < 0.0 || y < 0.0 || x > sw as f64 || y > sh as f64 {
-        return T::from_unit(0.0);
-    }
     let u = x - 0.5;
     let v = y - 0.5;
     let x0f = u.floor();
@@ -121,6 +120,35 @@ fn sample_with<T: Sample>(
     let top = at(x0, y0) * (1.0 - fx) + at(x1, y0) * fx;
     let bottom = at(x0, y1) * (1.0 - fx) + at(x1, y1) * fx;
     T::from_unit(top * (1.0 - fy) + bottom * fy)
+}
+
+fn sample_window<T: Sample>(
+    source: (usize, usize),
+    point: (f64, f64),
+    window: &[T],
+    width: usize,
+    origin: (usize, usize),
+    interpolation: Interpolation,
+) -> T {
+    let (sw, sh) = source;
+    let (x, y) = point;
+    if x < 0.0 || y < 0.0 || x > sw as f64 || y > sh as f64 {
+        return T::from_unit(0.0);
+    }
+    let (x0, y0) = origin;
+    if interpolation == Interpolation::Bilinear {
+        return sample_bilinear(sw, sh, x, y, |ix, iy| {
+            window[(iy - y0) * width + ix - x0].to_unit()
+        });
+    }
+    kernel::sample(
+        window,
+        width,
+        window.len() / width,
+        x - x0 as f64,
+        y - y0 as f64,
+        interpolation,
+    )
 }
 
 /// The dense inverse map of one plane (`sw×sh` at source `rect`) into `dest`,
@@ -142,12 +170,13 @@ fn resample_samples<T: Sample + Copy>(
             let qx = dest.left as f64 + xx as f64 + 0.5;
             let qy = dest.top as f64 + yy as f64 + 0.5;
             let (px, py) = rot.inverse(qx, qy);
-            out.push(sample_with(
+            out.push(sample_window(
+                (sw, sh),
+                (px - src_rect.left as f64, py - src_rect.top as f64),
+                src,
                 sw,
-                sh,
-                px - src_rect.left as f64,
-                py - src_rect.top as f64,
-                |ix, iy| src[iy * sw + ix].to_unit(),
+                (0, 0),
+                rot.interpolation,
             ));
         }
     }
@@ -196,8 +225,8 @@ fn rotate_tiled<T: TileSample + Sample>(
             (lo_x, hi_x) = (lo_x.min(x), hi_x.max(x));
             (lo_y, hi_y) = (lo_y.min(y), hi_y.max(y));
         }
-        // Taps sit at floor(c − 0.5) and one past it; two more each side
-        // absorb the corners' rounding against an interior pixel's.
+        // Cubic taps span floor(c − 0.5) − 1 through +2. Keep one
+        // extra sample at each side for floating-point roundoff.
         let span = |lo: f64, hi: f64, n: usize| {
             let max = (n - 1) as f64;
             let first = ((lo - 0.5).floor() - 2.0).clamp(0.0, max) as usize;
@@ -210,10 +239,14 @@ fn rotate_tiled<T: TileSample + Sample>(
         let ww = geometry_tiled::read_window(src, (sw, sh), channel, xs, ys, window);
         for r in 0..b.h {
             for (c, o) in out[r * stride..][..b.w].iter_mut().enumerate() {
-                let (x, y) = source(b.x + c, b.y + r);
-                *o = sample_with(sw, sh, x, y, |ix, iy| {
-                    window[(iy - y0) * ww + ix - x0].to_unit()
-                });
+                *o = sample_window(
+                    (sw, sh),
+                    source(b.x + c, b.y + r),
+                    window,
+                    ww,
+                    (x0, y0),
+                    rot.interpolation,
+                );
             }
         }
     })
@@ -354,6 +387,17 @@ pub fn rotate_document_in_offset(
 /// document centre, returns `true` (delegating to the exact remap for the
 /// latter).
 pub fn rotate_document_in(doc: &mut Document, angle_deg: f64, pivot: (f64, f64)) -> bool {
+    rotate_document_in_with(doc, angle_deg, pivot, Interpolation::Bilinear)
+}
+
+/// Rotate a document using the selected raster kernel. An exact turn about
+/// the canvas centre maps indices directly, regardless of interpolation.
+pub fn rotate_document_in_with(
+    doc: &mut Document,
+    angle_deg: f64,
+    pivot: (f64, f64),
+    interpolation: Interpolation,
+) -> bool {
     if !angle_deg.is_finite() || !(-MAX_ANGLE..=MAX_ANGLE).contains(&angle_deg) {
         return false;
     }
@@ -363,12 +407,9 @@ pub fn rotate_document_in(doc: &mut Document, angle_deg: f64, pivot: (f64, f64))
     if angle_deg == 0.0 {
         return true;
     }
-    // An exact quarter turn about the document centre is the exact index remap,
-    // but only when no vector mask needs its vertices rotated (the exact remap
-    // does not touch them).
     let w = doc.width as f64;
     let h = doc.height as f64;
-    if pivot == (w / 2.0, h / 2.0) && !has_vector_mask(&doc.layers) {
+    if pivot == (w / 2.0, h / 2.0) {
         let normalized = angle_deg.rem_euclid(360.0);
         let quarter = match normalized {
             a if (a - 90.0).abs() < 1e-9 => Some(1u8),
@@ -377,14 +418,19 @@ pub fn rotate_document_in(doc: &mut Document, angle_deg: f64, pivot: (f64, f64))
             _ => None,
         };
         if let Some(q) = quarter {
-            return super::rotate_document(doc, q).is_ok();
+            if !has_vector_mask(&doc.layers) {
+                return super::rotate_document(doc, q).is_ok();
+            }
+            // The exact remap doesn't rotate vector vertices. In the geometry
+            // path each pixel centre still maps to one source pixel.
+            return rotate_frame(doc, f64::from(q) * 90.0, pivot, Interpolation::Nearest).is_ok();
         }
     }
 
     if doc.source.multichannel_plates() {
         return false;
     }
-    rotate_frame(doc, angle_deg, pivot).is_ok()
+    rotate_frame(doc, angle_deg, pivot, interpolation.resolve(1, 1)).is_ok()
 }
 
 /// The document's rotation and its new canvas.
@@ -404,16 +450,23 @@ fn rotation(width: u32, height: u32, angle_deg: f64, pivot: (f64, f64)) -> (Rota
         sin,
         ox,
         oy,
+        interpolation: Interpolation::Bilinear,
     };
     (rot, new_w, new_h)
 }
 
 /// Resample every plane into spillable tiles (#1294) on a copy that shares the
 /// document's planes, so a refused strip leaves the document unchanged.
-fn rotate_frame(doc: &mut Document, angle_deg: f64, pivot: (f64, f64)) -> Result<(), MemoryError> {
+fn rotate_frame(
+    doc: &mut Document,
+    angle_deg: f64,
+    pivot: (f64, f64),
+    interpolation: Interpolation,
+) -> Result<(), MemoryError> {
     let mut next = doc.clone();
     materialize_merged_composite(&mut next);
-    let (rot, new_w, new_h) = rotation(next.width, next.height, angle_deg, pivot);
+    let (mut rot, new_w, new_h) = rotation(next.width, next.height, angle_deg, pivot);
+    rot.interpolation = interpolation;
     if let Some(job) = pictura_core::job::current() {
         job.begin_stage(rotated_rows(&mut next, &rot, new_h));
     }
@@ -723,6 +776,197 @@ mod tests {
         let geo = frame_geometry(w as f64, h as f64, 30.0, pivot);
         assert!((ox - (geo.new_w as f64 / 2.0 - pivot.0)).abs() < 1e-9);
         assert!((oy - (geo.new_h as f64 / 2.0 - pivot.1)).abs() < 1e-9);
+    }
+
+    const INTERPOLATIONS: [Interpolation; 6] = [
+        Interpolation::Nearest,
+        Interpolation::Bilinear,
+        Interpolation::Bicubic,
+        Interpolation::BicubicSmoother,
+        Interpolation::BicubicSharper,
+        Interpolation::BicubicAutomatic,
+    ];
+
+    #[test]
+    fn tiled_rotation_uses_selected_interpolation() {
+        let (w, h) = (310, 83);
+        let n = w as usize * h as usize;
+        let source = canvas_rect(w, h);
+        let pixels: Vec<u8> = (0..n)
+            .map(|i| {
+                if (i / w as usize + i % w as usize).is_multiple_of(3) {
+                    255
+                } else {
+                    0
+                }
+            })
+            .collect();
+        let mask: Vec<u8> = pixels.iter().map(|&v| 255 - v).collect();
+        let native: Vec<u16> = pixels.iter().map(|&v| u16::from(v) * 251).collect();
+        let mut layer = pixel_layer("Contrast", source, n);
+        layer.channels_mut()[0].data = pixels.clone().into();
+        layer.mask = Some(LayerMask {
+            rect: source,
+            default_color: 0,
+            data: Some(mask.clone().into()),
+            ..Default::default()
+        });
+        layer.source_channels = Some(SourceChannels::new(
+            BitDepth::Sixteen,
+            source,
+            vec![(0, Samples::U16(native.clone().into()))],
+        ));
+        let mut before = Document::new(w, h, ColorMode::Rgb, BitDepth::Sixteen);
+        before.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        before.channels.push(Channel {
+            id: 0,
+            data: mask.clone().into(),
+        });
+
+        let pivot = (f64::from(w) / 2.0, f64::from(h) / 2.0);
+        let degrees = 21.0;
+        let (rotation, new_w, new_h) = rotation(w, h, degrees, pivot);
+        assert!(new_w > 256);
+        let dest = canvas_rect(new_w, new_h);
+        let mut prior_red = Vec::new();
+        for interpolation in INTERPOLATIONS {
+            let mut actual = before.clone();
+            assert!(rotate_document_in_with(
+                &mut actual,
+                degrees,
+                pivot,
+                interpolation
+            ));
+            assert_eq!((actual.width, actual.height), (new_w, new_h));
+
+            let dense_rotation = Rotation {
+                interpolation: interpolation.resolve(1, 1),
+                ..rotation
+            };
+            let layer = &actual.layers[0];
+            let wanted_red = resample_samples(
+                &pixels,
+                w as usize,
+                h as usize,
+                source,
+                dest,
+                &dense_rotation,
+            );
+            let wanted_mask =
+                resample_samples(&mask, w as usize, h as usize, source, dest, &dense_rotation);
+            let wanted_native = resample_samples(
+                &native,
+                w as usize,
+                h as usize,
+                source,
+                dest,
+                &dense_rotation,
+            );
+            assert_eq!(layer.rect, dest);
+            assert_eq!(wanted_red[0], 0);
+            assert_eq!(wanted_mask[0], 0);
+            assert!(layer.channels()[0].data.is_tiled());
+            assert_eq!(
+                layer.channels()[0].data,
+                wanted_red,
+                "{interpolation:?} raster"
+            );
+            assert_eq!(
+                layer.mask.as_ref().unwrap().data.as_ref().unwrap(),
+                &wanted_mask
+            );
+            assert_eq!(
+                actual.channels[0].data, wanted_mask,
+                "{interpolation:?} document channel"
+            );
+            let Samples::U16(native_plane) = &layer.source_channels.as_ref().unwrap().planes[0].1
+            else {
+                panic!("expected 16-bit samples");
+            };
+            assert_eq!(native_plane, &wanted_native);
+
+            if interpolation == Interpolation::BicubicAutomatic {
+                assert_eq!(wanted_red, prior_red[2]);
+            } else {
+                assert!(
+                    !prior_red.contains(&wanted_red),
+                    "{interpolation:?} must be distinct"
+                );
+                prior_red.push(wanted_red);
+            }
+        }
+    }
+
+    #[test]
+    fn rotation_sampling_has_analytic_edges_and_seams() {
+        let cases = [
+            (Interpolation::Nearest, 100u8, 16_000u16),
+            (Interpolation::Bilinear, 50, 8_000),
+            (Interpolation::Bicubic, 44, 7_000),
+            (Interpolation::BicubicSmoother, 52, 8_333),
+            (Interpolation::BicubicSharper, 41, 6_500),
+        ];
+        let seam = [0u8, 0, 100, 200];
+        let native = [0u16, 0, 16_000, 32_000];
+        for (method, expected, expected_native) in cases {
+            // The window spans source columns 254..258; x=256 lies on
+            // the destination tile seam between source pixel centres.
+            assert_eq!(
+                sample_window((520, 1), (256.0, 0.5), &seam, 4, (254, 0), method),
+                expected
+            );
+            assert_eq!(
+                sample_window((520, 1), (256.0, 0.5), &native, 4, (254, 0), method),
+                expected_native
+            );
+            let edge = [100u8, 100, 100, 100];
+            assert_eq!(
+                sample_window((4, 1), (0.25, 0.5), &edge, 4, (0, 0), method),
+                100
+            );
+            assert_eq!(
+                sample_window((4, 1), (-0.01, 0.5), &edge, 4, (0, 0), method),
+                0
+            );
+            assert_eq!(
+                sample_window((4, 1), (4.01, 0.5), &edge, 4, (0, 0), method),
+                0
+            );
+        }
+    }
+
+    #[test]
+    fn vector_mask_right_angle_rotation_is_exact() {
+        let mut before = doc();
+        before.layers[1].channels_mut()[0].data =
+            (0..15).map(|i| (i * 13) as u8).collect::<Vec<_>>().into();
+        let mut exact = before.clone();
+        super::super::rotate_document(&mut exact, 1).unwrap();
+        before.layers[1].vector_mask = Some(pictura_core::VectorMask {
+            subpaths: vec![pictura_core::VectorSubpath {
+                closed: true,
+                points: vec![[0, 0], [1280, 0], [1280, 768]],
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        for interpolation in INTERPOLATIONS {
+            let mut actual = before.clone();
+            assert!(rotate_document_in_with(
+                &mut actual,
+                90.0,
+                (2.5, 1.5),
+                interpolation
+            ));
+            assert_eq!((actual.width, actual.height), (3, 5));
+            assert_eq!(actual.layers[1].rect, exact.layers[1].rect);
+            assert_eq!(actual.layers[1].channels(), exact.layers[1].channels());
+            let vector = actual.layers[1].vector_mask.as_ref().unwrap();
+            assert_eq!(
+                vector.subpaths[0].points,
+                [[768, 0], [768, 1280], [0, 1280]]
+            );
+        }
     }
 
     #[test]

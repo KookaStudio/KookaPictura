@@ -181,6 +181,7 @@ private:
     QLabel* languageStatus_ = nullptr;
     QPushButton* languageRestart_ = nullptr;
     QComboBox* pickerChoice_ = nullptr;
+    QComboBox* imageInterpolation_ = nullptr;
     QComboBox* autoSaveMinutes_ = nullptr;
     QComboBox* nativeSaveCompatibility_ = nullptr;
     QComboBox* rawSettingsStore_ = nullptr;

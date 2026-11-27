@@ -68,6 +68,7 @@ fields! {
     "color" / "textGammaEnabled": bool = true;
     "color" / "textGamma": f64 = 1.45;
     "general" / "pickerChoice": i32 = 0;
+    "general" / "imageInterpolation": String = "bicubic".into();
     "general" / "useShiftKeyForToolSwitch": bool = true;
     "general" / "zoomResizesWindows": bool = false;
     "general" / "historyLogEnabled": bool = false;
@@ -241,6 +242,13 @@ fn normalize(key: &str, value: Json) -> Result<Json, String> {
         "colorPolicy" | "cmykPolicy" | "nativeSaveCompatibility" => Json::from(bounded(0..=2, 0)),
         "renderIntent" => Json::from(bounded(0..=3, 1)),
         "pickerChoice" | "rawSettingsStore" => Json::from(bounded(0..=1, 0)),
+        "imageInterpolation" => Json::from(
+            value
+                .as_str()
+                .and_then(pictura_render::Interpolation::from_id)
+                .unwrap_or(pictura_render::Interpolation::Bicubic)
+                .id(),
+        ),
         "agentApprovalMode" => Json::from(int().clamp(0, 2)),
         "historyLogDestination" | "historyLogVerbosity" => Json::from(int().clamp(0, 2)),
         "fontPreviewSize" => Json::from(int().clamp(0, 5)),

@@ -109,7 +109,9 @@ pub use pictura_raw::{
     preview_pictura_raw,
 };
 pub use resize::{resize_document, resize_document_with_styles, resized_plane_bytes};
-pub use rotate_in::{rotate_document_in, rotate_document_in_offset, rotated_plane_bytes};
+pub use rotate_in::{
+    rotate_document_in, rotate_document_in_offset, rotate_document_in_with, rotated_plane_bytes,
+};
 pub use slices::{
     add_slice, clear_slices, remove_slice, resolve_export_slices, resolve_slices, set_slice, Slice,
 };

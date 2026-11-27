@@ -533,6 +533,7 @@ free	photo_info	photo_info	api/filters_bridge.h	pictura_app/src/cxxqt_object/fil
 free	read_watermark	read_watermark	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools.cxxqt.h
 free	reveal_all	reveal_all	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h
 free	rotate_document_arbitrary	rotate_document_arbitrary	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h
+free	rotate_document_arbitrary_with	rotate_document_arbitrary_with	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h
 free	trim_image	trim_image	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h
 free	vp_active	vp_active	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/vanishing_point.cxxqt.h
 free	vp_angle	vp_angle	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/vanishing_point.cxxqt.h
