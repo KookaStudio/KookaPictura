@@ -4,6 +4,19 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Olympus-compressed ORF, #1535** (OpenSpec change
+  `vendor-raw-orf-compressed`; `codec/vendor-raw-containers` modified).
+  `dng/orf_decode.rs` ports LibRaw 0.22.1's `olympus14.cpp` openly (owner
+  decision; LGPL-2.1 → GPL-3.0+), 12 and 14 bits. `orf.rs` decodes one strip
+  shorter than 1.5 bytes a photosite with the ImageProcessing coding tags
+  `0x0640`-`0x0653` (`orf_meta.rs`); 14-bit levels are recorded at 12 bits
+  and scaled by 4. Maker notes are read with `Tiff::ifd_skipping_strays`
+  (E-P1/E-PL1 carry an entry pointing before the file). Sequential decode:
+  0.5 s for 20 MP, 1.8 s for 81 MP. Bit-exact against LibRaw (rawpy) on 23
+  files / 17 bodies (`compressed_orfs_match_libraw_when_present`); synthetic
+  coverage through the test encoder `raw/orf_encode.rs`. Samples:
+  `~/Downloads/orf-1535`. US7715639B2 (active to 2029-02) recorded in
+  PROVENANCE, not assessed.
 - **SuperCCD SR merge, #1648** (OpenSpec change `raf-superccd-sr-merge`;
   `codec/vendor-raw-containers`, `codec/raw-demosaic` modified,
   `document/raw-open` added). SR bodies (SuperCCD word sections with a
@@ -241,14 +254,14 @@ Snapshot for resuming after a context break. Update after each milestone.
   and `document/raw-open` modified). `dng/orf.rs`: headers `IIRO`/`IIRS`/`MMOR`;
   IFD0 is the sensor image and the coding follows from strip bytes per
   photosite (2 = left-aligned words, 1.6 = LSB + pad, 1.5 = MSB, over LE
-  32-bit words under `IIRO`, two interlaced fields under `IIRS`; one shorter strip = compressed, refused).
+  32-bit words under `IIRO`, two interlaced fields under `IIRS`; one shorter strip = compressed, #1535).
   `dng/orf_meta.rs`: the three maker-note generations, ImageProcessing, then
   RawInfo, then main tags. Colour: the embedded camera → sRGB matrix as
   ForwardMatrix + ColorMatrix, anchored on 6600 K / fine-weather / as-shot WB
   (no Olympus in rawtoaces-data; warm tones lean pink on SP-350/510/550).
-  Checked on the 22 uncompressed raw.pixls.us files. Compressed ORF = #1535, blocked on
-  provenance and a patent check: do not write that decoder from a model's
-  memory or search for existing ones.
+  Checked on the 22 uncompressed raw.pixls.us files. Compressed ORF shipped
+  in #1535 as an attributed LibRaw port; never present a model-written
+  decoder of it as clean-room.
 - **Crop resampling and non-destructive Reveal All — #544 implemented**
   (OpenSpec change `crop-resampling-nondestructive`, archived; new capabilities
   `tools/crop-resampling` and `tools/non-destructive-crop`). `W x H x Resolution`

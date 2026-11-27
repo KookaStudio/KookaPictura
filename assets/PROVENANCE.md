@@ -227,13 +227,35 @@ public documentation of the Olympus tags (#1471). Colour uses the matrix each
 file embeds, read as camera to sRGB after comparing files with their own
 camera JPEGs; it is approximate, and leaves warm tones pink on some early
 compacts (SP-350, SP-510UZ, SP-550UZ). No dcraw, LibRaw or rawspeed code is
-used.
+used in this container reader; the compressed coding below is a separate,
+ported module.
 
-The compressed coding is not implemented (#1535). The AI session that wrote
-this container saw a web-search summary quoting fragments of third-party
-decoders of that coding, and a separate agent's attempt to derive it stopped
-on recognising training memory of such a decoder. Nothing from either is
-included.
+## Olympus compressed coding (`crates/pictura-codec/src/dng/orf_decode.rs`)
+
+**Ported code, not an independent implementation.** The AI session that
+wrote the ORF container saw a web-search summary quoting fragments of
+third-party decoders of this coding, and a separate agent's attempt to
+derive it from patents and samples stopped on recognising training memory
+of such a decoder; nothing from either was kept. By owner decision (#1535)
+the coding is then ported openly from LibRaw 0.22.1 (Source:
+https://github.com/LibRaw/LibRaw, tag `0.22.1`, commit
+b860248a89d9082b8e0a1e202e516f46af9adb29, file
+`src/decoders/olympus14.cpp`): the stream header check, the bit pump, the
+adaptive code with its escape, the fine context and the neighbour
+predictor. LibRaw is dual-licensed **LGPL-2.1** or **CDDL-1.0**; the port
+takes the LGPL-2.1 and is distributed under **GPL-3.0-or-later** as
+LGPL-2.1 section 3 permits. The file carries LibRaw's copyright notice
+(Alex Tutubalin, LibRaw LLC). The port was checked sample for sample
+against LibRaw 0.22.1's raw plane (through rawpy) on 23 compressed files
+from 17 bodies, E-410 to OM-1 Mark II, two of them 14-bit (raw.pixls.us and
+local samples, not committed).
+
+Patents (OVR-004): a Google Patents status search on 2026-11-22 listed
+US7715639B2 as active, with an adjusted expiration of 2029-02-01, and
+US7333035B2, US7259698B2 and JP2006211155A (JP4434974B2) as expired.
+Whether the active patent covers ORF files or decoding them has not been
+assessed; this is not a legal conclusion, and the owner decides before
+merge.
 
 ## Panasonic RW2 container (`crates/pictura-codec/src/dng/rw2.rs`)
 
