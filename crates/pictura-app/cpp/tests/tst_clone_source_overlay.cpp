@@ -10,6 +10,7 @@
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QToolButton>
 #include <QtGui/QPainter>
 #include <utility>
@@ -91,6 +92,18 @@ void CloneSourceOverlayTest::flipAndOffset()
     QCOMPARE(offset->value(), 35.0);
 }
 
+namespace {
+void editOpacity(pictura::NumericField* field, int percent)
+{
+    auto* edit = field->findChild<QLineEdit*>();
+    QVERIFY(edit);
+    edit->selectAll();
+    QTest::keyClicks(edit, QString::number(percent));
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(field->value(), double(percent));
+}
+}
+
 void CloneSourceOverlayTest::controlsAndSlots()
 {
     QVERIFY(stateHome_.isValid());
@@ -118,7 +131,7 @@ void CloneSourceOverlayTest::controlsAndSlots()
     hide->setChecked(true);
     clip->setChecked(true);
     invert->setChecked(true);
-    opacity->setValue(37);
+    editOpacity(opacity, 37);
     mode->setCurrentIndex(3);
     sourceSlots->setSlot(1);
     QVERIFY(!show->isChecked());
@@ -361,7 +374,7 @@ void CloneSourceOverlayTest::blendAndOpacity()
     QCOMPARE(colors[1], QColor(60, 80, 40));
     QCOMPARE(colors[2], QColor(200, 120, 180));
     QCOMPARE(colors[3], QColor(140, 40, 140));
-    t.opacity->setValue(0);
+    editOpacity(t.opacity, 0);
     const QColor zero = t.pixel(QPointF(42, 20));
     t.show->setChecked(false);
     QCOMPARE(t.pixel(QPointF(42, 20)), zero);
@@ -379,7 +392,7 @@ void CloneSourceOverlayTest::sourceAlpha()
     QVERIFY(t.ready());
     t.arm(pictura::ToolId::CloneStamp);
     t.invert->setChecked(true);
-    t.opacity->setValue(50);
+    editOpacity(t.opacity, 50);
     const QColor transparent = t.pixel(QPointF(42, 20));
     const QColor partial = t.pixel(QPointF(46, 20));
     t.show->setChecked(false);
@@ -396,7 +409,7 @@ void CloneSourceOverlayTest::grayAlignment()
     OverlayFixture t(seed);
     QVERIFY(t.ready());
     t.arm(pictura::ToolId::CloneStamp);
-    t.opacity->setValue(50);
+    editOpacity(t.opacity, 50);
     t.invert->setChecked(true);
     const QColor c = t.pixel(QPointF(42, 20));
     QVERIFY(qAbs(c.red() - 128) <= 2);
