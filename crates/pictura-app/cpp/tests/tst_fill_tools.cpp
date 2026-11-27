@@ -425,7 +425,8 @@ void FillToolsTest::paintBucketTool()
     fill->setCurrentIndex(1);
     const int plain = f.view->history_index();
     f.drag({QPointF(1, 1)});
-    const bool patterned = pattern->isEnabled() && f.tools->optionsFor<pictura::BucketGroup>(pictura::ToolId::PaintBucket)->get().fill == 1
+    const auto bucketOptions = f.tools->optionsFor<pictura::BucketGroup>(pictura::ToolId::PaintBucket)->get();
+    const bool patterned = pattern->isEnabled() && bucketOptions.fill == 1 && bucketOptions.pattern == 0
         && f.committedOnce(plain, "Paint Bucket")
         && f.view->sample_argb(1, 1) == QColor(215, 215, 215).rgba()
         && f.view->sample_argb(33, 1) == QColor(90, 90, 90).rgba();

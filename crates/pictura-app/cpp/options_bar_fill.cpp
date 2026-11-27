@@ -332,27 +332,34 @@ QWidget* OptionsBar::buildPaintBucketPage(ToolId id)
             }
             pattern->addItem(index >= 0 ? patternIcon(index) : QIcon(QPixmap::fromImage(item.preview)),
                              item.name, item.native);
+            pattern->setItemData(pattern->count() - 1, index, Qt::UserRole + 1);
         }
         pattern->setCurrentIndex(current >= 0 ? current : (pattern->count() ? 0 : -1));
     };
     rebuild();
-    const QByteArray chosenPreset = pattern->currentData().toByteArray();
-    update([chosenPreset](BucketOptions& o) { o.patternPreset = chosenPreset; o.pattern = -1; });
+    const auto updatePattern = [update, pattern] {
+        const auto preset = pattern->currentData().toByteArray();
+        const int index = pattern->currentIndex() < 0
+            ? -1 : pattern->currentData(Qt::UserRole + 1).toInt();
+        update([preset, index](BucketOptions& o) {
+            o.patternPreset = preset;
+            o.pattern = index;
+        });
+    };
+    updatePattern();
     pattern->setEnabled(initial.fill == 1);
     layout->addWidget(pattern);
     connect(fill, &QComboBox::currentIndexChanged, this, [update, pattern](int i) {
         pattern->setEnabled(i == 1);
         update([i](BucketOptions& o) { o.fill = i; });
     });
-    connect(pattern, &QComboBox::currentIndexChanged, this, [update, pattern](int i) {
-        const QByteArray preset = i >= 0 ? pattern->itemData(i).toByteArray() : QByteArray();
-        update([preset](BucketOptions& o) { o.patternPreset = preset; o.pattern = -1; });
-    });
-    connect(&store, &PresetStore::changed, this, [rebuild, update, pattern](int kind) {
-        if (kind != int(PresetType::Patterns)) return;
+    connect(pattern, &QComboBox::currentIndexChanged, this, updatePattern);
+    connect(&store, &PresetStore::changed, pattern, [rebuild, updatePattern](int kind) {
+        if (kind != int(PresetType::Patterns)) {
+            return;
+        }
         rebuild();
-        const QByteArray preset = pattern->currentData().toByteArray();
-        update([preset](BucketOptions& o) { o.patternPreset = preset; o.pattern = -1; });
+        updatePattern();
     });
 
     auto* mode =
