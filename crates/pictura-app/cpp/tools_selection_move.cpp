@@ -7,6 +7,7 @@
 #include "file_drop_router.h"
 #include "image_view.h"
 #include "selection_drag.h"
+#include "tool_handler.h"
 
 #include "api/selection_bridge.h"
 
@@ -206,6 +207,15 @@ void ToolController::releaseSelectionMove(const QPointF& imagePos)
     } else if (v) {
         pictura::cancel_selection_move(*v);
         emit selectionMovePreviewed();
+    }
+    const bool lineClick = v && dx == 0 && dy == 0 && !selectionMoveDragged_
+        && (active_ == ToolId::SingleRowMarquee || active_ == ToolId::SingleColumnMarquee);
+    if (lineClick) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            const QPointF anchor = selectionMoveAnchor_;
+            handler->onPress(*this, anchor, Qt::NoModifier);
+            handler->onRelease(*this, anchor, Qt::NoModifier);
+        }
     }
     refreshCursor();
 }

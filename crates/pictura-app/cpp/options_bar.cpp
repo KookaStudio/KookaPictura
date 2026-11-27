@@ -1134,18 +1134,17 @@ void OptionsBar::showTool(ToolId id)
     }
     refreshDocumentFacts();
     stack_->setCurrentIndex(static_cast<int>(id));
-    if (controller_) {
-        if (SelectionOptions* group = controller_->optionsFor<SelectionOptions>(id)) {
-            QWidget* page = stack_->currentWidget();
-            for (QToolButton* button : page->findChildren<QToolButton*>()) {
-                const QVariant mode = button->property("selectionMode");
-                if (mode.isValid()) {
-                    button->setChecked(mode.toInt() == int(group->combineMode()));
-                }
+    auto* group = controller_ ? controller_->optionsFor<SelectionOptions>(id) : nullptr;
+    if (group) {
+        QWidget* page = stack_->currentWidget();
+        for (QToolButton* button : page->findChildren<QToolButton*>()) {
+            const QVariant mode = button->property("selectionMode");
+            if (mode.isValid()) {
+                button->setChecked(mode.toInt() == int(group->combineMode()));
             }
-            if (auto* feather = page->findChild<NumericField*>(QStringLiteral("optionsFeather"))) {
-                feather->setValue(group->feather());
-            }
+        }
+        if (auto* feather = page->findChild<NumericField*>(QStringLiteral("optionsFeather"))) {
+            feather->setValue(group->feather());
         }
     }
     updateStackPolicies();

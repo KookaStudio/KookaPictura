@@ -293,28 +293,29 @@ pub(super) fn selection_below_half(view: &PictureView) -> bool {
     let ys = bounds.top as usize..bounds.bottom as usize;
     let mut nonzero = false;
     let mut above = false;
-    sel.data.for_each_tile(xs.clone(), ys.clone(), sel.width as usize, |tile| {
-        if above {
-            return;
-        }
-        match tile.uniform() {
-            Some(v) => {
-                nonzero |= v > 0;
-                above |= v > 127;
+    sel.data
+        .for_each_tile(xs.clone(), ys.clone(), sel.width as usize, |tile| {
+            if above {
+                return;
             }
-            None => {
-                let cols = xs.start.max(tile.x)..xs.end.min(tile.x + tile.w);
-                let rows = ys.start.max(tile.y)..ys.end.min(tile.y + tile.h);
-                for y in rows {
-                    let row = tile.row(y - tile.y).unwrap_or(&[]);
-                    for &v in &row[cols.start - tile.x..cols.end - tile.x] {
-                        nonzero |= v > 0;
-                        above |= v > 127;
+            match tile.uniform() {
+                Some(v) => {
+                    nonzero |= v > 0;
+                    above |= v > 127;
+                }
+                None => {
+                    let cols = xs.start.max(tile.x)..xs.end.min(tile.x + tile.w);
+                    let rows = ys.start.max(tile.y)..ys.end.min(tile.y + tile.h);
+                    for y in rows {
+                        let row = tile.row(y - tile.y).unwrap_or(&[]);
+                        for &v in &row[cols.start - tile.x..cols.end - tile.x] {
+                            nonzero |= v > 0;
+                            above |= v > 127;
+                        }
                     }
                 }
             }
-        }
-    });
+        });
     nonzero && !above
 }
 

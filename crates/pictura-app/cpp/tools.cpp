@@ -1083,19 +1083,8 @@ void ToolController::handleReleased(const QPointF& imagePos)
         return;
     }
     if (movingSelection_) {
-        const bool lineClick = !contentMove_ && !selectionMoveDragged_
-            && (active_ == ToolId::SingleRowMarquee || active_ == ToolId::SingleColumnMarquee)
-            && qRound(imagePos.x() - selectionMoveAnchor_.x()) == 0
-            && qRound(imagePos.y() - selectionMoveAnchor_.y()) == 0;
-        const QPointF anchor = selectionMoveAnchor_;
         dragging_ = false;
         releaseSelectionMove(imagePos);
-        if (lineClick) {
-            if (ToolHandler* h = registry_.forTool(active_)) {
-                h->onPress(*this, anchor, Qt::NoModifier);
-                h->onRelease(*this, anchor, Qt::NoModifier);
-            }
-        }
         return;
     }
     if (ToolHandler* h = registry_.forTool(active_); h && !sliceEditingBlocked()) {
