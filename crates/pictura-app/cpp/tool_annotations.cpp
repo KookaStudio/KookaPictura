@@ -1,4 +1,5 @@
 #include "tool_handler.h"
+#include "tools.h"
 
 #include "image_view.h"
 
@@ -128,6 +129,70 @@ std::unique_ptr<ToolHandler> makeColorSamplerToolHandler()
 std::unique_ptr<ToolHandler> makeNoteToolHandler()
 {
     return std::make_unique<MarkerToolHandler>(kNote);
+}
+
+// Color samplers, notes, and Count marks are shown with every tool, as CS6's
+// Extras are.
+void ToolController::refreshAnnotations()
+{
+    if (!canvas_) {
+        return;
+    }
+    PictureView* v = view();
+    QList<QPointF> lists[2];
+    for (int kind = 0; kind < 2; ++kind) {
+        const int count = v && v->has_document() ? marker_count(*v, kind) : 0;
+        for (int i = 0; i < count; ++i) {
+            const ::rust::Vec<std::int32_t> p = marker_at(*v, kind, i);
+            if (p.size() == 2) {
+                lists[kind].append(QPointF(p[0], p[1]));
+            }
+        }
+    }
+    // Undo can remove the current note.
+    if (currentNote_ >= lists[1].size()) {
+        setCurrentNote(-1);
+    }
+    canvas_->setAnnotationOverlay(lists[0], lists[1], currentNote_);
+
+    // Count marks, flattened from the visible groups.
+    QList<ImageView::CountOverlayMark> counts;
+    if (v && v->has_document()) {
+        const int groups = count_group_count(*v);
+        for (int g = 0; g < groups; ++g) {
+            if (!count_group_visible(*v, g)) {
+                continue;
+            }
+            const QColor color(QRgb(count_group_color(*v, g)));
+            const int markerSize = count_group_marker_size(*v, g);
+            const int labelSize = count_group_label_size(*v, g);
+            const int total = count_group_total(*v, g);
+            for (int i = 0; i < total; ++i) {
+                const ::rust::Vec<std::int32_t> p = count_group_mark_at(*v, g, i);
+                if (p.size() == 2) {
+                    counts.append({QPointF(p[0], p[1]), i + 1, color, markerSize, labelSize});
+                }
+            }
+        }
+    }
+    canvas_->setCountOverlay(counts);
+    refreshGuides();
+}
+
+void ToolController::setCurrentNote(int index)
+{
+    if (currentNote_ == index) {
+        return;
+    }
+    currentNote_ = index;
+    refreshAnnotations();
+    emit noteActivated(index);
+}
+
+bool ToolController::clearAnnotations()
+{
+    ToolHandler* h = registry_.forTool(active_);
+    return h && h->clearAnnotations();
 }
 
 } // namespace pictura
