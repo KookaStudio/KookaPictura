@@ -1,13 +1,21 @@
 // Image > Mode: color-mode and bit-depth conversions, ported from photorust.
 
-#include <QtTest/QtTest>
 #include <QtCore/QTimer>
+#include <QtGui/QImage>
+#include <QtTest/QtTest>
 #include <QtWidgets/QAbstractButton>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QComboBox>
+#include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QTableWidget>
+
+#include <functional>
 
 #include "bitmap_mode_dialog.h"
 #include "commands.h"
+#include "color_table_dialog.h"
 #include "frame.h"
 #include "indexed_color_dialog.h"
 
@@ -34,11 +42,23 @@ private slots:
     void bitmapNeedsGrayscaleAndSavesAsBitmap();
     void depthConversionsSaveTheirDepth();
     void indexedDialogEnablesOnlyMeaningfulOptions();
-    void bitmapDialogOffersThreeMethods();
+    void bitmapDialogShowsMethodOptions();
+    void recordedBitmapMethodsReplayTheirOptions();
+    void modalBitmapReplayPrefillsEditsAndCancels();
+    void silentBitmapReplayRefusesMissingPattern();
+    void exactFallsBackWhenOptionsExceedCapacity();
+    void exactRemainsAvailableAtCapacity();
+    void indexedColorTableCancelKeepsDocument();
+    void colorTableCommitCanBeUndone();
+    void colorTableInterpolatesRange();
+    void colorTableActRoundTrip();
+    void colorTableRejectsShortAct();
+    void colorTableUnchangedAcceptance();
 
 private:
     // A new white RGB document filled with `color`; returns its view.
     pictura::PictureView* newFilled(const QColor& color);
+    pictura::PictureView* newBitmapSource();
     // Save `view` to a temporary PSD, reopen it in a fresh view, and report the
     // reopened document's mode and depth.
     QPair<QString, int> reopened(pictura::PictureView* view);
@@ -361,15 +381,406 @@ void ImageModeTest::indexedDialogEnablesOnlyMeaningfulOptions()
     QVERIFY(!exact.findChild<QComboBox*>(QStringLiteral("indexedDither"))->isEnabled());
 }
 
-void ImageModeTest::bitmapDialogOffersThreeMethods()
+namespace {
+
+void answerBitmapDialog(QTimer& timer, const std::function<bool(pictura::BitmapModeDialog&)>& answer)
 {
-    pictura::BitmapModeDialog dialog;
+    QObject::connect(&timer, &QTimer::timeout, &timer, [&timer, answer] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (!widget->isVisible()) {
+                continue;
+            }
+            if (auto* dialog = qobject_cast<pictura::BitmapModeDialog*>(widget)) {
+                timer.stop();
+                if (answer(*dialog)) {
+                    dialog->accept();
+                } else {
+                    dialog->reject();
+                }
+                return;
+            }
+            if (auto* warning = qobject_cast<QMessageBox*>(widget);
+                warning && warning->text() == QStringLiteral("Flatten layers?")) {
+                if (auto* ok = warning->button(QMessageBox::Ok)) {
+                    ok->click();
+                    return;
+                }
+            }
+        }
+    });
+    timer.start(2);
+}
+
+QVector<quint32> bitmapPixels(const pictura::PictureView& view)
+{
+    QVector<quint32> pixels;
+    for (int y = 0; y < 12; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            pixels.append(view.composite_argb(x, y));
+        }
+    }
+    return pixels;
+}
+
+} // namespace
+
+pictura::PictureView* ImageModeTest::newBitmapSource()
+{
+    auto* view = newFilled(QColor(128, 128, 128));
+    if (!view || !pictura::convert_image_mode(*view, QStringLiteral("grayscale"))) {
+        return nullptr;
+    }
+    window_->registry()->refresh();
+    return view;
+}
+
+void ImageModeTest::bitmapDialogShowsMethodOptions()
+{
+    auto* view = newBitmapSource();
+    QVERIFY(view);
+    pictura::BitmapModeDialog dialog(*view);
     auto* method = dialog.findChild<QComboBox*>(QStringLiteral("bitmapMethod"));
-    QVERIFY(method);
-    QCOMPARE(method->count(), 3);
+    auto* screen = dialog.findChild<QWidget*>(QStringLiteral("bitmapScreenOptions"));
+    auto* pattern = dialog.findChild<QWidget*>(QStringLiteral("bitmapPatternOptions"));
+    auto* unit = dialog.findChild<QComboBox*>(QStringLiteral("bitmapFrequencyUnit"));
+    auto* frequency = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapFrequency"));
+    auto* shape = dialog.findChild<QComboBox*>(QStringLiteral("bitmapShape"));
+    QVERIFY(method && screen && pattern && unit && frequency && shape);
+    QCOMPARE(method->count(), 5);
     QCOMPARE(dialog.method(), 0);
-    method->setCurrentIndex(2);
+    QVERIFY(screen->isHidden());
+    QVERIFY(pattern->isHidden());
+
+    method->setCurrentIndex(method->findData(3));
+    QVERIFY(!screen->isHidden());
+    QVERIFY(pattern->isHidden());
+    QCOMPARE(shape->count(), 6);
+    QCOMPARE(frequency->minimum(), 1.0);
+    QCOMPARE(frequency->maximum(), 999.999);
+    unit->setCurrentIndex(1);
+    QCOMPARE(frequency->minimum(), 0.4);
+    QCOMPARE(frequency->maximum(), 400.0);
+
+    method->setCurrentIndex(method->findData(4));
+    QVERIFY(screen->isHidden());
+    QVERIFY(!pattern->isHidden());
+    method->setCurrentIndex(method->findData(2));
     QCOMPARE(dialog.method(), 2);
+    QVERIFY(screen->isHidden());
+    QVERIFY(pattern->isHidden());
+    closeActive();
+}
+
+void ImageModeTest::recordedBitmapMethodsReplayTheirOptions()
+{
+    const QString id = QString::fromLatin1(pictura::command_ids::ImageModeBitmap);
+    auto* registry = window_->registry();
+    for (int selected : {3, 4}) {
+        auto* view = newBitmapSource();
+        QVERIFY(view);
+        const int originalHistory = view->history_count();
+        pictura::CommandParams recorded;
+        registry->setRecordingSink([&](const QString& commandId, const auto& params) {
+            if (commandId == id) {
+                recorded = params;
+            }
+        });
+        QTimer timer;
+        answerBitmapDialog(timer, [selected](pictura::BitmapModeDialog& dialog) {
+            auto* method = dialog.findChild<QComboBox*>(QStringLiteral("bitmapMethod"));
+            method->setCurrentIndex(method->findData(selected));
+            if (selected == 3) {
+                dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapFrequency"))->setValue(9.0);
+                dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapAngle"))->setValue(23.0);
+                dialog.findChild<QComboBox*>(QStringLiteral("bitmapShape"))->setCurrentIndex(3);
+            } else {
+                auto* pattern = dialog.findChild<QComboBox*>(QStringLiteral("bitmapPattern"));
+                pattern->setCurrentIndex(pattern->findData(QStringLiteral("Pictura Checkerboard")));
+            }
+            return true;
+        });
+        const bool dispatched = registry->dispatch(id);
+        registry->setRecordingSink({});
+        QVERIFY(dispatched);
+        QCOMPARE(recorded.values.value(QStringLiteral("method")).toInt(), selected);
+        QCOMPARE(view->history_count(), originalHistory + 1);
+        QCOMPARE(pictura::image_depth_bits(*view), 1);
+        const auto expected = bitmapPixels(*view);
+        QVERIFY(expected.contains(qRgb(0, 0, 0)));
+        QVERIFY(expected.contains(qRgb(255, 255, 255)));
+        closeActive();
+
+        view = newBitmapSource();
+        QVERIFY(view);
+        const int replayHistory = view->history_count();
+        QVERIFY(registry->executeRecorded(id, recorded));
+        QCOMPARE(bitmapPixels(*view), expected);
+        QCOMPARE(view->history_count(), replayHistory + 1);
+        QCOMPARE(view->history_label(replayHistory), QStringLiteral("Convert Mode"));
+        closeActive();
+    }
+}
+
+void ImageModeTest::modalBitmapReplayPrefillsEditsAndCancels()
+{
+    const QString id = QString::fromLatin1(pictura::command_ids::ImageModeBitmap);
+    auto* registry = window_->registry();
+    for (int selected : {3, 4}) {
+        auto* view = newBitmapSource();
+        QVERIFY(view);
+        const int history = view->history_count();
+        pictura::CommandParams params;
+        params.values = {
+            {QStringLiteral("method"), selected},
+            {QStringLiteral("frequency"), 11.0},
+            {QStringLiteral("perCm"), true},
+            {QStringLiteral("angle"), -22.0},
+            {QStringLiteral("shape"), 4},
+            {QStringLiteral("patternId"), QStringLiteral("Pictura Checkerboard")},
+        };
+        bool prefilled = false;
+        QTimer accepted;
+        answerBitmapDialog(accepted, [&](pictura::BitmapModeDialog& dialog) {
+            if (dialog.method() != selected) {
+                return false;
+            }
+            if (selected == 3) {
+                auto* frequency = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapFrequency"));
+                const auto* unit = dialog.findChild<QComboBox*>(QStringLiteral("bitmapFrequencyUnit"));
+                const auto* angle = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("bitmapAngle"));
+                const auto* shape = dialog.findChild<QComboBox*>(QStringLiteral("bitmapShape"));
+                prefilled = frequency->value() == 11.0 && unit->currentIndex() == 1
+                            && angle->value() == -22.0 && shape->currentIndex() == 4;
+                frequency->setValue(4.0);
+            } else {
+                auto* pattern = dialog.findChild<QComboBox*>(QStringLiteral("bitmapPattern"));
+                prefilled = pattern->currentData().toString() == QStringLiteral("Pictura Checkerboard");
+                pattern->setCurrentIndex(pattern->findData(QStringLiteral("Pictura Diagonal")));
+            }
+            return true;
+        });
+        QVERIFY(registry->executeRecorded(id, &params, pictura::CommandMode::Modal));
+        QVERIFY(prefilled);
+        QCOMPARE(view->history_count(), history + 1);
+        QCOMPARE(pictura::image_depth_bits(*view), 1);
+        if (selected == 3) {
+            QCOMPARE(params.values.value(QStringLiteral("frequency")).toDouble(), 4.0);
+        } else {
+            QCOMPARE(params.values.value(QStringLiteral("patternId")).toString(),
+                     QStringLiteral("Pictura Diagonal"));
+        }
+        closeActive();
+
+        view = newBitmapSource();
+        QVERIFY(view);
+        const int cancelHistory = view->history_count();
+        const auto before = params.values;
+        QTimer rejected;
+        answerBitmapDialog(rejected, [](auto&) { return false; });
+        QVERIFY(!registry->executeRecorded(id, &params, pictura::CommandMode::Modal));
+        QCOMPARE(params.values, before);
+        QCOMPARE(view->history_count(), cancelHistory);
+        QCOMPARE(pictura::image_mode(*view), QStringLiteral("grayscale"));
+        closeActive();
+    }
+}
+
+void ImageModeTest::silentBitmapReplayRefusesMissingPattern()
+{
+    auto* view = newBitmapSource();
+    QVERIFY(view);
+    const int history = view->history_count();
+    const auto before = bitmapPixels(*view);
+    pictura::CommandParams params;
+    params.values.insert(QStringLiteral("method"), 4);
+    params.values.insert(QStringLiteral("patternId"), QStringLiteral("missing-test-pattern"));
+    QVERIFY(!window_->registry()->executeRecorded(
+        QString::fromLatin1(pictura::command_ids::ImageModeBitmap), params));
+    QCOMPARE(pictura::image_mode(*view), QStringLiteral("grayscale"));
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(bitmapPixels(*view), before);
+    closeActive();
+}
+
+namespace {
+
+bool openExactSource(pictura::PictureView& view, const QString& path, int opaqueCount)
+{
+    QImage image(opaqueCount + 1, 1, QImage::Format_ARGB32);
+    for (int i = 0; i < opaqueCount; ++i) {
+        image.setPixel(i, 0, qRgb(i, 30, 80));
+    }
+    image.setPixel(opaqueCount, 0, qRgba(0, 0, 0, 0));
+    return image.save(path) && view.open_image(path);
+}
+
+QDialog* visibleColorTableDialog()
+{
+    for (auto* widget : QApplication::topLevelWidgets()) {
+        if (widget->objectName() == QStringLiteral("indexedColorTableDialog")
+            && widget->isVisible()) {
+            return qobject_cast<QDialog*>(widget);
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void ImageModeTest::exactFallsBackWhenOptionsExceedCapacity()
+{
+    pictura::PictureView view;
+    QVERIFY(openExactSource(view, dir_.filePath(QStringLiteral("exact-overflow.png")), 255));
+    QVERIFY(pictura::indexed_exact_available_with_options(view, true, {}));
+    pictura::IndexedColorDialog dialog(true, true, nullptr);
+    connect(&dialog, &pictura::IndexedColorDialog::optionsChanged, &dialog, [&] {
+        dialog.setExactAvailable(pictura::indexed_exact_available_with_options(
+            view, dialog.transparency(), dialog.forcedColors()));
+    });
+    auto* forced = dialog.findChild<QComboBox*>(QStringLiteral("indexedForced"));
+    QVERIFY(forced);
+    forced->setCurrentIndex(1);
+    QCOMPARE(dialog.palette(), 4);
+    QCOMPARE(dialog.findChild<QComboBox*>(QStringLiteral("indexedPalette"))->findData(0), -1);
+}
+
+void ImageModeTest::exactRemainsAvailableAtCapacity()
+{
+    pictura::PictureView view;
+    QVERIFY(openExactSource(view, dir_.filePath(QStringLiteral("exact-capacity.png")), 253));
+    QVERIFY(pictura::indexed_exact_available_with_options(view, true, {}));
+    pictura::IndexedColorDialog dialog(true, true, nullptr);
+    connect(&dialog, &pictura::IndexedColorDialog::optionsChanged, &dialog, [&] {
+        dialog.setExactAvailable(pictura::indexed_exact_available_with_options(
+            view, dialog.transparency(), dialog.forcedColors()));
+    });
+    auto* forced = dialog.findChild<QComboBox*>(QStringLiteral("indexedForced"));
+    QVERIFY(forced);
+    forced->setCurrentIndex(1);
+    QCOMPARE(dialog.palette(), 0);
+    QVERIFY(pictura::convert_to_indexed_with_options(
+        view, dialog.palette(), dialog.colors(), dialog.dither(), dialog.amount(),
+        dialog.transparency(), dialog.forcedColors()));
+    QCOMPARE(pictura::indexed_color_table(view).size(), qsizetype(256 * 4));
+}
+
+void ImageModeTest::indexedColorTableCancelKeepsDocument()
+{
+    auto* view = newFilled(Qt::red);
+    QVERIFY(view);
+    QVERIFY(pictura::convert_to_indexed(*view, 0, 256, 0, 0));
+    window_->registry()->refresh();
+    const auto before = pictura::indexed_color_table(*view);
+    const auto history = view->history_count();
+    auto* command = action(pictura::command_ids::ImageModeColorTable);
+    QVERIFY(command && command->isEnabled());
+    bool opened = false;
+    QTimer::singleShot(0, this, [&] {
+        auto* dialog = visibleColorTableDialog();
+        if (!dialog) {
+            return;
+        }
+        auto* table = dialog->findChild<QTableWidget*>(QStringLiteral("indexedColorTable"));
+        auto* clear = dialog->findChild<QPushButton*>(QStringLiteral("tableSetTransparent"));
+        opened = table && table->item(0, 0) && clear;
+        if (opened) {
+            table->setCurrentCell(0, 0);
+            clear->click();
+        }
+        dialog->reject();
+    });
+    command->trigger();
+    QVERIFY(opened);
+    QCOMPARE(pictura::indexed_color_table(*view), before);
+    QCOMPARE(view->history_count(), history);
+    closeActive();
+}
+
+void ImageModeTest::colorTableCommitCanBeUndone()
+{
+    auto* view = newFilled(Qt::red);
+    QVERIFY(view);
+    QVERIFY(pictura::convert_to_indexed(*view, 0, 256, 0, 0));
+    window_->registry()->refresh();
+    const auto before = pictura::indexed_color_table(*view);
+    const auto history = view->history_count();
+    auto edited = before;
+    edited[3] = 0;
+    auto* command = action(pictura::command_ids::ImageModeColorTable);
+    QVERIFY(command && command->isEnabled());
+    QTimer::singleShot(0, this, [] {
+        if (auto* dialog = visibleColorTableDialog()) {
+            auto* clear = dialog->findChild<QPushButton*>(QStringLiteral("tableSetTransparent"));
+            if (clear) {
+                clear->click();
+            }
+            dialog->accept();
+        }
+    });
+    command->trigger();
+    QCOMPARE(pictura::indexed_color_table(*view), edited);
+    QCOMPARE(qAlpha(view->composite_argb(4, 4)), 0);
+    QCOMPARE(view->history_count(), history + 1);
+    QVERIFY(view->undo());
+    QCOMPARE(pictura::indexed_color_table(*view), before);
+    QCOMPARE(qAlpha(view->composite_argb(4, 4)), 255);
+    closeActive();
+}
+
+void ImageModeTest::colorTableInterpolatesRange()
+{
+    pictura::PictureView view;
+    QVERIFY(openExactSource(view, dir_.filePath(QStringLiteral("interpolate.png")), 2));
+    QVERIFY(pictura::convert_to_indexed(view, 0, 256, 0, 0));
+    pictura::ColorTableDialog dialog(pictura::indexed_color_table(view), 3);
+    dialog.interpolate(0, 2, QColor(Qt::black), QColor(200, 100, 50));
+    QCOMPARE(dialog.table(), QByteArray::fromHex("000000ff643219ffc86432ff"));
+    QVERIFY(pictura::apply_indexed_color_table(view, dialog.table()));
+    QCOMPARE(view.composite_argb(0, 0), qRgb(0, 0, 0));
+    QCOMPARE(view.composite_argb(1, 0), qRgb(100, 50, 25));
+    QCOMPARE(view.composite_argb(2, 0), qRgb(200, 100, 50));
+}
+
+void ImageModeTest::colorTableActRoundTrip()
+{
+    const auto table = QByteArray::fromHex("104080ff90602000");
+    pictura::ColorTableDialog dialog(table, 2);
+    pictura::ColorTableDialog reader(QByteArray::fromHex("000000ffffffffff"), 2);
+    QVERIFY(reader.loadAct(dialog.saveAct()));
+    QCOMPARE(reader.table(), table);
+}
+
+void ImageModeTest::colorTableRejectsShortAct()
+{
+    const auto table = QByteArray::fromHex("104080ff90602000");
+    pictura::ColorTableDialog dialog(table, 2);
+    const auto shortAct = pictura::encode_indexed_act(QByteArray::fromHex("000000ff"));
+    QVERIFY(!dialog.loadAct(shortAct));
+    QCOMPARE(dialog.table(), table);
+}
+
+void ImageModeTest::colorTableUnchangedAcceptance()
+{
+    auto* view = newFilled(Qt::blue);
+    QVERIFY(view);
+    QVERIFY(pictura::convert_to_indexed(*view, 0, 256, 0, 0));
+    window_->registry()->refresh();
+    const auto before = pictura::indexed_color_table(*view);
+    const auto history = view->history_count();
+    auto* command = action(pictura::command_ids::ImageModeColorTable);
+    QVERIFY(command && command->isEnabled());
+    bool accepted = false;
+    QTimer::singleShot(0, this, [&accepted] {
+        if (auto* dialog = visibleColorTableDialog()) {
+            accepted = true;
+            dialog->accept();
+        }
+    });
+    command->trigger();
+    QVERIFY(accepted);
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(pictura::indexed_color_table(*view), before);
+    closeActive();
 }
 
 PICTURA_QT_TEST_MAIN(ImageModeTest)

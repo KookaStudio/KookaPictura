@@ -13,4 +13,4 @@ class PictureView;
 
 int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 pictura::PicturaMainWindow& frame, pictura::PictureView* view,
-                const QImage& image, bool codecLoaded, int gpu);
+                QImage image, bool documentMode, int gpu);

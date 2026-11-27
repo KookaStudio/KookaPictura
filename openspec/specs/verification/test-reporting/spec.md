@@ -11,7 +11,7 @@ The system SHALL provide a unified end-of-run test report spanning every test
 layer: Rust unit, integration, and oracle tests, the C++
 application self-test, and the C++ Qt Test executables. `scripts/test-report.sh`
 SHALL run the workspace suite under `cargo nextest run --workspace --no-fail-fast`,
-run the self-test both with and without a document fixture, run
+run the self-test once with the `two_layers.psd` document fixture, run
 the Qt Test layer through `ctest --test-dir build -R '^tst_' --output-on-failure -j
 <level>` (CTest registers each executable under
 `build/crates/pictura-app/cpp/tests/` and passes
@@ -386,14 +386,216 @@ be counted as passing, skipped, or absent.
 
 ### Requirement: The test layers run concurrently
 
-The unified report SHALL run the test layers that do not share the workspace
-build directory at the same time: the two application self-test invocations
-SHALL run concurrently with each other and with the Qt Test layer, so the
-report's wall time is not the sum of the layers' durations. The layers SHALL
-still each produce their own capture, and a failure in any layer SHALL still
-fail the report.
+The application SHALL run one combined self-test invocation and retain its
+capture. When `PICTURA_QT_SELFTEST_OVERLAP=1`, it SHALL also run while the remaining Qt Test
+targets build after `pictura` has linked. The overlap flag SHALL default to
+disabled, and CI and local adapters SHALL NOT enable it until #1570 records a
+net wall-time improvement on four vCPUs without new flakes or CPU-contention
+regressions. CTest SHALL wait for the full Qt Test build and the self-test run
+to finish. A failure in any layer SHALL still fail the report.
 
 #### Scenario: the self-test layer overlaps the Qt Test layer [tr_layers_concurrent]
 
-- **WHEN** `scripts/test-report.sh` runs with a built application and built Qt Test executables
-- **THEN** both self-test invocations run while the Qt Test layer runs, and the report's wall time is below the sum of the layers' individual durations
+- **WHEN** the shared Qt executor runs with a built application and built Qt Test executables
+- **THEN** one combined self-test invocation retains its capture, and a failure fails the report
+
+#### Scenario: build-tail overlap is opt-in [qe_overlap_opt_in]
+
+- **WHEN** `PICTURA_QT_SELFTEST_OVERLAP=1` and the Qt Test build tail is still running after `pictura` links
+- **THEN** the combined self-test starts before the build tail finishes, and CTest starts only after the build tail and self-test finish
+
+#### Scenario: overlap stays disabled before measurement [qe_overlap_default]
+
+- **WHEN** the shared Qt executor runs without `PICTURA_QT_SELFTEST_OVERLAP=1`
+- **THEN** it waits for the self-test run before starting the remaining Qt Test build
+
+### Requirement: One shared Qt execution implementation
+
+CI and local verification SHALL use `scripts/test-report.sh` as the single Qt
+execution implementation. The script SHALL own optional configuration, staged
+builds, self-test captures, stale-result cleanup, CTest selection, missing-report
+validation, and reporter invocation. Workflow-only setup SHALL remain in the CI
+adapter. Rust nextest SHALL remain a separate stage and SHALL NOT overlap the Qt
+build, self-test, or CTest stages in this change.
+
+#### Scenario: CI delegates Qt execution [qe_ci_shared]
+
+- **WHEN** the CI Qt job configures, builds, self-tests, runs CTest, and reports Qt results
+- **THEN** it invokes the same `scripts/test-report.sh` Qt mode used by local verification and does not duplicate that ordering in YAML
+
+#### Scenario: the local full gate delegates Qt execution [qe_local_adapter]
+
+- **WHEN** `scripts/verify-full.sh` runs
+- **THEN** it reaches the shared Qt executor through `scripts/verify-fast.sh` with configure and build enabled, and performs no separate CMake build
+
+#### Scenario: nextest stays separate [qe_nextest_separate]
+
+- **WHEN** the shared script runs its default local mode
+- **THEN** nextest finishes as its own stage before Qt configuration, builds, self-tests, or CTest begin
+
+### Requirement: Qt builds are staged with one Ninja writer
+
+When building is requested, the shared Qt executor SHALL configure first, build
+and link `pictura` before starting the self-test invocation, and then build
+all remaining targets. It SHALL run at most one `cmake --build` process against
+the build tree at a time. CTest SHALL start only after the full build succeeds
+and every required Qt Test executable exists.
+
+#### Scenario: pictura links before self-tests [qe_pictura_first]
+
+- **WHEN** the shared Qt executor performs a staged build
+- **THEN** the `pictura` target build completes before the self-test invocation starts
+
+#### Scenario: CTest waits for every Qt executable [qe_ctest_after_build]
+
+- **WHEN** the remaining Qt Test targets are still compiling or linking
+- **THEN** CTest has not started, and after the full build succeeds CTest runs only then
+
+#### Scenario: one Ninja writer owns the tree [qe_single_ninja]
+
+- **WHEN** self-tests overlap an enabled Qt Test build tail
+- **THEN** no second `cmake --build` or Ninja process runs against the same build tree
+
+### Requirement: Qt execution preserves failure identity and process cleanup
+
+The shared Qt executor SHALL retain the combined self-test capture, run the
+reporter even after a failed stage, and return the first non-zero stage status
+in deterministic order. A failed `pictura` build SHALL
+prevent self-tests and CTest. A failed Qt Test build SHALL prevent CTest. On
+interrupt or termination, the executor SHALL terminate and reap its child
+processes before exiting.
+
+#### Scenario: self-test failure identity survives aggregation [qe_failure_identity]
+
+- **WHEN** the combined self-test exits 9
+- **THEN** the reporter receives its capture and the executor exits 9
+
+#### Scenario: a failed build stops later stages [qe_build_failure]
+
+- **WHEN** the `pictura` build or the remaining Qt Test build fails
+- **THEN** the executor skips the stages that depend on it, still reports available captures and missing reports, and returns the build's exit status
+
+#### Scenario: termination reaps children [qe_signal_cleanup]
+
+- **WHEN** the executor receives SIGINT or SIGTERM while a build or self-test child is running
+- **THEN** it terminates and reaps those children, removes temporary captures, and exits with the signal's conventional non-zero status
+
+### Requirement: Qt report inputs stay fresh and complete
+
+Before any stage can produce a Qt result, the shared Qt executor SHALL remove
+old `build/qt-test-results/*.xml` files. After CTest, it SHALL pass the current
+per-suite JUnit files and the CTest registration JSON to the reporter. A
+registered suite with no current report SHALL fail the run and be named, even
+when a stale file for that suite existed before the run.
+
+#### Scenario: stale JUnit files are removed [qe_stale_cleanup]
+
+- **WHEN** a previous run left JUnit files for suites that no longer produce reports
+- **THEN** those files are removed before execution and do not appear in the new report
+
+#### Scenario: missing reports are named [qe_missing_report]
+
+- **WHEN** a CTest-registered suite exits without writing its JUnit report
+- **THEN** the reporter names that suite as having produced no report and the executor exits non-zero
+
+### Requirement: Qt execution records stage timings
+
+The shared Qt executor SHALL print elapsed durations for Configure, the
+`pictura` build, the Qt Test build tail, the self-test invocation, CTest, and
+reporting. A stage that is skipped SHALL say so rather than report a fabricated
+zero duration. The timing output SHALL be sufficient for #1570 to compare the
+sequential and overlapped candidates.
+
+#### Scenario: every executed Qt stage is timed [qe_timings]
+
+- **WHEN** the shared Qt executor completes a staged run
+- **THEN** its output records all six stage durations, including the self-test duration
+
+### Requirement: Overlap retention depends on measurement
+
+The build-tail overlap SHALL remain disabled in CI and local adapters until
+#1570 measures it on a four-vCPU runner and records a net wall-time improvement
+without new flakes or CPU-contention regressions. The executor SHALL retain an
+explicit disable switch so a measured regression can be reverted without
+changing code.
+
+#### Scenario: four-vCPU measurement decides retention [qe_overlap_measurement]
+
+- **WHEN** #1570 compares sequential and overlapped staged runs on four vCPUs
+- **THEN** the adapters enable overlap only if the measured net result is positive, and otherwise leave it disabled
+
+### Requirement: Qt Test duration evidence is retained and published
+
+The reporter SHALL keep the duration it already parses from each Qt Test JUnit
+report instead of discarding it: the Qt layer SHALL carry each suite's `time`
+attribute, and the rendered report SHALL print that duration beside the suite's
+counts when it is non-zero. A missing or malformed `time` SHALL read as zero and
+SHALL NOT fail the report.
+
+`scripts/qt_test_timings.py` SHALL collect every per-entry JUnit report and,
+when present, CTest's per-entry `--output-junit` wall time into one
+timing store at `build/qt-test-timings.json`, recording per-suite seconds,
+per-function seconds, and per-entry wall time. The shared `scripts/test-report.sh`
+executor SHALL write the store and print the longest entries after the Qt Test
+layer in both local and CI runs. The Qt-aware CI job SHALL upload the raw JUnit reports, CTest's `ctest-junit.xml`, and the
+timing store as one artifact on every run. The longest-entry report SHALL mark
+each entry as within or over a quarter of the layer's measured total.
+
+#### Scenario: The report keeps suite durations [tr_qt_durations]
+
+- **WHEN** the reporter renders a Qt Test layer whose JUnit reports carry `time` attributes
+- **THEN** each suite's seconds appear beside its counts, and a report without any `time` attribute still renders with zero durations and exits 0
+
+#### Scenario: The timing store is written after the layer runs [tr_qt_timing_store]
+
+- **WHEN** `scripts/test-report.sh` finishes the Qt Test layer with at least one JUnit report
+- **THEN** `build/qt-test-timings.json` holds each suite's seconds and functions and each CTest entry's execution time
+
+#### Scenario: CI publishes the raw timing artifacts [tr_qt_timing_artifact]
+
+- **WHEN** the Qt-aware CI job finishes, successfully or not
+- **THEN** it uploads the JUnit reports, `build/ctest-junit.xml`, and `build/qt-test-timings.json` as the `qt-test-timings` artifact
+
+#### Scenario: The longest entry is reported against the quarter budget [tr_qt_longest_entry]
+
+- **WHEN** the timing store holds per-entry execution times
+- **THEN** the reporter prints each entry's seconds and marks it within or over a quarter of the layer's measured total
+
+### Requirement: One in-process self-test capture preserves the unique check set
+
+The unified report SHALL launch one application self-test process with the
+`two_layers.psd` fixture. The process SHALL start on the scratch document and
+run `fresh_white` while one mutable boolean is false. It SHALL
+then open the fixture in-process, close the scratch document after a successful
+open, update the active view and image, and set that same boolean from the open
+result. The 36 document-only checks SHALL run only when the boolean is true.
+The 466 shared checks SHALL run once. The combined
+capture SHALL contain the same unique `(suite, name)` check keys as the merged
+legacy bare and document captures, currently 503.
+
+#### Scenario: One process produces one summary [tr_single_document_capture]
+
+- **WHEN** `scripts/test-report.sh` runs with a built application
+- **THEN** it starts one self-test process with `two_layers.psd`, passes one capture to the reporter, and that capture ends with exactly one SUMMARY
+
+#### Scenario: The combined capture keeps the legacy unique checks [tr_unique_checks_preserved]
+
+- **WHEN** the 466 shared checks, `fresh_white`, and 36 document-only checks pass
+- **THEN** the report contains 503 unique check entries, with no duplicate shared checks
+
+#### Scenario: Mode-specific checks stay mutually exclusive [tr_mode_conditional_checks]
+
+- **WHEN** the self-test starts and the document has not opened
+- **THEN** it runs `fresh_white` and does not run the document-only block, and after a successful in-process open it runs the document-only block without running `fresh_white` again
+
+### Requirement: A single self-test capture keeps its summary and unique entries
+
+The reporter SHALL use a single complete capture's SUMMARY as the layer total
+and SHALL build the displayed check entries from that capture's unique
+`(suite, name)` keys. Multi-capture merging SHALL keep its existing FAIL-wins
+behavior and recomputed unique totals.
+
+#### Scenario: One summary remains authoritative [tr_single_summary_authoritative]
+
+- **WHEN** one complete self-test capture contains unique checks and a matching SUMMARY
+- **THEN** the app-self-test subtotal equals that SUMMARY and the listed entries equal the capture's unique check keys

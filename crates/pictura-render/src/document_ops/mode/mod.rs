@@ -7,18 +7,24 @@
 //! `source_palette` / `source_depth` stores the PSD writer already re-emits, so
 //! a converted document saves in its new mode instead of only being relabelled.
 //!
-//! ponytail: Duotone (no ink model to author), the Color
-//! Table, Bitmap Halftone Screen / Custom Pattern, and Grayscale-from-Bitmap's
-//! size ratio are not converted; CMYK/Lab are profile-free (no ICC working
+//! ponytail: Duotone (no ink model to author) and Grayscale-from-Bitmap's
+//! size ratio are not converted. CMYK/Lab are profile-free (no ICC working
 //! space); a conversion into CMYK/Lab of a 16-bit document, or out of one,
 //! passes through the 8-bit working planes.
 
 mod flat;
+mod indexed;
 mod multichannel;
 mod planes;
 mod stream;
 
-pub use flat::{convert_to_bitmap, convert_to_indexed, indexed_exact_available, BitmapMethod};
+pub use flat::{
+    convert_to_bitmap, indexed_exact_available, BitmapMethod, HalftoneScreen, HalftoneShape,
+};
+pub use indexed::{
+    convert_to_indexed, convert_to_indexed_with_forced, indexed_color_table,
+    indexed_color_table_minimum, indexed_exact_fits, replace_indexed_color_table,
+};
 
 use std::borrow::Cow;
 
@@ -232,7 +238,10 @@ pub fn convert_bit_depth(doc: &mut Document, out: BitDepth) -> Result<(), OpsErr
 /// color planes, so the display alpha plane is dropped unless the source signed
 /// it as merged transparency; any other document is borrowed unchanged.
 pub fn save_view(doc: &Document) -> Cow<'_, Document> {
-    let drops_alpha = !(doc.source.mode().is_none() && doc.channels.is_empty())
+    let retains_indexed_alpha = doc.source.mode() == Some(ColorMode::Indexed)
+        && pictura_codec::indexed_metadata(doc).1.is_some();
+    let drops_alpha = !retains_indexed_alpha
+        && !(doc.source.mode().is_none() && doc.channels.is_empty())
         && !doc.composite.signed_merged_alpha()
         && doc.mode == ColorMode::Rgb;
     if doc.composite.merged_output()

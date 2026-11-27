@@ -55,6 +55,118 @@ pub fn quantize(rgba: &[u8], width: u32, height: u32, options: PaletteOptions) -
     }
 }
 
+/// Quantize an Indexed document with mandatory colors and an optional exact
+/// palette. Refuse a table that cannot hold all required entries.
+pub fn quantize_document_indexed(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    options: PaletteOptions,
+    forced: &[[u8; 3]],
+    exact: bool,
+) -> Option<Indexed> {
+    if forced.is_empty() && !exact {
+        return Some(quantize(rgba, width, height, options));
+    }
+
+    let (rgb, transparent) = laid_over(rgba, width as usize * height as usize, options);
+    let has_clear = transparent.contains(&true);
+    let opaque_capacity = 256 - usize::from(has_clear);
+    let mut palette = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for &color in forced {
+        if seen.insert(color) {
+            palette.push(color);
+        }
+    }
+    if palette.len() > opaque_capacity {
+        return None;
+    }
+
+    if exact {
+        for (color, &clear) in rgb.iter().zip(&transparent) {
+            if !clear {
+                let key = color.map(|channel| channel.round() as u8);
+                if seen.insert(key) {
+                    if palette.len() == opaque_capacity {
+                        return None;
+                    }
+                    palette.push(key);
+                }
+            }
+        }
+    } else {
+        let target = usize::from(options.colors).max(palette.len() + usize::from(has_clear));
+        let budget = target.clamp(2, 256) - usize::from(has_clear);
+        let remaining = budget.saturating_sub(palette.len());
+        if remaining > 0 {
+            let generated = if options.reduction == ColorReduction::Restrictive {
+                web_safe_palette()
+            } else {
+                let skip: Vec<_> = rgb
+                    .iter()
+                    .zip(&transparent)
+                    .map(|(color, &clear)| {
+                        clear || seen.contains(&color.map(|channel| channel.round() as u8))
+                    })
+                    .collect();
+                median_cut(&rgb, &skip, remaining, options.reduction)
+            };
+            palette.extend(
+                generated
+                    .into_iter()
+                    .filter(|color| seen.insert(*color))
+                    .take(remaining),
+            );
+        }
+    }
+
+    let mut mapping = options;
+    if exact {
+        mapping.dither = Dither::None;
+    }
+    let indices = map_pixels(&rgb, &transparent, width as usize, &palette, mapping);
+    let mut table: Vec<_> = palette
+        .into_iter()
+        .map(|[r, g, b]| [r, g, b, 255])
+        .collect();
+    if has_clear {
+        let [r, g, b] = options.matte;
+        table.push([r, g, b, 0]);
+    }
+    Some(Indexed {
+        width,
+        height,
+        palette: table,
+        indices,
+    })
+}
+
+/// Compute only whether the source and required entries fit an Exact table.
+pub fn indexed_document_exact_fits(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    options: PaletteOptions,
+    forced: &[[u8; 3]],
+) -> bool {
+    let (rgb, transparent) = laid_over(rgba, width as usize * height as usize, options);
+    let capacity = 256 - usize::from(transparent.contains(&true));
+    let mut colors: std::collections::HashSet<_> = forced.iter().copied().collect();
+    if colors.len() > capacity {
+        return false;
+    }
+    for (color, clear) in rgb.into_iter().zip(transparent) {
+        if !clear {
+            colors.insert(color.map(|channel| channel.round() as u8));
+            if colors.len() > capacity {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// Lay every pixel over the matte; with transparency the mostly clear ones are
 /// marked for the transparent entry.
 fn laid_over(rgba: &[u8], n: usize, options: PaletteOptions) -> (Vec<[f32; 3]>, Vec<bool>) {

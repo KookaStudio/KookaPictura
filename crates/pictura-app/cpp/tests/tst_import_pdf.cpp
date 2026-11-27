@@ -295,6 +295,7 @@ private slots:
     void epsCancelOpensNothing();
     void openAsIsLive();
     void openAsForcesFormat();
+    void openAsPict();
     void openAsReportsMismatch();
     void openAsReportsCorruptDecode();
     void openFiltersListPdfEps();
@@ -1158,6 +1159,31 @@ void ImportPdfTest::openAsForcesFormat()
     QVERIFY(window->openAsPath(path, png));
     QCOMPARE(window->activeView()->document_width(), 12);
     QCOMPARE(pixel(window->activeView(), 3, 3).rgba(), QColor(10, 200, 30).rgba());
+}
+
+// open_as_pict
+void ImportPdfTest::openAsPict()
+{
+    QTemporaryDir dir;
+    const QString fixture =
+        QFINDTESTDATA("../../../../crates/pictura-codec/tests/fixtures/pict_rgb.pct");
+    QVERIFY(!fixture.isEmpty());
+    const QString pict = dir.filePath(QStringLiteral("photo.pct"));
+    QVERIFY(QFile::copy(fixture, pict));
+    PicturaMainWindow* window = window_.get();
+    const int filter = int(openAsFileFilters().indexOf(QStringLiteral("PICT (*.PCT *.PIC *.PICT)")));
+    QVERIFY(filter >= 0);
+    QVERIFY(window->openAsPath(pict, filter));
+    QCOMPARE(window->activeView()->document_width(), 4);
+    QCOMPARE(window->activeView()->document_height(), 3);
+
+    QImage image(4, 4, QImage::Format_RGB32);
+    image.fill(Qt::red);
+    const QString notPict = dir.filePath(QStringLiteral("photo.png"));
+    QVERIFY(image.save(notPict));
+    QVERIFY(!window->openAsPath(notPict, filter));
+    QCOMPARE(status(*window),
+             QStringLiteral("Could not open photo.png: format mismatch or damaged file."));
 }
 
 // open_as_mismatch

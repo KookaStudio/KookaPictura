@@ -948,6 +948,11 @@ fn write_container_to(
     } else {
         (resources, false)
     };
+    let resources = if !indexed_mode && doc.source.mode() == Some(ColorMode::Indexed) {
+        crate::indexed_metadata::without_indexed_metadata(resources)
+    } else {
+        resources
+    };
     let resources = crate::variable_resources::output(doc, resources)?;
     sink.put(&(resources.len() as u32).to_be_bytes())?;
     sink.put(&resources)?;
@@ -962,7 +967,7 @@ fn write_container_to(
         || compatibility_placeholder && !doc.layers.is_empty())
         && merged
         && mode_code == MODE_RGB
-        && doc.source.mode().is_none()
+        && (doc.source.mode().is_none() || doc.source.mode() == Some(ColorMode::Indexed))
         && doc.composite.channels == 4
         && (doc.channels.is_empty() || signed_alpha);
     let used_layer_keys = write_layer_mask_section(sink, doc, psb, cache, merged_alpha)?;

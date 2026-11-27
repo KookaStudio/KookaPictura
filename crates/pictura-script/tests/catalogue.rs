@@ -151,9 +151,9 @@ fn default_catalogue_shape_is_stable() {
     assert_eq!(catalogue.len(), 693);
     assert_eq!(
         catalogue.iter().filter(|spec| spec.implemented).count(),
-        529
+        530
     );
-    assert_eq!(const_names().len(), 426);
+    assert_eq!(const_names().len(), 427);
 }
 
 #[test]

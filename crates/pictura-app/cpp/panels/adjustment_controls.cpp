@@ -4,7 +4,11 @@
 
 #include "color_picker_dialog.h"
 #include "curve_widget.h"
+#include "histogram_panel.h"
 #include "jump_slider.h"
+#include "theme.h"
+
+#include "api/filters_bridge.h"
 
 #include <QtGui/QPainter>
 #include <QtWidgets/QCheckBox>
@@ -71,6 +75,21 @@ void AdjustmentControls::setPage(const QStringList& page, bool holdValues)
     }
 }
 
+void AdjustmentControls::refreshThresholdHistogram(const PictureView& view, const QString& path)
+{
+    if (!thresholdHistogram_) {
+        return;
+    }
+    const auto counts = image_adjustment_threshold_histogram(view, path);
+    QVector<quint32> bins;
+    bins.reserve(qsizetype(counts.size()));
+    for (auto count : counts) {
+        bins.append(count);
+    }
+    thresholdHistogram_->setSeries(
+        {{bins, Theme::tokenColor(QStringLiteral("graph-axis"))}}, false);
+}
+
 void AdjustmentControls::insert(QWidget* widget)
 {
     layout_->insertWidget(layout_->count() - 1, widget);
@@ -86,12 +105,14 @@ void AdjustmentControls::clear()
     rows_.clear();
     groups_ = nullptr;
     curve_ = nullptr;
+    thresholdHistogram_ = nullptr;
     curveChannel_ = nullptr;
 }
 
 void AdjustmentControls::build(const QStringList& page)
 {
     clear();
+    const bool threshold = page.contains(QStringLiteral("threshold-histogram"));
     loading_ = true;
     for (const QString& line : page) {
         const QStringList cells = line.split(QLatin1Char('\t'));
@@ -113,7 +134,7 @@ void AdjustmentControls::build(const QStringList& page)
         } else if (kind == QLatin1String("curves")) {
             addCurves();
         } else if (kind == QLatin1String("slider")) {
-            addSlider(cells);
+            addSlider(cells, threshold);
         } else if (kind == QLatin1String("check")) {
             addCheck(cells);
         } else if (kind == QLatin1String("choice")) {
@@ -141,7 +162,7 @@ void AdjustmentControls::load(const QStringList& page)
     loading_ = false;
 }
 
-void AdjustmentControls::addSlider(const QStringList& cells)
+void AdjustmentControls::addSlider(const QStringList& cells, bool threshold)
 {
     const QString key = cells.value(1);
     const int decimals = cells.value(8).toInt();
@@ -161,6 +182,13 @@ void AdjustmentControls::addSlider(const QStringList& cells)
     head->addStretch(1);
     head->addWidget(spin);
     column->addLayout(head);
+    if (threshold) {
+        thresholdHistogram_ = new HistogramView(holder);
+        thresholdHistogram_->setObjectName(QStringLiteral("thresholdHistogram"));
+        thresholdHistogram_->setAccessibleName(tr("Luminance"));
+        thresholdHistogram_->setMinimumHeight(64);
+        column->addWidget(thresholdHistogram_);
+    }
     auto* slider = new JumpSlider(Qt::Horizontal, holder);
     slider->setObjectName(QStringLiteral("adjustmentSlider.") + key);
     slider->setRange(qRound(spin->minimum() * factor), qRound(spin->maximum() * factor));

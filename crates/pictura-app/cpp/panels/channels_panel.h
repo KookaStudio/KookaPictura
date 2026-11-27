@@ -9,6 +9,8 @@
 #include <QtGui/QPixmap>
 #include <QtWidgets/QWidget>
 
+#include <optional>
+
 class QLabel;
 class QListWidget;
 class QMimeData;
@@ -65,6 +67,7 @@ public:
     bool canDuplicateRow(int row) const;
     bool canDuplicateCurrent() const;
     int channelMask() const;
+    bool isCompositeChannelActive(PictureView* view) const;
     // The alpha channels currently shown on the canvas; empty for the composite.
     QList<int> shownAlphas() const;
     // The drag payload for a row, for the frame's drop tests.
@@ -79,6 +82,8 @@ public:
 signals:
     // The visible working colour channels: bit 0 red, 1 green, 2 blue (0x7 all).
     void channelMaskChanged(int mask);
+    void channelTargetChanged();
+    void compositeChannelChanged();
     // Alt-clicking Save Selection asks the frame for the Save dialog.
     void saveOptionsRequested();
     // An alpha channel eye changed: the frame re-syncs the canvas view.
@@ -105,9 +110,12 @@ private:
     void rebuild(const QString& mode, const QStringList& alphaNames, bool storedPlates);
     void addRow(const QString& name, const QString& shortcut, int alpha, RowKind kind=RowKind::Color);
     void refreshThumbnails();
+    void selectRow(int index);
+    void setRgbVisibility(int mask);
     void toggle(int index);
     void toggleAlpha(int alpha);
     void updateAlphaEyes();
+    void notifyCompositeChannelChanged();
     void updateFooter();
     void styleRows();
     int selectedAlpha() const;
@@ -124,6 +132,8 @@ private:
     bool duplicateChannelFromMime(const QMimeData* mime);
 
     PictureView* view_ = nullptr;
+    QMetaObject::Connection viewChanged_;
+    std::optional<bool> compositeChannelActive_;
     QListWidget* list_ = nullptr;
     QLabel* ctrlOverlay_ = nullptr;
     QList<Row> rows_;

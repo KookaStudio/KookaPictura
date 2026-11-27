@@ -17,6 +17,7 @@ pub(in crate::cxxqt_object) use image_size::image_size_fits_budget;
 mod imp;
 pub(in crate::cxxqt_object) mod jobs;
 mod new_document;
+mod threshold_histogram;
 
 use super::hdr_conversion::convert_depth_method;
 use super::image_hdr_toning::{hdr_toning_apply, hdr_toning_preview};
@@ -30,6 +31,8 @@ pub mod ffi {
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qstringlist.h");
         type QStringList = cxx_qt_lib::QStringList;
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -49,8 +52,25 @@ pub mod ffi {
         /// `block`'s descriptor page (the Properties panel's row format), or empty. `cmyk` reads the block as a CMYK document.
         fn image_adjustment_page(block: &[u8], cmyk: bool) -> QStringList;
 
+        /// Threshold's opening edit target (empty path) or the source below its adjustment layer.
+        fn image_adjustment_threshold_histogram(view: &PictureView, path: &QString) -> Vec<u32>;
+
         /// `block` with parameter `key` set to `value`, or empty when refused. `cmyk` reads the block as a CMYK document.
         fn image_adjustment_set(block: &[u8], key: &QString, value: f64, cmyk: bool) -> Vec<u8>;
+
+        /// Sample a bounded square in the current composite. Transparent pixels
+        /// contribute no color; 0 means there was no visible sample.
+        fn image_adjust_sample(view: &PictureView, x: i32, y: i32, size: i32) -> u32;
+
+        /// Bounded display crop at a pyramid level beyond the configured cache.
+        fn image_adjust_clipping_source(
+            view: &PictureView,
+            level: i32,
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+        ) -> QImage;
 
         /// A Curves `block`'s `channel` points as `"x,y x,y …"`, or empty.
         fn image_adjustment_curve(block: &[u8], channel: i32) -> QString;

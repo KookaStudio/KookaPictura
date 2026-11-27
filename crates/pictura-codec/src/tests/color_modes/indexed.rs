@@ -320,3 +320,105 @@ fn added_empty_layer_keeps_indexed_on_save() {
         "the original index channel is byte-identical"
     );
 }
+
+#[test]
+fn indexed_metadata_round_trips_psd_and_psb() {
+    use pictura_core::{BitDepth, ColorMode, Document, Samples, SourcePlanes};
+
+    let mut palette = [0; 768];
+    palette[0] = 125;
+    let indices = [0, 1];
+    let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
+    doc.composite
+        .replace(crate::indexed_working_buffer(
+            2,
+            1,
+            &indices,
+            &palette,
+            Some(1),
+        ))
+        .unwrap();
+    doc.source
+        .set_encoding(Some(ColorMode::Indexed), Some(palette))
+        .unwrap();
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::Eight,
+            width: 2,
+            height: 1,
+            samples: Samples::U8(indices.to_vec().into()),
+        }))
+        .unwrap();
+    crate::set_indexed_metadata(&mut doc, Some(2), Some(1));
+
+    for bytes in [
+        crate::write_psd(&doc).unwrap(),
+        crate::write_psb(&doc).unwrap(),
+    ] {
+        let reopened = crate::read_psd(&bytes).unwrap();
+        assert_eq!(reopened.source.mode(), Some(ColorMode::Indexed));
+        assert_eq!(crate::indexed_metadata(&reopened), (2, Some(1)));
+        assert_eq!(reopened.source.planes(), doc.source.planes());
+        assert_eq!(reopened.composite.channels, 4);
+        assert_eq!(&reopened.composite.data.as_slice()[6..], &[255, 0]);
+    }
+}
+
+#[test]
+fn indexed_signed_merged_alpha_combines_with_transparent_index() {
+    let palette = indexed_palette();
+    for transparent in [None, Some(5u16)] {
+        let mut bytes = layered_psd_with_data(
+            8,
+            2,
+            2,
+            &palette,
+            &[&[5], &[120]],
+            &[(0, &[5]), (-1, &[120])],
+        );
+        let resources = transparent.map_or_else(Vec::new, |index| {
+            crate::image_resources::encode_image_resources(&[
+                crate::image_resources::frame_image_resource(1047, "", &index.to_be_bytes()),
+            ])
+        });
+        let resource_offset = 30 + palette.len();
+        bytes.splice(
+            resource_offset..resource_offset + 4,
+            (resources.len() as u32).to_be_bytes(),
+        );
+        bytes.splice(
+            resource_offset + 4..resource_offset + 4,
+            resources.iter().copied(),
+        );
+        let layer_count_offset = resource_offset + 4 + resources.len() + 8;
+        bytes[layer_count_offset..layer_count_offset + 2].copy_from_slice(&(-1i16).to_be_bytes());
+        let doc = read_psd(&bytes).unwrap();
+        assert_eq!(doc.composite.channels, 4);
+        assert_eq!(doc.composite.data.len(), 4);
+        assert_eq!(
+            doc.composite.data[3],
+            if transparent.is_some() { 0 } else { 120 }
+        );
+    }
+}
+
+#[test]
+fn opaque_edit_at_transparent_layer_index_falls_back_to_rgb() {
+    let palette = indexed_palette();
+    for merged in [true, false] {
+        let bytes = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5]), (-1, &[255])]);
+        let mut doc = read_psd(&bytes).unwrap();
+        crate::set_indexed_metadata(&mut doc, Some(6), Some(5));
+        doc.layers[0].visible = false;
+        doc.composite.set_merged_output(merged);
+        let out = write_psd(&doc).unwrap();
+        assert_eq!(u16::from_be_bytes(out[24..26].try_into().unwrap()), 3);
+        let back = read_psd(&out).unwrap();
+        let alpha = back.layers[0]
+            .channels()
+            .iter()
+            .find(|c| c.id == -1)
+            .unwrap();
+        assert_eq!(alpha.data[0], 255);
+    }
+}

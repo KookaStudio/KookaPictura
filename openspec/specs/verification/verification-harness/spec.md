@@ -71,7 +71,8 @@ can become a test that nothing runs. `scripts/verify-fast.sh` SHALL run the
 same nextest invocation, so the local fast gate and CI agree on the runner. The nextest run SHALL emit a JUnit XML artifact through
 the repository's `.config/nextest.toml`, and CI SHALL upload that artifact. CI
 SHALL build the Qt application under a pinned Qt 6 in a headless job and SHALL
-run its `--headless --self-test` mode there. That job SHALL run the Qt Test layer
+run its `--headless --self-test` mode there with the `two_layers.psd` fixture,
+once. That job SHALL run the Qt Test layer
 through CTest with a parallel level equal to the runner's CPU count, overridable
 through `CTEST_PARALLEL_LEVEL`, SHALL configure the C++ build with precompiled
 headers disabled, so a source that compiles only through a precompiled header
@@ -115,12 +116,12 @@ CI job SHALL set a `timeout-minutes` bound.
 #### Scenario: The JUnit artifact is uploaded
 
 - **WHEN** the workflow test step completes
-- **THEN** `target/nextest/default/junit.xml` has been written and is uploaded as an artifact
+- **THEN** `target/nextest/default/junit.xml` has been written and is uploaded as a workflow artifact
 
 #### Scenario: The Qt app self-tests headlessly
 
 - **WHEN** the workflow builds the Qt application with the pinned Qt 6 toolchain
-- **THEN** it runs `--headless --self-test` with and without a document fixture and fails the job on a non-zero exit
+- **THEN** it runs `--headless --self-test` once with `two_layers.psd` and fails the job on a non-zero exit
 
 #### Scenario: External oracles are exercised
 
@@ -140,7 +141,7 @@ CI job SHALL set a `timeout-minutes` bound.
 #### Scenario: A runaway job is bounded
 
 - **WHEN** a CI job exceeds its configured `timeout-minutes`
-- **THEN** the run is cancelled rather than consuming minutes indefinitely
+- **THEN** the run is cancelled rather than consuming more minutes
 
 #### Scenario: CI runs Qt Test suites concurrently [vh_ci_ctest_parallel]
 
@@ -149,8 +150,8 @@ CI job SHALL set a `timeout-minutes` bound.
 
 #### Scenario: CI builds without precompiled headers [vh_ci_no_pch]
 
-- **WHEN** the CI headless job configures and builds the C++
-- **THEN** precompiled headers are disabled in its configure and every source compiles without one
+- **WHEN** the CI headless job configures and builds the C++ project
+- **THEN** precompiled headers are disabled at configure time and every source compiles without one
 
 #### Scenario: CI exercises the configured linker [vh_ci_mold]
 
@@ -161,7 +162,9 @@ CI job SHALL set a `timeout-minutes` bound.
 The system SHALL provide `scripts/guard.sh` that fails when tracked source under
 `crates/` references `.8bf` plugin binaries, when an `artboard*` file appears
 under `crates/`, or when `docs/` is modified without a `TASK-ALLOWS-DOCS` marker,
-and SHALL exit 0 when none of those conditions hold.
+and SHALL exit 0 when none of those conditions hold. It SHALL also run
+`scripts/check-qt-test-waits.py`, so a non-zero fixed wait in the Qt Test sources
+without a reason comment fails the guard on a C++-only change.
 
 #### Scenario: .8bf reference under crates/
 - **WHEN** a tracked `crates/` source contains an `.8bf` reference
@@ -175,8 +178,12 @@ and SHALL exit 0 when none of those conditions hold.
 - **WHEN** `docs/` differs from the guard base and no commit carries `TASK-ALLOWS-DOCS`
 - **THEN** the guard exits non-zero and lists the changed files
 
+#### Scenario: an unjustified fixed wait fails the guard [vh_wait_guard]
+- **WHEN** a Qt Test source holds a non-zero `qWait` call with no reason comment on its line or the line above
+- **THEN** the guard exits non-zero and names the file and line
+
 #### Scenario: Clean tree
-- **WHEN** no non-goal artifact is present and docs are unchanged or allowed
+- **WHEN** no non-goal artifact is present, docs are unchanged or allowed, and every fixed wait is justified
 - **THEN** the guard exits 0
 
 ### Requirement: A live control-server end-to-end check
@@ -255,25 +262,25 @@ The repository SHALL provide `scripts/check-worktree-hook.sh` that proves the ho
 The build jobs (format/lint/test and Qt headless) SHALL be skipped when
 every changed path matches `docs/**`, `openspec/**`, `**/*.md`, or `.serena/**`,
 using workflow-level `paths-ignore`. A separate workflow with no path filter
-SHALL run `scripts/guard.sh`, `openspec validate --all --strict`,
+SHALL select its mandatory checks from the checked-in gate manifest on every
+push and pull request, so a docs-only change is still gated. That set SHALL
+include `scripts/guard.sh`, `openspec validate --all --strict`,
 `scripts/check-file-size.sh`, `scripts/check-selftest-budget.sh`,
 `scripts/check-test-plan.py`, `scripts/check-worktree-hook.sh`,
-`scripts/check-selftest-codes.py`, and
-`scripts/check-openspec-archived.sh` on
-every push and pull request, so a docs-only change is still gated. A mixed change
-SHALL run the build jobs, because `paths-ignore` skips a workflow only when all
-changed paths match. `scripts/verify-fast.sh` SHALL run
-`scripts/check-worktree-hook.sh`, `scripts/check-selftest-codes.py`, and
-`scripts/check-openspec-archived.sh` in its
-full gate alongside the other script checks, and SHALL also run
-`scripts/check-selftest-codes.py` on the path that handles a docs-only diff, so a
-change that touches only markdown, specs, or `docs/` cannot land a self-test
-invariant regression unnoticed.
+`scripts/check-selftest-codes.py`, `scripts/check-openspec-archived.sh`,
+`scripts/check-icon-provenance.py`, `scripts/check-shell-seams.py`, and
+`scripts/check-flatpak-cargo-sources.py`, together with the other existing
+mandatory guards. A mixed change SHALL run the build jobs, because
+`paths-ignore` skips a workflow only when all changed paths match.
+`scripts/verify-fast.sh` SHALL select its docs-only checks from the manifest's
+docs-only placement and SHALL skip format, lint, tests, and other checks not
+placed there. Its full gate SHALL select the local-fast placement, or the
+local-full placement when the explicit full-local flag is set.
 
 #### Scenario: Docs-only change
 
 - **WHEN** a push or pull request changes only `docs/**`, `openspec/**`, `*.md`, or `.serena/**`
-- **THEN** the build jobs do not run and the guards workflow runs the guard, OpenSpec validation, file-size, self-test budget, self-test codes, worktree-hook, and archive checks
+- **THEN** the build jobs do not run and the guards workflow runs every check placed in guards CI by the manifest
 
 #### Scenario: Code change
 
@@ -282,8 +289,8 @@ invariant regression unnoticed.
 
 #### Scenario: Guards fail
 
-- **WHEN** `scripts/guard.sh`, `openspec validate --all --strict`, `scripts/check-file-size.sh`, `scripts/check-selftest-budget.sh`, `scripts/check-test-plan.py`, `scripts/check-worktree-hook.sh`, `scripts/check-selftest-codes.py`, or `scripts/check-openspec-archived.sh` exits non-zero
-- **THEN** the guards workflow fails
+- **WHEN** any command selected for guards CI exits non-zero
+- **THEN** the guards workflow fails and identifies that check
 
 #### Scenario: The fast full gate runs the worktree-hook check
 
@@ -298,7 +305,7 @@ invariant regression unnoticed.
 #### Scenario: The docs-only fast path still runs the self-test codes guard [vh_docs_only_guard]
 
 - **WHEN** `scripts/verify-fast.sh` sees a diff of only `docs/**`, `openspec/**`, `*.md`, or `.serena/**` paths
-- **THEN** it skips fmt, clippy, and the tests but still runs `scripts/check-selftest-codes.py` and fails the gate on a violation
+- **THEN** it selects the manifest's docs-only checks, skips fmt, clippy, and tests, and fails on a self-test-code violation
 
 ### Requirement: Jobs are skipped when the change cannot affect them
 For a change that is not docs-only (the docs-only case is governed by
@@ -352,22 +359,25 @@ these rules:
 ### Requirement: Local verification fast path
 
 `scripts/verify-fast.sh` SHALL detect the changed paths of the working tree
-(committed diff against the merge base with `master`, plus untracked files). When
-every changed path matches `docs/**`, `openspec/**`, `*.md`, or `.serena/**`, it
-SHALL run only `scripts/guard.sh`, `scripts/check-openspec-archived.sh`,
-`scripts/check-test-plan.py`, and `openspec validate --all --strict` and skip
-format, lint, and tests. When the changed-path set is empty or contains any other
-path, it SHALL run the full gate.
+(committed diff against the merge base with `master`, plus untracked files).
+When every changed path matches `docs/**`, `openspec/**`, `*.md`, or `.serena/**`,
+it SHALL run only the commands selected by the manifest's docs-only placement
+and skip format, lint, tests, and other full-gate checks. That placement SHALL
+include `scripts/guard.sh`, `scripts/check-openspec-archived.sh`,
+`scripts/check-test-plan.py`, `scripts/check-selftest-codes.py`, and
+`openspec validate --all --strict`. When the changed-path set is empty or
+contains any other path, it SHALL select the local-fast placement, or the
+local-full placement when the explicit full-local flag is set.
 
 #### Scenario: Docs-only working diff
 
 - **WHEN** `scripts/verify-fast.sh` runs and every changed path is `docs/**`, `openspec/**`, `*.md`, or `.serena/**`
-- **THEN** it runs the guard, the archive check, the test plan, and OpenSpec validation and does not run fmt, clippy, or tests
+- **THEN** it runs the manifest's docs-only checks and does not run fmt, clippy, tests, or full-only checks
 
 #### Scenario: Clean tree or code change
 
 - **WHEN** the working diff is empty or contains a path outside the fast-path set
-- **THEN** `scripts/verify-fast.sh` runs the full gate
+- **THEN** `scripts/verify-fast.sh` runs the selected local fast gate, or local full gate with the explicit flag
 
 ### Requirement: Opt-in serialization of local verification runs
 
@@ -604,25 +614,32 @@ running through the cache.
 
 ### Requirement: Independent fast-gate checks run concurrently
 
-`scripts/verify-fast.sh` SHALL run its independent script checks concurrently
-with each other (bounded by the local CPU budget when one is set), capture each
-check's output, and fail after all checks complete when any exits non-zero. A
-check is independent when it does not compile project code, write the workspace
-build directory, or depend on another check's output. A check that rewrites a
-shared repository file SHALL NOT run alongside a check that reads that file.
-The Cargo format, clippy, and test steps SHALL remain sequential because they
-share the workspace build directory. When a check fails,
-its captured output SHALL be shown.
+`scripts/verify-fast.sh` SHALL select its independent script checks from the
+checked-in gate manifest and run them concurrently with each other, bounded by
+the local CPU budget when one is set, capture each check's output, and fail
+after all checks complete when any exits non-zero. A check is independent when
+it does not compile project code, write the workspace build directory, or
+depend on another check's output. A check that rewrites a shared repository
+file SHALL NOT run alongside a check that reads that file. The Cargo format,
+clippy, build-tree, and test steps SHALL remain sequential because they share
+the workspace build directory. When a check fails, its captured output SHALL be
+shown. Guards CI SHALL execute its selected commands sequentially and stop on
+the first failure.
 
 #### Scenario: all checks pass [vh_parallel_checks]
 
 - **WHEN** `scripts/verify-fast.sh` runs its full gate and every independent check passes
-- **THEN** every check runs and the gate reports success once they all finish
+- **THEN** every selected check runs and the gate reports success once they all finish
 
 #### Scenario: one check fails [vh_parallel_failure]
 
 - **WHEN** one independent check exits non-zero while the others pass
 - **THEN** the gate fails after all checks finish and prints the failing check's output
+
+#### Scenario: CI reports the failing check [gm_ci_failure]
+
+- **WHEN** a guards CI command exits non-zero
+- **THEN** the workflow stops and identifies that command's manifest ID
 
 ### Requirement: The local gates detect a stale build tree
 
@@ -821,3 +838,86 @@ lower-only ceiling. No entry SHALL be added to
 
 - **WHEN** `scripts/check-file-size.sh` is inspected after the change
 - **THEN** the code budget is 1200 and the test budget is 1400, and `scripts/file-size-allowlist.txt` has no new entry
+
+### Requirement: One checked-in gate manifest
+
+The repository SHALL maintain one checked-in gate manifest with an entry for
+every `scripts/check-*` script. Each entry SHALL name a unique check ID, scope,
+cost class, execution phase, command, and local fast, local full, and guards CI
+placement. An entry MAY also name docs-only or build-CI placement. An entry for
+a check composed by another check SHALL name that script in the composing entry. Both
+`scripts/verify-fast.sh` and the guards CI workflow SHALL select their commands
+from this manifest rather than maintain separate check lists.
+
+A check scheduled locally SHALL also be scheduled in guards CI or name one of
+the existing build-CI equivalents. Manual tooling SHALL have no automatic local
+or CI placement. Every guards CI entry SHALL be present in the local full run.
+A check removed from local fast SHALL remain in local full and guards CI, and
+local full SHALL require one explicit opt-in flag. The existing mandatory guards
+set SHALL include icon provenance, shell seams, Flatpak cargo-source coverage,
+and the build-lock check. Format, clippy, and test commands SHALL remain sequential;
+independent local checks MAY run concurrently within the CPU budget.
+
+The repository SHALL provide a drift check that fails for an unlisted
+`scripts/check-*` script, a manifest path absent from the tree, a duplicate or
+malformed entry, a missing mandatory CI entry, a guards CI entry absent from
+local full, or an unscoped local-only entry. Its self-test SHALL plant each
+failure class and prove that the check rejects it.
+
+#### Scenario: A new check script has no entry [gm_unlisted]
+
+- **WHEN** a `scripts/check-*` script exists and no manifest entry names it
+- **THEN** the drift check exits non-zero and names the script
+
+#### Scenario: A new check has one source of placement [gm_new_check]
+
+- **WHEN** a contributor adds a check script and one valid manifest entry for it
+- **THEN** both local full and guards CI select that entry without edits to either runner
+
+#### Scenario: The mandatory CI set cannot shrink [gm_mandatory_ci]
+
+- **WHEN** a manifest edit removes or disables an existing mandatory guards CI entry
+- **THEN** the drift check exits non-zero and names the missing check ID
+
+#### Scenario: Local-only placement is rejected [gm_no_local_only]
+
+- **WHEN** an entry schedules a check locally without guards CI or a recognized build-CI equivalent
+- **THEN** the drift check exits non-zero rather than allowing an accidental local-only gate
+
+#### Scenario: Full-local mode is explicit [gm_full_opt_in]
+
+- **WHEN** a contributor defers an expensive CI-owned check from local fast
+- **THEN** local fast reports the deferral, local full and guards CI still run it, and only the explicit full-local flag enables it locally
+
+#### Scenario: Runner parity is checked [gm_runner_parity]
+
+- **WHEN** the manifest selects a guards CI check that is absent from local full
+- **THEN** the drift check exits non-zero and names the check ID
+
+#### Scenario: Guards CI runs the build-lock check [gm_build_lock_ci]
+
+- **WHEN** the guards workflow selects its commands
+- **THEN** the build-lock check is mandatory and a non-zero exit fails the workflow
+
+### Requirement: CI Qt setup remains an adapter
+
+The CI Qt job SHALL retain ownership of Qt and TIFF runtime installation,
+compiler-cache setup, CI-specific CMake options, and runner CPU selection. It
+SHALL provide the TIFF runtime before invoking the shared Qt executor so CTest
+inherits the same library path. The job SHALL NOT keep separate Configure,
+Build, Self-test, CTest, or Qt report steps that duplicate the shared executor.
+
+#### Scenario: TIFF setup precedes shared execution [qe_ci_tiff]
+
+- **WHEN** the CI Qt job prepares the TIFF runtime and invokes `scripts/test-report.sh`
+- **THEN** the runtime extraction and `LD_LIBRARY_PATH` setup occur before the shared executor can start CTest
+
+#### Scenario: CI uses the runner CPU count [qe_ci_cpu]
+
+- **WHEN** the CI Qt job invokes the shared executor without `CTEST_PARALLEL_LEVEL`
+- **THEN** the build and CTest default to the runner's full CPU count, while an explicit `CTEST_PARALLEL_LEVEL` still wins
+
+#### Scenario: CI keeps only one Qt orchestration step [qe_ci_orchestration]
+
+- **WHEN** the workflow is inspected
+- **THEN** one step invokes the shared Qt executor and no other step directly invokes the self-test, CTest, or the Qt reporter

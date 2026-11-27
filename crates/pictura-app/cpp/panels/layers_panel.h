@@ -37,6 +37,8 @@ inline bool isSyntheticRowPath(const QString& path)
     return path.contains(QLatin1String("/@sf")) || path.contains(QLatin1String("/@fx"));
 }
 
+struct AdjustmentKind;
+class ChannelsPanel;
 class ColorState;
 class LayerFilterBar;
 class LayerRowDelegate;
@@ -59,6 +61,8 @@ public:
     explicit LayersPanel(ColorState* colors = nullptr, QWidget* parent = nullptr);
 
     void setView(PictureView* view);
+    void setChannelsPanel(ChannelsPanel* channels);
+    void updateSelectiveColorAvailability();
     void refresh();
 
     /// While a transform is pending the layer list stays selectable but the
@@ -502,6 +506,8 @@ private:
     // The action strip is disabled without a document; the mask and trash
     // buttons also follow the active layer and the selection.
     void syncStripButtons();
+    bool canCreateAdjustment(const QString& kind) const;
+    void addAdjustmentMenuAction(QMenu* menu, const AdjustmentKind& entry);
     void addMaskFromButton(bool alt);
     // The trash: with both masks on the layer it deletes the vector mask after
     // a "Delete Vector Mask?" prompt; otherwise it deletes the selection.
@@ -623,6 +629,8 @@ private:
     bool useDefaultMasksOnFill_ = true;
     bool addMaskByDefault_ = true;
     CommandRegistry* registry_ = nullptr;
+    ChannelsPanel* channels_ = nullptr;
+    QAction* selectiveColorAction_ = nullptr;
     bool syncing_ = false;
     int refreshCount_ = 0;
     const PictureView* patternView_ = nullptr;

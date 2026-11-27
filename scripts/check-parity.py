@@ -551,7 +551,16 @@ def baseline_history(
     return errors
 
 
-def gate_wiring_present(verify_fast: str, guards: str) -> list[str]:
+def gate_wiring_present(verify_fast: str, guards: str, manifest: str = "") -> list[str]:
+    if "gate_manifest.py run" in verify_fast and "gate_manifest.py run ci-guards" in guards:
+        import tomllib
+        rows = tomllib.loads(manifest).get("check", [])
+        parity = next((row for row in rows if row.get("id") == "parity"), {})
+        if (all(parity.get(key) for key in ("local_fast", "local_full", "docs_only", "ci_guards"))
+                and parity.get("phase") == "parallel"
+                and "scripts/check-parity.py" in parity.get("command", "")):
+            return []
+        return ["manifest does not place the parity check in all required gates"]
     errors = []
     if "== parity ==" not in verify_fast:
         errors.append("verify-fast.sh has no docs-only parity section")
@@ -603,6 +612,7 @@ def check(root: Path = ROOT) -> list[str]:
     errors += gate_wiring_present(
         (root / "scripts/verify-fast.sh").read_text(encoding="utf-8"),
         (root / ".github/workflows/guards.yml").read_text(encoding="utf-8"),
+        (root / "scripts/checks.toml").read_text(encoding="utf-8"),
     )
     return errors
 

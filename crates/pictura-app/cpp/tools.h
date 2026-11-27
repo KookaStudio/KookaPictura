@@ -563,6 +563,7 @@ signals:
     // Auto-Select flip).
     void modifiersChanged(int modifiers);
     void selectionCommitted();
+    void selectionMovePreviewed();
     // A pixel edit was refused because the target layer's pixels are locked.
     void pixelEditRefused(const QString& message);
     // The Ruler's measuring line changed (drawn, edited, cleared, or another

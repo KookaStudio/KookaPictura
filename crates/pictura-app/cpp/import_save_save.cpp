@@ -22,6 +22,7 @@
 #include "indexed_color_dialog.h"
 #include "jpeg_options_dialog.h"
 #include "memory_refusal.h"
+#include "pict_options_dialog.h"
 #include "png_options_dialog.h"
 #include "raw_options_dialog.h"
 #include "save_options_dialog.h"
@@ -1014,6 +1015,15 @@ bool ImportSaveCoordinator::runSaveFormatDialog(SaveFormatKind kind,
             return false;
         }
         options.cineonBits = dialog.bits();
+        return true;
+    }
+    case SaveFormatKind::Pict: {
+        PictOptionsDialog dialog(options, dialogParent_);
+        if (runDialog(dialog, dialogParent_) != QDialog::Accepted) {
+            return false;
+        }
+        options.pictResolution = dialog.resolution();
+        options.pictCompression = dialog.compression();
         return true;
     }
     default:

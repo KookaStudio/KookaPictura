@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 #
-# verify-full.sh - full verification: build the CMake/Qt app first, then
-# verify-fast.sh, whose test step routes through scripts/test-report.sh and
-# therefore exercises the app self-tests and prints the unified report.
-# Slow; run verify-fast.sh during the edit loop.
+# verify-full.sh - full verification: run verify-fast.sh with the Qt build
+# enabled, then the live checks.
+#
+# The Qt execution (configure, staged build, self-tests, CTest, report) lives in
+# scripts/test-report.sh, which verify-fast.sh reaches with --configure --build.
+# This script owns the lock, the build-tree validation, the cache proof, and the
+# live control and memory checks.
 
 set -euo pipefail
 
@@ -24,27 +27,16 @@ if [ "${_build_lock_owned:-0}" = "1" ]; then
     export PICTURA_VERIFY_LOCK_HELD=1
 fi
 
-echo "== cmake =="
-# -U drops linker flags cached by an older configure so the mold/lld probe is
-# not masked by a stale -DCMAKE_EXE_LINKER_FLAGS value. An existing build keeps
-# its generator; a new one defaults to Ninja.
-if [ -f build/CMakeCache.txt ]; then
-  cmake -S . -B build -U CMAKE_EXE_LINKER_FLAGS -U CMAKE_SHARED_LINKER_FLAGS
-else
-  cmake -S . -B build -G Ninja -U CMAKE_EXE_LINKER_FLAGS -U CMAKE_SHARED_LINKER_FLAGS
-fi
-cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$PICTURA_JOBS}"
-echo "cmake_build=ok"
+export PICTURA_FULL_GATES=1
+bash scripts/verify-fast.sh --configure --build
 
 echo "== build tree =="
-# The build just ran, so the tree has to match the sources now. A tree that
-# does not would make the self-test and the Qt suites below meaningless.
+# The build just ran, so the tree has to match the sources now. A tree that does
+# not would make the live checks below meaningless.
 bash scripts/check-build-tree.sh
 
 echo "== build cache =="
 bash scripts/check-local-build-caching.sh --rebuild --dir build
-
-bash scripts/verify-fast.sh
 
 echo "== control =="
 bash scripts/verify-control.sh

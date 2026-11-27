@@ -363,9 +363,9 @@ int main(int argc, char* argv[])
         pictura::history_log_shutdown();
     });
 
-    bool codecLoaded = false;
-    if (!psdPath.isEmpty()) {
-        codecLoaded = frame.openPath(psdPath);
+    bool documentMode = false;
+    if (!selfTest && !psdPath.isEmpty()) {
+        documentMode = frame.openPath(psdPath);
     }
     // A normal launch opens no document; only the self-test keeps the scratch
     // white document its null_image/fresh_white/gpu_blank checks need. The GPU
@@ -373,7 +373,7 @@ int main(int argc, char* argv[])
     // probe never replaces the document image (E1), so the scratch document
     // presents pure white rather than the probe's gradient.
     int gpu = 0;
-    if (pictura::launchCreatesScratchDocument(selfTest, codecLoaded)) {
+    if (pictura::launchCreatesScratchDocument(selfTest, documentMode)) {
         frame.newDocument(QStringLiteral("Untitled"), 512, 512, QStringLiteral("rgb"), 8,
                           QStringLiteral("white"));
         if (pictura::PictureView* scratch = frame.activeView()) {
@@ -410,7 +410,7 @@ int main(int argc, char* argv[])
             }
         }
         const int rc = runSelfTest(app, headless, psdPath, frame, view, image,
-                                   codecLoaded, gpu);
+                                   documentMode, gpu);
         if (rc != 0) {
             // The status cannot carry a code above 255, and a whole multiple of
             // 256 truncates to zero. The FAIL token keeps the true code; only the

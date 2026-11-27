@@ -130,7 +130,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "image.mode.8.bits", path: &["Image", "Mode", "8 Bits/Channel"], label: "8 Bits/Channel", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "image.mode.16.bits", path: &["Image", "Mode", "16 Bits/Channel"], label: "16 Bits/Channel", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "image.mode.32.bits", path: &["Image", "Mode", "32 Bits/Channel"], label: "32 Bits/Channel", shortcut: "", implemented: true, checkable: true },
-    CommandSpec { id: "image.mode.color.table", path: &["Image", "Mode", "Color Table"], label: "Color Table", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "image.mode.color.table", path: &["Image", "Mode", "Color Table"], label: "Color Table", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "image.adjustments.brightnesscontrast", path: &["Image", "Adjustments", "Brightness/Contrast"], label: "Brightness/Contrast", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "image.adjustments.levels", path: &["Image", "Adjustments", "Levels"], label: "Levels", shortcut: "Ctrl+L", implemented: false, checkable: false },
     CommandSpec { id: "image.adjustments.curves", path: &["Image", "Adjustments", "Curves"], label: "Curves", shortcut: "Ctrl+M", implemented: false, checkable: false },

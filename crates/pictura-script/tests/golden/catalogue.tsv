@@ -125,7 +125,7 @@ image.mode.multichannel	Image/Mode/Multichannel	Multichannel		1	1
 image.mode.8.bits	Image/Mode/8 Bits/Channel	8 Bits/Channel		1	1
 image.mode.16.bits	Image/Mode/16 Bits/Channel	16 Bits/Channel		1	1
 image.mode.32.bits	Image/Mode/32 Bits/Channel	32 Bits/Channel		1	1
-image.mode.color.table	Image/Mode/Color Table	Color Table		0	0
+image.mode.color.table	Image/Mode/Color Table	Color Table		1	0
 image.adjustments.brightnesscontrast	Image/Adjustments/Brightness/Contrast	Brightness/Contrast		0	0
 image.adjustments.levels	Image/Adjustments/Levels	Levels	Ctrl+L	0	0
 image.adjustments.curves	Image/Adjustments/Curves	Curves	Ctrl+M	0	0

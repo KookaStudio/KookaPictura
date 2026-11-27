@@ -293,6 +293,7 @@ set(PICTURA_QT_TEST_DRIVER_imaging
     tst_calculations
     tst_match_color
     tst_image_adjustments
+    tst_levels_canvas_controls
 )
 set(PICTURA_QT_TEST_DRIVER_control
     tst_client_registration
@@ -358,36 +359,74 @@ endforeach()
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
 
-# The slow suites are registered in several entries, so the layer's wall time
-# is set by the number of suites and the parallel level rather than by one
-# slow suite. Each entry runs a share of the suite's test functions: the
-# share comes from the PICTURA_TEST_SHARD environment variable, and the
-# functions are distributed over the shares in declaration order.
+# Shard membership and count come from retained duration evidence, not from a
+# hand-maintained list: scripts/qt_test_timings.py reads the JUnit/CTest timing
+# store (.ci/qt-test-timings.json) and writes cmake/qt-test-shards.json. Each
+# plan entry names the suite, its share count, and (when measured) the exact
+# functions of each share, so the split is a recorded decision.
 #
-# Only suites whose test functions are independent of each other belong here.
-# A suite may share one window between its test functions and stay here when
-# its per-function reset (init() and cleanup()) makes every function
-# independent, so each passes run alone by name and in any share; a suite
-# whose functions build on each other's state keeps one entry.
-set(PICTURA_QT_TEST_SHARDS
-    tst_canvas_mask_domain
-    tst_document_arrange
-    tst_document_float
-    tst_document_navigate
-    tst_document_windows
-    tst_edit_refresh
-    tst_floating_workspaces
-    tst_import_pdf
-    tst_loading_tab
-    tst_print
-    tst_quick_mask
-    tst_save_pdf
-    tst_ui_scale
-    tst_workspaces
-)
-set(PICTURA_QT_TEST_SHARD_COUNT 4)
-# A suite whose slowest functions land in one share of four gets more shares.
-set(tst_ui_scale_SHARD_COUNT 8)
+
+# The plan is regenerated with:
+#   python3 scripts/qt_test_timings.py plan --timings .ci/qt-test-timings.json \
+#       --out cmake/qt-test-shards.json
+#
+# Only suites whose test functions are independent of each other may appear:
+# a suite may share one window between functions and stay shardable when its
+# per-function reset (init() and cleanup()) makes every function independent,
+# so each passes run alone by name and in any share. suites whose functions
+# build on each other's state stay out of the plan.
+set(PICTURA_QT_SHARD_PLAN "${CMAKE_SOURCE_DIR}/cmake/qt-test-shards.json")
+if(EXISTS "${PICTURA_QT_SHARD_PLAN}")
+    file(READ "${PICTURA_QT_SHARD_PLAN}" _pictura_shard_json)
+    string(JSON _pictura_plan_count ERROR_VARIABLE _pictura_plan_error LENGTH "${_pictura_shard_json}" suites)
+    if(_pictura_plan_error)
+        message(FATAL_ERROR "qt-test-shards.json is not valid JSON: ${_pictura_plan_error}")
+    endif()
+else()
+    set(_pictura_plan_count 0)
+    message(WARNING "cmake/qt-test-shards.json is missing; every suite runs in one entry")
+endif()
+
+set(PICTURA_QT_TEST_SHARDS "")
+if(_pictura_plan_count GREATER 0)
+    math(EXPR _pictura_last_plan "${_pictura_plan_count} - 1")
+    foreach(_plan_index RANGE 0 ${_pictura_last_plan})
+        string(JSON _plan_name GET "${_pictura_shard_json}" suites ${_plan_index} name)
+        list(APPEND PICTURA_QT_TEST_SHARDS ${_plan_name})
+        string(JSON ${_plan_name}_SHARD_COUNT GET "${_pictura_shard_json}" suites ${_plan_index} count)
+        string(JSON _plan_shards_type ERROR_VARIABLE _plan_shards_error TYPE "${_pictura_shard_json}" suites ${_plan_index} shards)
+        if(NOT _plan_shards_error AND _plan_shards_type STREQUAL "ARRAY")
+            string(JSON _plan_shard_length LENGTH "${_pictura_shard_json}" suites ${_plan_index} shards)
+            math(EXPR _plan_last_shard "${_plan_shard_length} - 1")
+            foreach(_shard_index RANGE 0 ${_plan_last_shard})
+                # Read each function by index rather than the whole array: an
+                # indexed GET has one unambiguous result independent of how a
+                # CMake version renders arrays, and the built list becomes one
+                # command-line argument per function name.
+                string(JSON _plan_fn_count LENGTH "${_pictura_shard_json}" suites ${_plan_index} shards ${_shard_index})
+                set(_plan_functions "")
+                if(_plan_fn_count GREATER 0)
+                    math(EXPR _plan_last_fn "${_plan_fn_count} - 1")
+                    foreach(_fn_index RANGE 0 ${_plan_last_fn})
+                        string(JSON _plan_function GET "${_pictura_shard_json}" suites ${_plan_index} shards ${_shard_index} ${_fn_index})
+                        list(APPEND _plan_functions "${_plan_function}")
+                    endforeach()
+                endif()
+                set(${_plan_name}_SHARD_${_shard_index}_FUNCTIONS "${_plan_functions}")
+            endforeach()
+        endif()
+    endforeach()
+endif()
+
+# A plan entry that names no registered suite would be silently ignored, so
+# configuration fails instead: the plan and the suite list must agree.
+foreach(_plan_suite IN LISTS PICTURA_QT_TEST_SHARDS)
+    if(NOT _plan_suite IN_LIST PICTURA_QT_TESTS)
+        message(FATAL_ERROR
+            "cmake/qt-test-shards.json shards '${_plan_suite}', which is not a registered suite")
+    endif()
+endforeach()
+
 
 # The suites share one precompiled header, built by this object library with
 # their own flags: they cannot reuse the shell's, which is compiled position
@@ -439,19 +478,25 @@ endforeach()
 
 foreach(test_name IN LISTS PICTURA_QT_TESTS)
     set(_driver ${PICTURA_QT_TEST_TARGET_${test_name}})
-    if(test_name IN_LIST PICTURA_QT_TEST_SHARDS)
-        set(_pictura_shard_count ${PICTURA_QT_TEST_SHARD_COUNT})
-        if(DEFINED ${test_name}_SHARD_COUNT)
-            set(_pictura_shard_count ${${test_name}_SHARD_COUNT})
-        endif()
-        math(EXPR _pictura_last_shard "${_pictura_shard_count} - 1")
+    set(_pictura_suite_shares 1)
+    if(DEFINED ${test_name}_SHARD_COUNT)
+        set(_pictura_suite_shares ${${test_name}_SHARD_COUNT})
+    endif()
+    if(test_name IN_LIST PICTURA_QT_TEST_SHARDS AND _pictura_suite_shares GREATER 1)
+        math(EXPR _pictura_last_shard "${_pictura_suite_shares} - 1")
         foreach(_shard RANGE 0 ${_pictura_last_shard})
             set(_entry "${test_name}_${_shard}")
+            set(_share_functions "")
+            if(DEFINED ${test_name}_SHARD_${_shard}_FUNCTIONS)
+                set(_share_functions ${${test_name}_SHARD_${_shard}_FUNCTIONS})
+            endif()
             add_test(NAME ${_entry} COMMAND ${_driver}
                 --suite ${test_name}
-                -o ${CMAKE_BINARY_DIR}/qt-test-results/${_entry}.xml,junitxml)
+                -o ${CMAKE_BINARY_DIR}/qt-test-results/${_entry}.xml,junitxml
+                ${_share_functions})
+
             set_tests_properties(${_entry} PROPERTIES
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PICTURA_TEST_SHARD=${_shard}/${_pictura_shard_count}"
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PICTURA_TEST_SHARD=${_shard}/${_pictura_suite_shares}"
                 TIMEOUT 120
             )
         endforeach()
@@ -490,17 +535,19 @@ set_tests_properties(tst_ui_localization PROPERTIES TIMEOUT 240)
 set_tests_properties(tst_brush_outline PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1")
 
-# Quick Mask's full suite runs about 112 s under the 80% CPU budget; give each
-# share headroom over the default 120 s timeout so a loaded machine does not fail
-# a passing suite.
-set(_pictura_quick_mask_shard_count ${PICTURA_QT_TEST_SHARD_COUNT})
-if(DEFINED tst_quick_mask_SHARD_COUNT)
-    set(_pictura_quick_mask_shard_count ${tst_quick_mask_SHARD_COUNT})
+
+# Quick Mask runs about 112 s under the 80% CPU budget; give it headroom over
+# the default 120 s timeout so a loaded machine does not fail a passing suite.
+# The timeout is per entry, so every share the plan registers gets it.
+if(tst_quick_mask IN_LIST PICTURA_QT_TEST_SHARDS AND tst_quick_mask_SHARD_COUNT GREATER 1)
+    math(EXPR _pictura_quick_mask_last "${tst_quick_mask_SHARD_COUNT} - 1")
+    foreach(_quick_mask_shard RANGE 0 ${_pictura_quick_mask_last})
+        set_tests_properties(tst_quick_mask_${_quick_mask_shard} PROPERTIES TIMEOUT 300)
+    endforeach()
+else()
+    set_tests_properties(tst_quick_mask PROPERTIES TIMEOUT 300)
 endif()
-math(EXPR _pictura_quick_mask_last_shard "${_pictura_quick_mask_shard_count} - 1")
-foreach(_shard RANGE 0 ${_pictura_quick_mask_last_shard})
-    set_tests_properties(tst_quick_mask_${_shard} PROPERTIES TIMEOUT 300)
-endforeach()
+
 
 # The suites include the generated cxx-qt header, so they follow the bridge
 # stamp like the shell does.

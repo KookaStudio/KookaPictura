@@ -2,8 +2,10 @@
 
 #include "adjustment_dialog.h"
 
+#include <QtCore/QPointer>
 #include <QtCore/QVector>
 #include <QtGui/QColor>
+#include <QtGui/QImage>
 #include <QtWidgets/QWidget>
 
 #include <array>
@@ -11,6 +13,7 @@
 class QComboBox;
 class QDoubleSpinBox;
 class QSpinBox;
+class QToolButton;
 
 namespace pictura {
 
@@ -48,16 +51,22 @@ public:
 
 signals:
     void valueChanged(int index, int value);
+    void clippingThumbChanged(int index);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    bool event(QEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     int xForValue(int value) const;
     int valueForX(int index, int x) const;
+    bool draggingInputEndpoint() const;
+    void updateClipping(bool alt);
+    void endDrag();
 
     struct Thumb {
         int min = 0;
@@ -67,6 +76,7 @@ private:
     };
     QVector<Thumb> thumbs_;
     int dragging_ = -1;
+    bool clipping_ = false;
 };
 
 // Image > Adjustments > Levels in CS6's layout: Preset and Channel menus, the
@@ -85,10 +95,29 @@ public:
     LevelsDialog(PictureView* view, const QByteArray& block, const QRect& visible,
                  QWidget* parent = nullptr);
 
+    ~LevelsDialog() override;
+
     QWidget* controlForTest(const QString& key) const override;
     void reloadFromBlock() override { loadChannel(); }
+    void setClippingCanvas(ImageView* canvas);
+    void done(int result) override;
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    enum PointKind { BlackPoint, GrayPoint, WhitePoint };
+
+    QHBoxLayout* makePointControls();
+    void armPoint(PointKind kind);
+    void disarmPoint();
+    void chooseTarget(PointKind kind);
+    void showSampleMenu(PointKind kind, const QPoint& globalPos);
+    void pickPoint(PointKind kind, const QPointF& pos);
+    void setClippingThumb(int index);
+    void renderClipping();
+    void clearClipping();
+
     // The current channel's key prefix: "", "red.", "green.", "blue.".
     QString prefix() const;
     // Reload every field and thumb from the block for the current channel.
@@ -110,6 +139,17 @@ private:
     QSpinBox* inWhite_ = nullptr;
     QSpinBox* outBlack_ = nullptr;
     QSpinBox* outWhite_ = nullptr;
+    std::array<QToolButton*, 3> points_{};
+    std::array<int, 3> targets_{0, 128, 255};
+    QPointer<ImageView> canvas_;
+    QImage clippingSource_;
+    QRect clippingSourceCrop_;
+    int clippingSourceLevel_ = -1;
+    int sampleSize_ = 1;
+    int clippingThumb_ = -1;
+    bool canvasControlsAvailable_ = false;
+    bool grayscale_ = false;
+    bool pointArmed_ = false;
     bool loading_ = false;
 };
 

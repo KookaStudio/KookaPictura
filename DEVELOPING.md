@@ -260,7 +260,7 @@ bash scripts/with-build-lock.sh -- cargo clippy --workspace --all-targets -- -D 
 bash scripts/with-build-lock.sh -- cargo nextest run --workspace   # one crate/test: -p <crate> [name]
 
 bash scripts/verify-fast.sh                      # fmt, clippy, test-report, guards, openspec
-bash scripts/verify-full.sh                      # CMake build first, then verify-fast
+bash scripts/verify-full.sh                      # verify-fast with the Qt build, then live checks
 openspec validate --all --strict
 bash scripts/check-openspec-archived.sh          # zero-open change gate
 ```
@@ -287,11 +287,15 @@ See
 [`docs/dev/testing-conventions.md`](docs/dev/testing-conventions.md) for how
 each layer is built and reports.
 
-`scripts/test-report.sh` folds the layers into one report. The two
-application self-test invocations run concurrently with each other and with
-the CTest layer, and a suite that CTest registered but that produced no report
-is a failure, named in the report — a suite that never started is not a
-silently missing line.
+`scripts/test-report.sh` is the one Qt execution path: CI and the local gates
+both call it, and it owns the optional configure, the staged `pictura`-first
+build, the self-tests, the Qt Test build tail, CTest, and the report. The two
+application self-test invocations run concurrently with each other; CTest
+starts only after both finish and the Qt Test build completes. Setting
+`PICTURA_QT_SELFTEST_OVERLAP=1` lets them overlap the build tail; it stays off
+until #1570 measures it on four vCPUs. A suite that CTest registered but that
+produced no report is a failure, named in the report — a suite that never
+started is not a silently missing line.
 
 `scripts/check-build-tree.sh` compares the build tree with the sources under
 it: the full gate fails when the application binary predates a tracked source

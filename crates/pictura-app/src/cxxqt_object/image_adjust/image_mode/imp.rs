@@ -8,10 +8,10 @@ use crate::cxxqt_object::save_format::SaveGifOptions;
 use crate::cxxqt_object::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QString;
-use pictura_codec::{ColorReduction, Dither, PaletteOptions};
+use cxx_qt_lib::{QByteArray, QString};
+use pictura_codec::{ColorReduction, Dither, PaletteOptions, PatternPixels};
 use pictura_core::{BitDepth, ColorMode, Document};
-use pictura_render::BitmapMethod;
+use pictura_render::{BitmapMethod, HalftoneScreen, HalftoneShape};
 
 pub(super) const HISTORY_LABEL: &str = "Convert Mode";
 
@@ -70,7 +70,7 @@ pub(crate) fn palette_options(
     }
 }
 
-pub(super) fn bitmap_method(method: i32) -> BitmapMethod {
+pub(super) fn bitmap_method(method: i32) -> BitmapMethod<'static> {
     match method {
         1 => BitmapMethod::Pattern,
         2 => BitmapMethod::Diffusion,
@@ -151,8 +151,16 @@ pub(super) fn image_depth_available(view: &PictureView, bits: i32) -> bool {
 /// one state. A flattening conversion leaves at most a Background, so the
 /// active layer is re-pointed at it (or cleared for a flat Bitmap).
 pub(super) fn commit(
-    mut view: Pin<&mut PictureView>,
+    view: Pin<&mut PictureView>,
     convert: impl FnOnce(&mut Document) -> Result<(), pictura_ops::OpsError> + Send + 'static,
+) -> bool {
+    commit_mode_edit(view, HISTORY_LABEL, move |doc| convert(doc).map(|()| true))
+}
+
+fn commit_mode_edit(
+    mut view: Pin<&mut PictureView>,
+    label: &'static str,
+    edit: impl FnOnce(&mut Document) -> Result<bool, pictura_ops::OpsError> + Send + 'static,
 ) -> bool {
     if view.rust().modal_transform_blocks_edit() {
         return view.document_preflight_refusal(pictura_error::ErrorCode::Capability);
@@ -172,11 +180,11 @@ pub(super) fn commit(
         view.as_mut().recomposite();
     }
     view.as_mut().document_op(
-        HISTORY_LABEL,
+        label,
         JobBar::Busy,
         move |doc| {
-            convert(doc)
-                .map(|()| Some(Outcome::default()))
+            edit(doc)
+                .map(|changed| changed.then(Outcome::default))
                 .map_err(document_engine_error)
         },
         |rust, _| {
@@ -248,26 +256,108 @@ pub(super) fn convert_to_indexed(
     dither: i32,
     amount: i32,
 ) -> bool {
-    let options = palette_options(palette, colors, dither, amount);
-    commit(view, move |doc| {
-        pictura_render::convert_to_indexed(doc, options)
-    })
+    convert_to_indexed_with_options(
+        view,
+        palette,
+        colors,
+        dither,
+        amount,
+        false,
+        &QByteArray::default(),
+    )
 }
 
 pub(super) fn preview_indexed(
-    mut view: Pin<&mut PictureView>,
+    view: Pin<&mut PictureView>,
     palette: i32,
     colors: i32,
     dither: i32,
     amount: i32,
 ) -> bool {
-    let options = palette_options(palette, colors, dither, amount);
+    preview_indexed_with_options(
+        view,
+        palette,
+        colors,
+        dither,
+        amount,
+        false,
+        &QByteArray::default(),
+    )
+}
+
+fn forced_colors(rgb: &QByteArray) -> Option<Vec<[u8; 3]>> {
+    let (colors, trailing) = rgb.as_slice().as_chunks::<3>();
+    (colors.len() <= 256 && trailing.is_empty()).then(|| colors.to_vec())
+}
+
+pub(super) fn indexed_exact_available_with_options(
+    view: &PictureView,
+    transparency: bool,
+    forced_rgb: &QByteArray,
+) -> bool {
+    let Some(forced) = forced_colors(forced_rgb) else {
+        return false;
+    };
+    let mut options = palette_options(0, 256, 0, 0);
+    options.transparency = transparency;
+    let rust = view.rust();
+    rust.session
+        .live
+        .mode_preview()
+        .or(rust.session.doc.as_ref())
+        .is_some_and(|doc| pictura_render::document_ops::indexed_exact_fits(doc, options, &forced))
+}
+
+pub(super) fn convert_to_indexed_with_options(
+    view: Pin<&mut PictureView>,
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
+    transparency: bool,
+    forced_rgb: &QByteArray,
+) -> bool {
+    let Some(forced) = forced_colors(forced_rgb) else {
+        return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
+    };
+    let mut options = palette_options(palette, colors, dither, amount);
+    options.transparency = transparency;
+    commit(view, move |doc| {
+        pictura_render::document_ops::convert_to_indexed_with_forced(
+            doc,
+            options,
+            &forced,
+            palette == 0,
+        )
+    })
+}
+
+pub(super) fn preview_indexed_with_options(
+    mut view: Pin<&mut PictureView>,
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
+    transparency: bool,
+    forced_rgb: &QByteArray,
+) -> bool {
+    let Some(forced) = forced_colors(forced_rgb) else {
+        return false;
+    };
+    let mut options = palette_options(palette, colors, dither, amount);
+    options.transparency = transparency;
     let previewed = {
         let mut rust = view.as_mut().rust_mut();
         let Some(mut converted) = rust.mode_preview_base() else {
             return false;
         };
-        let ok = pictura_render::convert_to_indexed(&mut converted, options).is_ok();
+        let ok = pictura_render::document_ops::convert_to_indexed_with_forced(
+            &mut converted,
+            options,
+            &forced,
+            palette == 0,
+        )
+        .is_ok();
         if ok {
             rust.session.doc.set(Some(converted));
         }
@@ -277,6 +367,91 @@ pub(super) fn preview_indexed(
         view.as_mut().recomposite();
     }
     previewed
+}
+
+fn pack_table(table: pictura_codec::ColorTable) -> QByteArray {
+    let bytes: Vec<_> = table
+        .colors
+        .iter()
+        .enumerate()
+        .flat_map(|(i, &[r, g, b])| {
+            [
+                r,
+                g,
+                b,
+                if table.transparent == Some(i as u8) {
+                    0
+                } else {
+                    255
+                },
+            ]
+        })
+        .collect();
+    QByteArray::from(bytes.as_slice())
+}
+
+fn unpack_table(rgba: &QByteArray) -> Option<pictura_codec::ColorTable> {
+    let (entries, trailing) = rgba.as_slice().as_chunks::<4>();
+    if !trailing.is_empty() || !(1..=256).contains(&entries.len()) {
+        return None;
+    }
+    let mut table = pictura_codec::ColorTable::default();
+    for (i, &[r, g, b, alpha]) in entries.iter().enumerate() {
+        match alpha {
+            255 => {}
+            0 if table.transparent.is_none() => table.transparent = Some(i as u8),
+            _ => return None,
+        }
+        table.colors.push([r, g, b]);
+    }
+    Some(table)
+}
+
+pub(super) fn indexed_color_table(view: &PictureView) -> QByteArray {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(pictura_render::document_ops::indexed_color_table)
+        .map_or_else(QByteArray::default, pack_table)
+}
+
+pub(super) fn indexed_color_table_minimum(view: &PictureView) -> i32 {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(pictura_render::document_ops::indexed_color_table_minimum)
+        .map_or(0, |count| count as i32)
+}
+
+pub(super) fn apply_indexed_color_table(view: Pin<&mut PictureView>, rgba: &QByteArray) -> bool {
+    let Some(table) = unpack_table(rgba) else {
+        return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
+    };
+    if view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(pictura_render::document_ops::indexed_color_table)
+        .is_some_and(|current| current == table)
+    {
+        return false;
+    }
+    commit_mode_edit(view, "Color Table", move |doc| {
+        pictura_render::document_ops::replace_indexed_color_table(doc, table)
+    })
+}
+
+pub(super) fn decode_indexed_act(bytes: &QByteArray) -> QByteArray {
+    pictura_codec::parse_act(bytes.as_slice()).map_or_else(QByteArray::default, pack_table)
+}
+
+pub(super) fn encode_indexed_act(rgba: &QByteArray) -> QByteArray {
+    unpack_table(rgba).map_or_else(QByteArray::default, |table| {
+        QByteArray::from(pictura_codec::encode_act(&table).as_slice())
+    })
 }
 
 pub(super) fn preview_gif_indexed(
@@ -365,6 +540,72 @@ pub(super) fn convert_to_bitmap(view: Pin<&mut PictureView>, method: i32) -> boo
     let method = bitmap_method(method);
     commit(view, move |doc| {
         pictura_render::convert_to_bitmap(doc, method)
+    })
+}
+
+pub(super) fn convert_to_bitmap_halftone(
+    view: Pin<&mut PictureView>,
+    frequency: f64,
+    per_cm: bool,
+    angle: f64,
+    shape: i32,
+) -> bool {
+    let shapes = [
+        HalftoneShape::Round,
+        HalftoneShape::Diamond,
+        HalftoneShape::Ellipse,
+        HalftoneShape::Line,
+        HalftoneShape::Square,
+        HalftoneShape::Cross,
+    ];
+    let Some(&shape) = usize::try_from(shape).ok().and_then(|i| shapes.get(i)) else {
+        return false;
+    };
+    let options = HalftoneScreen {
+        frequency,
+        per_cm,
+        angle,
+        shape,
+    };
+    commit(view, move |doc| {
+        pictura_render::convert_to_bitmap(doc, BitmapMethod::HalftoneScreen(options))
+    })
+}
+
+fn bitmap_pattern(doc: &Document, id: &str, native: &[u8]) -> Option<PatternPixels> {
+    if id.is_empty() {
+        return None;
+    }
+    if native.is_empty() {
+        return pictura_codec::decode_patterns(doc)
+            .into_iter()
+            .find(|pattern| pattern.pattern_id == id)
+            .or_else(|| pictura_render::builtin_pattern_by_id(id));
+    }
+
+    use pictura_codec::preset_library::{decode, document_pattern_id, Format, Kind, Payload};
+
+    let mut entries = decode(Kind::Patterns, Format::Native, native)
+        .ok()?
+        .library
+        .entries
+        .into_iter();
+    let Payload::Pattern(pattern) = entries.next()?.payload else {
+        return None;
+    };
+    (entries.next().is_none() && document_pattern_id(&pattern) == id).then_some(pattern)
+}
+
+pub(super) fn convert_to_bitmap_pattern(
+    view: Pin<&mut PictureView>,
+    pattern_id: &QString,
+    native: &QByteArray,
+) -> bool {
+    let id = pattern_id.to_string();
+    let native = native.as_slice().to_vec();
+    commit(view, move |doc| {
+        let pattern = bitmap_pattern(doc, &id, &native);
+        pictura_render::convert_to_bitmap(doc, BitmapMethod::CustomPattern(pattern.as_ref()))
     })
 }
 

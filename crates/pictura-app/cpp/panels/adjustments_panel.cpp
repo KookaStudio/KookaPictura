@@ -1,6 +1,7 @@
 #include "adjustments_panel.h"
 
 #include "adjustment_catalogue.h"
+#include "channels_panel.h"
 #include "icons.h"
 
 #include "api/layers_bridge.h"
@@ -41,6 +42,9 @@ AdjustmentsPanel::AdjustmentsPanel(QWidget* parent)
         }
         const int i = buttons_.size();
         QToolButton* button = makeButton(entry);
+        if (adjustmentRequiresCompositeChannel(entry.kind)) {
+            selectiveColorButton_ = button;
+        }
         buttons_.append(button);
         grid->addWidget(button, i / kColumns, i % kColumns);
     }
@@ -82,8 +86,22 @@ void AdjustmentsPanel::setView(PictureView* view)
     refresh();
 }
 
+void AdjustmentsPanel::setChannelsPanel(ChannelsPanel* channels)
+{
+    channels_ = channels;
+    updateSelectiveColorAvailability();
+}
+
+void AdjustmentsPanel::updateSelectiveColorAvailability()
+{
+    if (selectiveColorButton_) {
+        selectiveColorButton_->setEnabled(view_ && (!channels_ || channels_->isCompositeChannelActive(view_)));
+    }
+}
+
 void AdjustmentsPanel::refresh()
 {
+    updateSelectiveColorAvailability();
     const quint64 generation = view_ ? view_->document_generation() : 0;
     if (view_ == patternView_ && generation == patternGeneration_) {
         return;

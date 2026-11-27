@@ -183,7 +183,7 @@ static VERIFIED: &[CommandDefinition] = &[
     CommandDefinition { id: "layer.flatten.image", label: "Flatten Image", class: CommandClass::AdobeVerified,
         event: EventId::Adobe("FltI"), parameters: &[], dialog: DialogMode::None },
     CommandDefinition { id: "image.mode.bitmap", label: "Bitmap", class: CommandClass::AdobeVerified,
-        event: EventId::AdobeWhen { code: "CnvM", parameter: "mode", value: "bitmap" }, parameters: MODE_PARAMS, dialog: DialogMode::None },
+        event: EventId::AdobeWhen { code: "CnvM", parameter: "mode", value: "bitmap" }, parameters: MODE_PARAMS, dialog: DialogMode::Optional },
     CommandDefinition { id: "image.mode.grayscale", label: "Grayscale", class: CommandClass::AdobeVerified,
         event: EventId::AdobeWhen { code: "CnvM", parameter: "mode", value: "grayscale" }, parameters: MODE_PARAMS, dialog: DialogMode::None },
     CommandDefinition { id: "image.mode.indexed.color", label: "Indexed Color", class: CommandClass::AdobeVerified,

@@ -97,6 +97,8 @@ fields! {
     "agent" / "agentRoots": Vec<String> = Vec::new();
     "unitsAndGuides" / "rulerUnit": i32 = 1;
     "unitsAndGuides" / "traditionalPoints": bool = false;
+    "unitsAndGuides" / "columnWidthInches": f64 = 2.5;
+    "unitsAndGuides" / "columnGutterInches": f64 = 1.0 / 6.0;
     "unitsAndGuides" / "guideColor": String = "#4affff".into();
     "unitsAndGuides" / "guideDashed": bool = false;
     "keyboard" / "shortcuts": BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -212,6 +214,20 @@ fn normalize(key: &str, value: Json) -> Result<Json, String> {
             let gamma = value.as_f64().ok_or("textGamma must be finite")?;
             Json::from(gamma.clamp(1.0, 2.2))
         }
+        "columnWidthInches" => Json::from(
+            value
+                .as_f64()
+                .filter(|v| *v > 0.0)
+                .unwrap_or(2.5)
+                .clamp(0.0001, 100_000.0),
+        ),
+        "columnGutterInches" => Json::from(
+            value
+                .as_f64()
+                .filter(|v| *v >= 0.0)
+                .unwrap_or(1.0 / 6.0)
+                .min(100_000.0),
+        ),
         "scratchVolumes" => Json::Array(
             value
                 .as_array()

@@ -26,7 +26,7 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
-        /// The Properties page for the adjustment layer at `path`, one tab-separated row each: `title`, `note`, `groups` (`|`-joined), `curves`, then a `slider` (key, label, group, value, default, min, max, decimals), `check` / `color` (key, label, group, value, default), or `choice` (… options `|`-joined) per control; group -1 shows in every group. Empty for anything else.
+        /// The Properties page for the adjustment layer at `path`, one tab-separated row each: `title`, optional `threshold-histogram` marker, `note`, `groups` (`|`-joined), `curves`, then a `slider` (key, label, group, value, default, min, max, decimals), `check` / `color` (key, label, group, value, default), or `choice` (… options `|`-joined) per control; group -1 shows in every group. Empty for anything else.
         fn adjustment_page(view: &PictureView, path: &QString) -> QStringList;
 
         /// The adjustment layer at `path`'s block (the 4-byte key then the payload), or empty for anything else.

@@ -1,22 +1,22 @@
 # Feature parity tracker
 
-Assessed: 2026-11-26
-Pictura commit: 1fd5bcad6
+Assessed: 2026-11-27
+Pictura commit: 47d505216
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
-This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
+This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The current assessment includes the #577 worktree changes relative to the listed commit. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
 ## Headline
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 209 | 79 | 57 | 4 | 349 | 59.9% | 8 |
-| CS6 Standard, in scope | 209 | 79 | 51 | 2 | 341 | 61.3% | 8 |
-| CS6 Extended | 210 | 79 | 73 | 4 | 366 | 57.4% | 23 |
-| CS6 Extended, in scope | 210 | 79 | 52 | 2 | 343 | 61.2% | 23 |
-| CC 28.0 | 211 | 81 | 78 | 4 | 374 | 56.4% | 20 |
-| CC 28.0, in scope | 211 | 81 | 60 | 2 | 354 | 59.6% | 20 |
+| CS6 Standard | 214 | 77 | 54 | 4 | 349 | 61.3% | 8 |
+| CS6 Standard, in scope | 214 | 77 | 48 | 2 | 341 | 62.8% | 8 |
+| CS6 Extended | 215 | 77 | 70 | 4 | 366 | 58.7% | 23 |
+| CS6 Extended, in scope | 215 | 77 | 49 | 2 | 343 | 62.7% | 23 |
+| CC 28.0 | 216 | 79 | 75 | 4 | 374 | 57.8% | 20 |
+| CC 28.0, in scope | 216 | 79 | 57 | 2 | 354 | 61.0% | 20 |
 
 ## Baselines
 
@@ -38,13 +38,13 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 
 | Category | CS6 Standard | CS6 Extended | CC 28.0 |
 |---|---|---|---|
-| Files & interchange | 27/40 (67.5%) | 27/42 (64.3%) | 28/46 (60.9%) |
+| Files & interchange | 28/40 (70.0%) | 28/42 (66.7%) | 29/46 (63.0%) |
 | Layers & compositing | 31/38 (81.6%) | 31/39 (79.5%) | 31/39 (79.5%) |
 | Tools & painting | 41/70 (58.6%) | 42/81 (51.9%) | 42/71 (59.2%) |
 | Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
-| Adjustments & filters | 30/55 (54.5%) | 30/55 (54.5%) | 30/64 (46.9%) |
+| Adjustments & filters | 32/55 (58.2%) | 32/55 (58.2%) | 32/64 (50.0%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
-| Color & bit depth | 14/29 (48.3%) | 14/29 (48.3%) | 14/29 (48.3%) |
+| Color & bit depth | 16/29 (55.2%) | 16/29 (55.2%) | 16/29 (55.2%) |
 | Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
 | Shell, panels & preferences | 28/60 (46.7%) | 28/63 (44.4%) | 28/62 (45.2%) |
 
@@ -72,7 +72,7 @@ Source list: CS6 and CC supported-format lists plus named File-menu, metadata, p
 | P-FMT-14 | Cineon export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-15 | DCS export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | Process-ink-only ceiling | — |
 | P-FMT-16 | Photoshop Raw export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | 8-bit ceiling | — |
-| P-FMT-17 | PICT read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1503 |
+| P-FMT-17 | PICT read and write | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/pict/; crates/pictura-codec/src/save/pict.rs | manual:tst_image_import pictOpens; codec PICT tests and the magick oracle | Bitmap-only PICT v1/v2 read (Bits/PackBits/DirectBits and QuickTime JPEG); QuickDraw vector records are skipped and a vector-only picture is refused; write 16/32-bit PackBits or JPEG, with 8191 px (32-bit) and 16383 px (16-bit) width ceilings | — |
 | P-FMT-18 | IFF read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1504 |
 | P-FMT-19 | PCX read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1505 |
 | P-FMT-20 | SGI read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1506 |
@@ -275,7 +275,7 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | ID | Feature | S | E | CC | Status | Scope | Evidence | Check | Notes | Tracking |
 |---|---|---|---|---|---|---|---|---|---|---|
 | P-IMG-01 | Brightness/Contrast | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src/tonal.rs | none | Auto ships | #578 |
-| P-IMG-02 | Levels | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Eyedroppers and Alt-drag clipping preview remain | #560 |
+| P-IMG-02 | Levels | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/levels_dialog.cpp | automated:tst_levels_canvas_controls::levelsAltDragClips | RGB and Grayscale eyedroppers and clipping preview ship; CS6 and native-depth behavior remain unverified | #560 |
 | P-IMG-03 | Curves | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | On-image, pencil, smooth, sliders, display options, CMYK/Lab graphs remain | #561 |
 | P-IMG-04 | Exposure | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
 | P-IMG-05 | Vibrance | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Auto and presets remain | #564 |
@@ -287,9 +287,9 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | P-IMG-11 | Colour Lookup | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
 | P-IMG-12 | Invert | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
 | P-IMG-13 | Posterize | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
-| P-IMG-14 | Threshold | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Histogram under the slider remains | #563 |
+| P-IMG-14 | Threshold | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/panels/adjustment_controls.cpp | none | Histogram samples large inputs and approximates specialized clipping and knockout cases | #563 |
 | P-IMG-15 | Gradient Map | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Dither and CS6 print-toning presets remain | #574 |
-| P-IMG-16 | Selective Colour | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Composite-channel-only gate and preset whitelist remain | #577 |
+| P-IMG-16 | Selective Colour | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/menu_adjust.cpp | none | Composite-channel gate and preset whitelist. Family weighting is modelled. | #577 |
 | P-IMG-17 | Shadows/Highlights | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Local-surround operator and eight controls remain | #562 |
 | P-IMG-18 | HDR Toning | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Local Adaptation Toning Curve and Corner remain | #557 |
 | P-IMG-19 | Desaturate | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
@@ -383,8 +383,8 @@ Source list: Image > Mode, Color Settings, picker, and swatch capabilities.
 | P-CLR-10 | 16-bit per channel | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | — | — |
 | P-CLR-11 | 32-bit per channel | Y | Y | Y | Partial | in-scope | crates/pictura-core/src | none | 32-bit preview options and the Info readout remain | #570 |
 | P-CLR-12 | Image mode conversion | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
-| P-CLR-13 | Colour Table, Indexed transparency, and Forced palette | Y | Y | Y | Missing | in-scope | — | none | No colour table UI or forced palette | #555 |
-| P-CLR-14 | Bitmap Halftone Screen and Custom Pattern | Y | Y | Y | Missing | in-scope | — | none | No halftone screen or custom pattern | #556 |
+| P-CLR-13 | Colour Table, Indexed transparency, and Forced palette | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/color_table_dialog.cpp; crates/pictura-render/src/document_ops/mode/indexed.rs | automated:tst_image_mode::colorTableActRoundTrip | Entry and range edits, ACT files, forced colours, and a transparent palette index | #555 |
+| P-CLR-14 | Bitmap Halftone Screen and Custom Pattern | Y | Y | Y | Complete | in-scope | crates/pictura-render/src/document_ops/mode/flat.rs; crates/pictura-app/cpp/bitmap_mode_dialog.cpp | none | Screen geometry is a behavioral approximation | — |
 | P-CLR-15 | Assign Profile | Y | Y | Y | Complete | in-scope | crates/pictura-color/src | none | — | — |
 | P-CLR-16 | Convert to Profile | Y | Y | Y | Complete | in-scope | crates/pictura-color/src | none | — | #568 |
 | P-CLR-17 | Colour Settings | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | .csf save/load, Gray/Spot working spaces, and installed-profile discovery remain | #569 |
@@ -468,7 +468,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-PREF-02 | Interface preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-03 | File Handling preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-04 | Performance preferences | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/preferences_performance.cpp; crates/pictura-app/cpp/status_readouts.cpp | manual:tst_performance_preferences covers the pane | Presets approximated; Cache Tile Size fixed at 256 px; no Basic/Normal/Advanced GPU modes (owner decision); Cache Levels default 8, not CS6's 4 | — |
-| P-PREF-05 | Units & Rulers preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
+| P-PREF-05 | Units & Rulers preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Column width and gutter are editable and persistent; Type and New Document Preset Resolutions remain | #506 |
 | P-PREF-06 | Guides, Grid & Slices preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-07 | Cursors preferences | Y | Y | Y | Missing | in-scope | — | none | Pane absent | UI-9 |
 | P-PREF-08 | Transparency & Gamut preferences | Y | Y | Y | Missing | in-scope | — | none | Pane absent | UI-9 |
@@ -520,10 +520,16 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 - **CC-only generative and cloud (non-goal:feasibility:76):** Generative Fill/Expand, Generate Image, Neural Filters, Relight, Libraries, Cloud Documents, and UXP remain outside the local product; P-FLT-34 through P-FLT-37, P-FLT-39, and P-AUT-19 through P-AUT-22.
 - **Extended-only (non-goal:feasibility:72):** 3D layers, the 3D panel, 3D file import, and the ten 3D tools are missing; P-LAY-40, P-PAN-26, and the P-TOOL 3D rows.
 
+Canvas Size supports picas and columns and gates extension fill on the Background layer (#566). Column preference editing is tracked in #565.
+
 ## Baseline history
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-27 | 47d505216 | 214/349 (61.3%) | 215/366 (58.7%) | 28.0 | 216/374 (57.8%) |
+| 2026-11-27 | 4a1fc6771 | 213/349 (61.0%) | 214/366 (58.5%) | 28.0 | 215/374 (57.5%) |
+| 2026-11-26 | 68a47c69 | 212/349 (60.7%) | 213/366 (58.2%) | 28.0 | 214/374 (57.2%) |
+| 2026-11-26 | 141c21da | 210/349 (60.2%) | 211/366 (57.7%) | 28.0 | 212/374 (56.7%) |
 | 2026-11-26 | 1fd5bcad6 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
 | 2026-11-25 | 5bba3258 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
 | 2026-11-21 | 4736b57e | 208/349 (59.6%) | 209/366 (57.1%) | 28.0 | 210/374 (56.1%) |

@@ -32,6 +32,7 @@
 #include "frame.h"
 #include "gif_options_dialog.h"
 #include "jpeg_options_dialog.h"
+#include "pict_options_dialog.h"
 #include "png_options_dialog.h"
 #include "raw_options_dialog.h"
 #include "save_format_options.h"
@@ -258,6 +259,7 @@ private slots:
     void tiffTransparencyOffFlattens();
     void cancelWritesNothing();
     void rememberedSettings();
+    void pictRemembered();
     void sizeEstimateFollowsQuality();
     void previewDoesNotMutate();
     void filterHintChoosesDcs();
@@ -275,6 +277,7 @@ private slots:
     void rawOptionsWrite();
     void tgaOptionsWrite();
     void cineonOptionsWrite();
+    void pictOptionsWrite();
     void gifSaveKeepsMode();
     void gifCancelLeavesMode();
     void gifWarningBeforeConversion();
@@ -336,6 +339,10 @@ void SaveFormatOptionsTest::formatKindForSuffix()
                  SaveFormatKind::Tga);
     }
     QCOMPARE(pictura::saveFormatKindForSuffix(QStringLiteral("cin")), SaveFormatKind::Cineon);
+    for (const char* suffix : {"pct", "pic", "pict"}) {
+        QCOMPARE(pictura::saveFormatKindForSuffix(QString::fromLatin1(suffix)),
+                 SaveFormatKind::Pict);
+    }
 }
 
 void SaveFormatOptionsTest::gifSettingsRoundTrip()
@@ -383,6 +390,10 @@ void SaveFormatOptionsTest::dialogDefaults()
     pictura::BmpOptionsDialog bmp(defaults);
     QCOMPARE(bmp.format(), 0);
     QCOMPARE(bmp.depth(), 24);
+
+    pictura::PictOptionsDialog pict(defaults);
+    QCOMPARE(pict.resolution(), 32);
+    QCOMPARE(pict.compression(), 0);
 }
 
 void SaveFormatOptionsTest::unsupportedControlsDisabled()
@@ -567,6 +578,34 @@ void SaveFormatOptionsTest::rememberedSettings()
         });
     QVERIFY(window_->saveActiveAsWithOptions(path("remembered2.png")));
     QCOMPARE(seeded, 100);
+    window_->setSaveFormatDialogForTest(nullptr);
+    closeActive();
+}
+
+void SaveFormatOptionsTest::pictRemembered()
+{
+    pictura::PictureView* view = newView(QStringLiteral("white"));
+    QVERIFY(view);
+    window_->setSaveFormatDialogForTest(
+        [](pictura::SaveFormatKind, pictura::SaveFormatOptions& options) {
+            options.pictResolution = 16;
+            options.pictCompression = 3;
+            return true;
+        });
+    QVERIFY(window_->saveActiveAsWithOptions(path("remembered.pct")));
+
+    int resolution = -1;
+    int compression = -1;
+    window_->setSaveFormatDialogForTest(
+        [&resolution, &compression](pictura::SaveFormatKind,
+                                    pictura::SaveFormatOptions& options) {
+            resolution = options.pictResolution;
+            compression = options.pictCompression;
+            return true;
+        });
+    QVERIFY(window_->saveActiveAsWithOptions(path("remembered2.pct")));
+    QCOMPARE(resolution, 16);
+    QCOMPARE(compression, 3);
     window_->setSaveFormatDialogForTest(nullptr);
     closeActive();
 }
@@ -892,6 +931,50 @@ void SaveFormatOptionsTest::cineonOptionsWrite()
     QCOMPARE(quint8(bytes[193]), quint8(3));
     window_->setSaveFormatDialogForTest(nullptr);
     closeActive();
+}
+
+void SaveFormatOptionsTest::pictOptionsWrite()
+{
+    const auto save = [this](const char* name, int resolution, int compression) {
+        pictura::PictureView* view = newView(QStringLiteral("white"));
+        QVERIFY(view);
+        window_->setSaveFormatDialogForTest(
+            [resolution, compression](pictura::SaveFormatKind,
+                                      pictura::SaveFormatOptions& options) {
+                options.pictResolution = resolution;
+                options.pictCompression = compression;
+                return true;
+            });
+        QVERIFY(window_->saveActiveAsWithOptions(path(name)));
+        window_->setSaveFormatDialogForTest(nullptr);
+        closeActive();
+    };
+
+    save("rgb.pct", 32, 0);
+    {
+        QFile file(path("rgb.pct"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray bytes = file.readAll();
+        QVERIFY(bytes.size() > 600);
+        QCOMPARE(bytes.mid(522, 4), QByteArray::fromHex("001102ff"));
+        QCOMPARE(bytes.mid(564, 2), QByteArray::fromHex("009a"));
+    }
+
+    save("rgb16.pct", 16, 0);
+    {
+        QFile file(path("rgb16.pct"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray bytes = file.readAll();
+        QCOMPARE(bytes.mid(564, 2), QByteArray::fromHex("009a"));
+    }
+
+    save("jpeg.pct", 32, 4);
+    {
+        QFile file(path("jpeg.pct"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray bytes = file.readAll();
+        QCOMPARE(bytes.mid(564, 2), QByteArray::fromHex("8200"));
+    }
 }
 
 void SaveFormatOptionsTest::gifSaveKeepsMode()

@@ -99,6 +99,7 @@ inline constexpr char ImageModeMultichannel[] = "image.mode.multichannel";
 inline constexpr char ImageMode8Bits[] = "image.mode.8.bits";
 inline constexpr char ImageMode16Bits[] = "image.mode.16.bits";
 inline constexpr char ImageMode32Bits[] = "image.mode.32.bits";
+inline constexpr char ImageModeColorTable[] = "image.mode.color.table";
 inline constexpr char SelectAll[] = "select.all";
 inline constexpr char SelectDeselect[] = "select.deselect";
 inline constexpr char SelectReselect[] = "select.reselect";

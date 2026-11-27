@@ -183,6 +183,9 @@ pub(super) fn parse_resample(kind: &str) -> Option<pictura_render::Resample> {
         "nearest" => Resample::Nearest,
         "bilinear" => Resample::Bilinear,
         "bicubic" => Resample::Bicubic,
+        "bicubic-smoother" => Resample::BicubicSmoother,
+        "bicubic-sharper" => Resample::BicubicSharper,
+        "automatic" => Resample::Automatic,
         _ => return None,
     })
 }
@@ -634,30 +637,30 @@ pub(super) fn move_preview_region(
 /// budget.
 ///
 /// A probed WebP container is decoded by the engine (Qt's WebP reader is an
-/// optional plugin); every other container goes to Qt, whose runtime decoders
-/// are the authoritative allow-list. The probe is only a fast-path guard that
-/// pre-empts a recognized header, so a container the probe does not recognize is
-/// still handed to Qt and capped afterwards.
+/// optional plugin) and a probed PICT container is decoded by the engine (Qt
+/// has no PICT reader); every other container goes to Qt, whose runtime
+/// decoders are the authoritative allow-list. The probe is only a fast-path
+/// guard that pre-empts a recognized header, so a container the probe does not
+/// recognize is still handed to Qt and capped afterwards.
 pub(super) fn decode_import(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let budget = pictura_codec::ImageBudget::default();
-    let is_webp = match pictura_codec::probe_image(bytes, budget) {
-        Ok(probe) => probe.format == pictura_codec::ImageFormat::WebP,
-        Err(pictura_codec::ImportError::UnknownContainer { .. }) => false,
+    let native = match pictura_codec::probe_image(bytes, budget) {
+        Ok(probe) if probe.format == pictura_codec::ImageFormat::WebP => {
+            pictura_codec::decode_webp(bytes, budget)
+        }
+        Ok(probe) if probe.format == pictura_codec::ImageFormat::Pict => {
+            pictura_codec::decode_pict_rgba(bytes, budget)
+        }
+        Ok(_) => None,
+        Err(pictura_codec::ImportError::UnknownContainer { .. }) => None,
         Err(_) => return None,
-    };
-    // Qt ships no WebP reader unless the optional qt6-imageformats package is
-    // present, so decode WebP in the engine; fall back to Qt only if it fails.
-    let native = if is_webp {
-        pictura_codec::decode_webp(bytes, budget)
-    } else {
-        None
     };
     let (rgba, w, h) = match native {
         Some(decoded) => decoded,
         None => {
             // Qt's image plugin loader is not safe for concurrent readers; the
             // open workers can decode several files at once, so serialize the
-            // Qt edge (the engine's WebP path above stays parallel).
+            // Qt edge (the engine's WebP and PICT paths above stay parallel).
             static QT_DECODE: std::sync::Mutex<()> = std::sync::Mutex::new(());
             let _guard = QT_DECODE
                 .lock()

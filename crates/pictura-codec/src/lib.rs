@@ -44,6 +44,7 @@ mod icc;
 mod icc_convert;
 pub mod illustrator;
 mod image_resources;
+mod indexed_metadata;
 mod iptc;
 mod layer_comps;
 pub mod layer_content;
@@ -67,6 +68,7 @@ mod path_resources;
 mod patterns;
 mod patterns_write;
 pub mod pdf;
+pub(crate) mod pict;
 mod pictura_filter;
 mod pictura_raw;
 pub(crate) mod png;
@@ -186,12 +188,14 @@ pub use smart_object::{
 pub use smart_writer::new_vector_source_id;
 // Re-exported so the app's profile commands can name a `Profile` without adding
 // a direct dependency on `pictura-color`.
+pub use indexed_metadata::{indexed_metadata, indexed_working_buffer, set_indexed_metadata};
 pub use lazy::{read_psd_lazy, MergedPreview, SourcePin};
 pub use live_shape::{
     decode_live_shape, encode_live_shape, LiveShape, ORIGIN_ELLIPSE, ORIGIN_RECTANGLE,
     ORIGIN_ROUNDED_RECTANGLE,
 };
 pub use mapped::MappedFile;
+pub use pict::{decode_pict, decode_pict_rgba, PictError, PictImage};
 pub use pictura_color::{ConversionOptions, Intent, Policy, Profile};
 pub use png::{encode_base64 as encode_png_base64, encode_rgba as encode_png_rgba};
 pub use probe::{probe_image, ImageBudget, ImageFormat, ImageProbe, ImportError, LimitKind};
@@ -234,11 +238,12 @@ pub use vector_mask::{
     encode_vector_mask_with_rule,
 };
 pub use web::{
-    embed_web_metadata, encode_act, encode_gif, encode_wbmp, pack_indexed, palette_delete,
-    palette_edit, palette_map_transparency, palette_sort, parse_act, quantize, quantize_custom,
-    quantize_locked, sfw_metadata, slice_html, unpack_indexed, web_safe_palette, ColorReduction,
-    ColorTable, Dither, Indexed, MetadataLevel, PaletteOptions, PaletteSort, SliceCell,
-    SliceHtmlOptions, SliceLayout, WebMetadata,
+    embed_web_metadata, encode_act, encode_gif, encode_wbmp, indexed_document_exact_fits,
+    pack_indexed, palette_delete, palette_edit, palette_map_transparency, palette_sort, parse_act,
+    quantize, quantize_custom, quantize_document_indexed, quantize_locked, sfw_metadata,
+    slice_html, unpack_indexed, web_safe_palette, ColorReduction, ColorTable, Dither, Indexed,
+    MetadataLevel, PaletteOptions, PaletteSort, SliceCell, SliceHtmlOptions, SliceLayout,
+    WebMetadata,
 };
 pub use webp::{decode_webp, encode_webp, encode_webp_lossy};
 pub use write::{

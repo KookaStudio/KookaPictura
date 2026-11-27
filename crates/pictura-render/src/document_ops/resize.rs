@@ -4,6 +4,7 @@
 use pictura_core::memory::MemoryError;
 use pictura_core::{Plane, Samples};
 
+use super::layer_ops::scale_layer_style;
 use super::resize_tiled::{self, Kernel};
 use super::{for_each_layer, materialize_merged_composite, valid_size};
 
@@ -18,6 +19,17 @@ pub fn resize_document(
     height: u32,
     resample: pictura_ops::Resample,
 ) -> Result<(), pictura_ops::OpsError> {
+    resize_document_with_styles(doc, width, height, resample, false)
+}
+
+/// Resize the document and optionally scale stored effects as part of the same edit.
+pub fn resize_document_with_styles(
+    doc: &mut pictura_core::Document,
+    width: u32,
+    height: u32,
+    resample: pictura_ops::Resample,
+    scale_styles: bool,
+) -> Result<(), pictura_ops::OpsError> {
     valid_size(width, height)?;
     let old_w = doc.width;
     let old_h = doc.height;
@@ -29,15 +41,24 @@ pub fn resize_document(
     let sx = width as f64 / old_w as f64;
     let sy = height as f64 / old_h as f64;
     let mut next = doc.clone();
+    let was_layerless = next.layers.is_empty();
     materialize_merged_composite(&mut next);
     if let Some(job) = pictura_core::job::current() {
         job.begin_stage(resampled_rows(&mut next, sx, sy, (width, height)));
     }
 
+    let style_factor = if scale_styles {
+        style_scale(old_w, old_h, width, height)
+    } else {
+        None
+    };
     let mut refused = None;
     for_each_layer(&mut next.layers, &mut |layer| {
         if refused.is_none() {
             refused = resize_layer(layer, sx, sy, resample).err();
+            if let Some(factor) = style_factor.filter(|_| refused.is_none()) {
+                scale_layer_style(layer, factor, true);
+            }
         }
     });
     if let Some(err) = refused {
@@ -63,6 +84,9 @@ pub fn resize_document(
             .expect("valid source planes");
     }
 
+    if was_layerless && !next.layers.is_empty() {
+        attach_resized_merged_native(&mut next, width, height)?;
+    }
     next.width = width;
     next.height = height;
     if (width, height) != (old_w, old_h) {
@@ -71,6 +95,113 @@ pub fn resize_document(
     super::refresh_plate_preview(&mut next);
     *doc = next;
     Ok(())
+}
+
+// The synthetic layer must retain the resized native samples for compatible saves.
+fn attach_resized_merged_native(
+    doc: &mut pictura_core::Document,
+    width: u32,
+    height: u32,
+) -> Result<(), MemoryError> {
+    use pictura_core::{BitDepth, ColorMode, SourceChannels, TileSample};
+    if doc.source.mode().is_some() || !matches!(doc.mode, ColorMode::Rgb | ColorMode::Grayscale) {
+        return Ok(());
+    }
+    let Some(store) = doc.source.planes().as_ref() else {
+        return Ok(());
+    };
+    if !matches!(store.depth, BitDepth::Sixteen | BitDepth::ThirtyTwo)
+        || (store.width, store.height) != (width, height)
+    {
+        return Ok(());
+    }
+    let (w, h) = (width as usize, height as usize);
+    let area = w * h;
+    let colors = doc.mode.color_channels() as usize;
+    if store.samples.len() < area * colors {
+        return Ok(());
+    }
+    let mut ids: Vec<(i16, usize)> = (0..colors).map(|i| (i as i16, i)).collect();
+    if doc.mode == ColorMode::Rgb
+        && doc.composite.signed_merged_alpha()
+        && store.samples.len() >= area * (colors + 1)
+    {
+        ids.push((-1, colors));
+    }
+    fn copy_plane<T: TileSample>(
+        src: &Plane<T>,
+        w: usize,
+        h: usize,
+        index: usize,
+    ) -> Result<Plane<T>, MemoryError> {
+        Plane::build_tiled(w, h, 1, |y, row| {
+            src.read_into(index * w * h + y * w, row);
+            Ok(())
+        })
+    }
+    let mut planes = Vec::with_capacity(ids.len());
+    for (id, index) in ids {
+        let samples = match &store.samples {
+            Samples::U16(src) => Samples::U16(copy_plane(src, w, h, index)?),
+            Samples::F32(src) => Samples::F32(copy_plane(src, w, h, index)?),
+            Samples::U8(_) => return Ok(()),
+        };
+        planes.push((id, samples));
+    }
+    fn narrow_plane<T: TileSample>(
+        src: &Plane<T>,
+        w: usize,
+        h: usize,
+        narrow: impl Fn(T) -> u8,
+    ) -> Result<Plane<u8>, MemoryError> {
+        let mut native = vec![T::default(); w];
+        Plane::build_tiled(w, h, 1, |y, row| {
+            src.read_into(y * w, &mut native);
+            for (pixel, &sample) in row.iter_mut().zip(&native) {
+                *pixel = narrow(sample);
+            }
+            Ok(())
+        })
+    }
+
+    let layer = &mut doc.layers[0];
+    // The PSD writer preserves native samples only when they narrow to the
+    // working plane. Derive both copies from the same resized samples.
+    for channel in layer.channels_mut() {
+        let Some((_, samples)) = planes.iter().find(|(id, _)| *id == channel.id) else {
+            continue;
+        };
+        channel.data = match samples {
+            Samples::U16(src) => narrow_plane(src, w, h, |s| (s >> 8) as u8)?,
+            Samples::F32(src) => {
+                narrow_plane(src, w, h, |s| (s * 256.0).trunc().clamp(0.0, 255.0) as u8)?
+            }
+            Samples::U8(src) => src.clone(),
+        };
+    }
+    layer.source_channels = Some(SourceChannels::new(store.depth, layer.rect, planes));
+    Ok(())
+}
+
+// A linked target may round to different apparent scale factors per axis.
+fn style_scale(old_w: u32, old_h: u32, width: u32, height: u32) -> Option<f64> {
+    if (old_w, old_h) == (width, height) {
+        return None;
+    }
+    let scale_bounds = |src: u32, dst: u32| {
+        let lo = if dst == 1 { 0.0 } else { f64::from(dst) - 0.5 };
+        (lo / f64::from(src), (f64::from(dst) + 0.5) / f64::from(src))
+    };
+    let (x_lo, x_hi) = scale_bounds(old_w, width);
+    let (y_lo, y_hi) = scale_bounds(old_h, height);
+    if x_lo.max(y_lo) >= x_hi.min(y_hi) {
+        return None;
+    }
+    Some(if old_w >= old_h {
+        f64::from(width) / f64::from(old_w)
+    } else {
+        f64::from(height) / f64::from(old_h)
+    })
 }
 
 /// An 8-bit plane through the tiled resampler with `pictura_ops::resize`'s
@@ -122,7 +253,7 @@ fn resize_native(
             from,
             channels,
             to,
-            Kernel::unit(resample),
+            Kernel::float(resample),
         )?),
     })
 }
@@ -186,9 +317,34 @@ fn resampled_rows(doc: &mut pictura_core::Document, sx: f64, sy: f64, to: (u32, 
 pub fn resized_plane_bytes(doc: &pictura_core::Document, width: u32, height: u32) -> (u64, u64) {
     let sx = width as f64 / f64::from(doc.width.max(1));
     let sy = height as f64 / f64::from(doc.height.max(1));
-    mapped_plane_bytes(doc, (width, height), |r| {
+    let (mut bytes, mut widest) = mapped_plane_bytes(doc, (width, height), |r| {
         (r.width() > 0 && r.height() > 0).then(|| scaled_dims(r.width(), r.height(), sx, sy))
-    })
+    });
+    if doc.layers.is_empty() && doc.composite.merged_output() {
+        let area = u64::from(width) * u64::from(height);
+        let colors = doc.mode.color_channels() as u64;
+        bytes += area * (colors + 1);
+        if doc.source.mode().is_none()
+            && matches!(
+                doc.mode,
+                pictura_core::ColorMode::Rgb | pictura_core::ColorMode::Grayscale
+            )
+        {
+            if let Some(store) = doc.source.planes().as_ref().filter(|s| {
+                matches!(
+                    s.depth,
+                    pictura_core::BitDepth::Sixteen | pictura_core::BitDepth::ThirtyTwo
+                )
+            }) {
+                let alpha = u64::from(
+                    doc.mode == pictura_core::ColorMode::Rgb && doc.composite.signed_merged_alpha(),
+                );
+                bytes += area * (colors + alpha) * (sample_bytes(&store.samples) + 1);
+            }
+        }
+        widest = widest.max(u64::from(width));
+    }
+    (bytes, widest)
 }
 
 /// The bytes a whole-document geometry command writes (#1293, #1294): every
@@ -376,6 +532,93 @@ mod tests {
         BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerMask, LockFlags,
         PsdRect, RawChannel, Samples, SourceChannels, SourcePlanes,
     };
+
+    #[test]
+    fn resize_style_rounding_intervals() {
+        assert_eq!(style_scale(3, 2, 5, 3), Some(5.0 / 3.0));
+        assert_eq!(style_scale(30, 2, 2, 1), Some(2.0 / 30.0));
+        assert_eq!(style_scale(3, 2, 3, 2), None);
+        assert_eq!(style_scale(3, 2, 5, 6), None);
+        assert_eq!(style_scale(3, 2, 11, 9), None);
+        assert_eq!(style_scale(3, 2, 11, 7), Some(11.0 / 3.0));
+    }
+
+    #[test]
+    fn image_size_scales_legacy_effects_without_rewriting_unknown_records() {
+        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        let mut layer = pixel_layer("Legacy", rect(0, 0, 4, 4), None);
+        let mut shadow = Vec::new();
+        for value in [0u32, 8, 25, 45, 12] {
+            shadow.extend_from_slice(&value.to_be_bytes());
+        }
+        shadow.extend_from_slice(&[0; 10]);
+        shadow.extend_from_slice(b"8BIMnorm");
+        shadow.extend_from_slice(&[0, 0, 255]);
+        let mut legacy = vec![0, 0, 0, 2];
+        legacy.extend_from_slice(b"8BIMdsdw");
+        legacy.extend_from_slice(&(shadow.len() as u32).to_be_bytes());
+        legacy.extend_from_slice(&shadow);
+        legacy.extend_from_slice(b"8BIMzzzz");
+        legacy.extend_from_slice(&3u32.to_be_bytes());
+        legacy.extend_from_slice(&[7, 8, 9]);
+        assert!(layer.set_metadata_block(*b"lrFX", Some(legacy.clone().into())));
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        let before = doc.clone();
+        resize_document_with_styles(&mut doc, 8, 8, pictura_ops::Resample::Nearest, true).unwrap();
+        let result = doc.layers[0].extra_block(b"lrFX").unwrap().data.to_vec();
+        let mut expected = legacy.clone();
+        expected[20..24].copy_from_slice(&16u32.to_be_bytes());
+        expected[32..36].copy_from_slice(&24u32.to_be_bytes());
+        assert_eq!(result, expected);
+        assert_eq!(
+            before.layers[0].extra_block(b"lrFX").unwrap().data.to_vec(),
+            legacy
+        );
+        let mut unchanged = before;
+        resize_document_with_styles(&mut unchanged, 8, 8, pictura_ops::Resample::Nearest, false)
+            .unwrap();
+        assert_eq!(
+            unchanged.layers[0]
+                .extra_block(b"lrFX")
+                .unwrap()
+                .data
+                .to_vec(),
+            legacy
+        );
+    }
+
+    #[test]
+    fn resize_scales_layer_styles_only_when_requested() {
+        use super::super::layer_ops::{layer_style_value, set_layer_style_value};
+        let mut original = Document::new(3, 2, ColorMode::Rgb, BitDepth::Eight);
+        let mut layer = pixel_layer("Styled", rect(0, 0, 2, 3), None);
+        assert!(set_layer_style_value(&mut layer, "dropShadow.on", 1.0));
+        assert!(set_layer_style_value(&mut layer, "dropShadow.size", 9.0));
+        assert!(set_layer_style_value(&mut layer, "innerShadow.size", 6.0));
+        original.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        for (scale, outer, inner) in [(false, 9.0, 6.0), (true, 15.0, 10.0)] {
+            let mut doc = original.clone();
+            resize_document_with_styles(&mut doc, 5, 3, pictura_ops::Resample::Nearest, scale)
+                .unwrap();
+            assert_eq!(
+                layer_style_value(&doc.layers[0], "innerShadow.on"),
+                Some(0.0)
+            );
+            assert!(set_layer_style_value(
+                &mut doc.layers[0],
+                "innerShadow.on",
+                1.0
+            ));
+            assert_eq!(
+                layer_style_value(&doc.layers[0], "dropShadow.size"),
+                Some(outer)
+            );
+            assert_eq!(
+                layer_style_value(&doc.layers[0], "innerShadow.size"),
+                Some(inner)
+            );
+        }
+    }
 
     fn rect(top: i32, left: i32, bottom: i32, right: i32) -> PsdRect {
         PsdRect {

@@ -5,7 +5,8 @@ Aggregates three layers into one pytest/vitest-like report:
 
   * nextest JUnit XML      (--junit)
   * C++ self-test tokens   (--selftest)
-  * Qt Test JUnit XML      (--qt-junit)
+  * Qt Test JUnit XML      (--qt-junit), whose per-suite `time` is retained
+                             and printed beside the counts
 
 Exits non-zero when any layer failed or a provided input could not be parsed.
 Run ``python3 scripts/report_tests.py --self-check`` for the parser fixture
@@ -157,6 +158,44 @@ def parse_junit(xml_text):
 QT_SYNTHETIC_CASES = ("initTestCase", "cleanupTestCase")
 
 
+def junit_timings(xml_text):
+    """Retain the JUnit ``time`` evidence instead of discarding it.
+
+    Returns ``(suite_seconds, cases)``: ``{suite: seconds}`` and
+    ``[(suite, case, seconds)]``, in document order. A missing or malformed
+    ``time`` is 0.0, so a supplier that omits it cannot fail the report. This is
+    the evidence ``scripts/qt_test_timings.py`` turns into a shard plan.
+    """
+    root = ET.fromstring(xml_text)
+    suite_seconds = {}
+    cases = []
+    for testsuite in root.iter("testsuite"):
+        name = testsuite.get("name") or ""
+        try:
+            total = float(testsuite.get("time") or 0.0)
+        except ValueError:
+            total = 0.0
+        suite_cases = []
+        case_total = 0.0
+        for case in testsuite.findall("testcase"):
+            case_name = case.get("name") or ""
+            try:
+                seconds = float(case.get("time") or 0.0)
+            except ValueError:
+                seconds = 0.0
+            case_total += seconds
+            if case_name not in QT_SYNTHETIC_CASES:
+                suite_cases.append((case_name, seconds))
+        # A report without a suite-level time still carries case times, setup and
+        # teardown included; summing them keeps the evidence for the shard plan.
+        if name:
+            measured = total or case_total
+            if measured:
+                suite_seconds[name] = suite_seconds.get(name, 0.0) + measured
+        cases.extend((name, case_name, seconds) for case_name, seconds in suite_cases)
+    return suite_seconds, cases
+
+
 def parse_qt_junit(xml_text):
     """Parse a Qt Test JUnit report, dropping the lifecycle pseudo-tests.
 
@@ -280,17 +319,22 @@ def validate_selftest_stream(text, label):
 def merge_selftest_streams(texts):
     """Merge self-test streams, deduping checks by (suite, name).
 
-    A check present in several runs is counted once. The last stream's status
-    wins only among PASS and SKIP: a FAIL in any capture stays a failure, so a
-    later passing run cannot erase an earlier red one. Layer totals are
+    A single complete stream keeps its SUMMARY as the layer total. A check
+    present in several runs is counted once. The last stream's status wins only
+    among PASS and SKIP: a FAIL in any capture stays a failure, so a later
+    passing run cannot erase an earlier red one. Multi-stream layer totals are
     recomputed from the merged unique checks. Returns ({suite: Counts}, totals,
     [(label, message)], entries) where ``entries`` is
     ``[(suite, name, status, detail)]`` in stream order.
     """
+    texts = list(texts)
+    single_summary = None
     order = []
     merged = {}
     for text in texts:
-        stream_order, checks, _summary = parse_selftest_stream(text)
+        stream_order, checks, summary = parse_selftest_stream(text)
+        if len(texts) == 1:
+            single_summary = summary
         for key in stream_order:
             if key not in merged:
                 order.append(key)
@@ -324,6 +368,8 @@ def merge_selftest_streams(texts):
             failures.append((label, record["message"]))
 
     totals = sum_counts(suites)
+    if single_summary is not None:
+        totals = single_summary
     return suites, totals, failures, entries
 
 
@@ -371,11 +417,16 @@ def _style(text, code, color):
 
 
 class Layer:
-    def __init__(self, title, suites=None, totals=None, entries=None, captures=None):
+    def __init__(
+        self, title, suites=None, totals=None, entries=None, captures=None, times=None
+    ):
         self.title = title
         self.suites = suites or {}
         self.totals = totals if totals is not None else sum_counts(self.suites)
         self.entries = entries or []
+        # {suite: seconds} from JUnit's time attribute: retained, not discarded,
+        # so the slowest entry is visible and a shard plan can cite it.
+        self.times = times or {}
         # [(label, Counts)] for one line per capture, since the captures run
         # different check sets and the merged total is not any one of them.
         self.captures = captures or []
@@ -459,7 +510,9 @@ def render(layers, failures, color, show_tests=True):
         for suite, name, status, detail in layer.entries:
             by_suite.setdefault(suite, []).append((name, status, detail))
         for suite, counts in layer.suites.items():
-            lines.append(f"  {suite} ({_counts_compact(counts)})")
+            seconds = layer.times.get(suite)
+            suffix = f" {seconds:.1f}s" if seconds else ""
+            lines.append(f"  {suite} ({_counts_compact(counts)}){suffix}")
             lines.extend(_test_lines(by_suite.get(suite, []), color))
         for label, counts in layer.captures:
             lines.append(f"  {label} ({_counts_compact(counts)})")
@@ -517,11 +570,6 @@ def build_layers(args, errors):
             captures.append(summary)
         if texts:
             suites, totals, selftest_failures, entries = merge_selftest_streams(texts)
-            # One capture's own SUMMARY is authoritative: a check that passes and
-            # then fails is two tokens but one check, so the deduped count would
-            # under-report the passes the run itself counted.
-            if len(texts) == 1 and captures[0] is not None:
-                totals = captures[0]
             if suites or totals.total():
                 layers.append(
                     Layer(
@@ -541,15 +589,19 @@ def build_layers(args, errors):
     if args.qt_junit or args.ctest_json:
         qt_suites = {}
         qt_entries = []
+        qt_times = {}
         for path in args.qt_junit or []:
             text = _read(path, errors)
             if text is None:
                 continue
             try:
                 suites, entries, qt_failures = parse_qt_junit(text)
+                suite_seconds, _cases = junit_timings(text)
             except ET.ParseError as exc:
                 errors.append(f"{path}: invalid JUnit XML: {exc}")
                 continue
+            for suite, seconds in suite_seconds.items():
+                qt_times[suite] = qt_times.get(suite, 0.0) + seconds
             for suite, counts in suites.items():
                 qt_suites.setdefault(suite, Counts()).add(counts)
             qt_entries.extend(entries)
@@ -564,7 +616,12 @@ def build_layers(args, errors):
                     failures.append((f"no report::{name}", message))
         if qt_suites:
             layers.append(
-                Layer("Qt shell tests (offscreen)", qt_suites, entries=qt_entries)
+                Layer(
+                    "Qt shell tests (offscreen)",
+                    qt_suites,
+                    entries=qt_entries,
+                    times=qt_times,
+                )
             )
 
     return layers, failures
@@ -696,6 +753,28 @@ def run_self_check():
     assert entries[0][1:] == ("oracle::skipped", "skip", "(ignored)"), entries
     assert entries[1][1:] == ("oracle::bad", "fail", ""), entries
 
+    # Durations are retained, not discarded. The fixture's suite element has no
+    # time, so the suite total falls back to its case times.
+    suite_seconds, cases = junit_timings(QT_JUNIT)
+    assert suite_seconds == {"SmokeTest": 0.414}, suite_seconds
+    assert cases == [("SmokeTest", "frameOpensOffscreen", 0.0)], cases
+    timed_xml = (
+        '<testsuite name="SmokeTest" time="1.5">'
+        '<testcase name="initTestCase" classname="SmokeTest" time="0.4"/>'
+        '<testcase name="frameOpensOffscreen" classname="SmokeTest" time="1.1"/>'
+        "</testsuite>"
+    )
+    suite_seconds, cases = junit_timings(timed_xml)
+    assert suite_seconds == {"SmokeTest": 1.5}, suite_seconds
+    assert cases == [("SmokeTest", "frameOpensOffscreen", 1.1)], cases
+    timed = Layer(
+        "Qt shell tests (offscreen)",
+        {"SmokeTest": Counts(1, 0, 0)},
+        entries=[("SmokeTest", "frameOpensOffscreen", "pass", "")],
+        times=suite_seconds,
+    )
+    assert "1.5s" in render([timed], [], False), render([timed], [], False)
+
     suites, entries, failures = parse_qt_junit(QT_JUNIT)
     assert suites["SmokeTest"].total() == 1, suites
     assert suites["SmokeTest"].failed == 1, suites
@@ -742,6 +821,56 @@ def run_self_check():
 
     suites, totals, _, _ = merge_selftest_streams([SELFTEST_BARE])
     assert (totals.passed, totals.failed, totals.skipped) == (2, 0, 0), totals
+
+    shared_tokens = "".join(
+        f"pictura self-test: PASS core {name} ok\n"
+        for name in ("shared", "common")
+    )
+    document_tokens = "".join(
+        f"pictura self-test: PASS core document_{index:02d} ok\n"
+        for index in range(36)
+    )
+    legacy_bare = (
+        shared_tokens
+        + "pictura self-test: PASS core fresh_white ok\n"
+        + "pictura self-test: SUMMARY passed=3 failed=0 skipped=0\n"
+    )
+    legacy_document = (
+        shared_tokens
+        + document_tokens
+        + "pictura self-test: SUMMARY passed=38 failed=0 skipped=0\n"
+    )
+    combined = (
+        shared_tokens
+        + "pictura self-test: PASS core fresh_white ok\n"
+        + document_tokens
+        + "pictura self-test: SUMMARY passed=39 failed=0 skipped=0\n"
+    )
+    single_suites, single_totals, single_failures, single_entries = parse_selftest(combined)
+    legacy_suites, legacy_totals, legacy_failures, legacy_entries = merge_selftest_streams(
+        [legacy_bare, legacy_document]
+    )
+    assert single_entries == legacy_entries, (single_entries, legacy_entries)
+    assert {
+        name: (counts.passed, counts.failed, counts.skipped)
+        for name, counts in single_suites.items()
+    } == {
+        name: (counts.passed, counts.failed, counts.skipped)
+        for name, counts in legacy_suites.items()
+    }
+    assert (
+        single_totals.passed,
+        single_totals.failed,
+        single_totals.skipped,
+    ) == (
+        legacy_totals.passed,
+        legacy_totals.failed,
+        legacy_totals.skipped,
+    )
+    assert (single_totals.passed, single_totals.failed, single_totals.skipped) == (39, 0, 0)
+    assert len(single_entries) == 39, single_entries
+    assert sum(entry[1] == "fresh_white" for entry in single_entries) == 1
+    assert not single_failures and not legacy_failures
 
     # Truncation: a capture that never reached its SUMMARY, end to end through
     # build_layers (which records it in errors) and exit_code.
@@ -845,6 +974,10 @@ def run_self_check():
         "pictura self-test: FAIL core two_phase 9 late\n"
         "pictura self-test: SUMMARY passed=1 failed=1 skipped=0\n"
     )
+    suites, totals, merge_failures, entries = merge_selftest_streams([pass_then_fail])
+    assert (totals.passed, totals.failed, totals.skipped) == (1, 1, 0), totals
+    assert entries == [("core", "two_phase", "fail", "")], entries
+    assert merge_failures == [("core::two_phase (exit 9)", "late")], merge_failures
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "single.log")
         with open(path, "w", encoding="utf-8") as handle:

@@ -131,6 +131,20 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state, const Prefe
 
     channelsPanel_ = new ChannelsPanel(shell_);
     channelsPanel_->setObjectName(QStringLiteral("channelsPanel"));
+    adjustmentsPanel_->setChannelsPanel(channelsPanel_);
+    layersPanel_->setChannelsPanel(channelsPanel_);
+    connect(channelsPanel_, &ChannelsPanel::compositeChannelChanged, this, [this]() {
+        adjustmentsPanel_->updateSelectiveColorAvailability();
+        layersPanel_->updateSelectiveColorAvailability();
+        if (commands_) {
+            static const QString imageCommand = commandIdForPath(
+                {QStringLiteral("Image"), QStringLiteral("Adjustments"), QStringLiteral("Selective Color")});
+            static const QString layerCommand = commandIdForPath(
+                {QStringLiteral("Layer"), QStringLiteral("New Adjustment Layer"), QStringLiteral("Selective Color")});
+            commands_->applyState(commands_->action(imageCommand));
+            commands_->applyState(commands_->action(layerCommand));
+        }
+    });
     // Channel visibility follows the active document; the panel resets it on a
     // document switch, so applying it to every window's canvas keeps them in
     // step.
@@ -142,6 +156,16 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state, const Prefe
             if (window->canvas) {
                 window->canvas->setChannelMask(mask);
             }
+        }
+    });
+    connect(channelsPanel_, &ChannelsPanel::channelTargetChanged, this, [this]() {
+        if (commands_) {
+            commands_->refresh();
+        }
+    });
+    connect(channelsPanel_, &ChannelsPanel::channelMaskChanged, this, [this](int) {
+        if (commands_) {
+            commands_->refresh();
         }
     });
     connect(channelsPanel_, &ChannelsPanel::saveOptionsRequested, this, [this]() {

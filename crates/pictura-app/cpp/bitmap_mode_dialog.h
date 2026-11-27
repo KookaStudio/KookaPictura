@@ -1,26 +1,32 @@
 #pragma once
 
-#include <QtWidgets/QComboBox>
+#include <QtCore/QJsonObject>
 #include <QtWidgets/QDialog>
+
+class QComboBox;
+class QDoubleSpinBox;
 
 namespace pictura {
 
-// Image > Mode > Bitmap: how 8-bit gray is reduced to black and white
-// (docs/04-image-ops/image-modes.md). `method()` is the `convert_to_bitmap`
-// bridge's integer.
-//
-// ponytail: no Output resolution (the conversion does not resample), and
-// Halftone Screen / Custom Pattern are absent.
+class PictureView;
+
 class BitmapModeDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit BitmapModeDialog(QWidget* parent = nullptr);
+    explicit BitmapModeDialog(PictureView& view, const QJsonObject& initial = {},
+                              QWidget* parent = nullptr);
 
-    int method() const;  // 0 50% Threshold, 1 Pattern Dither, 2 Diffusion Dither
+    int method() const;
+    QJsonObject options() const;
 
 private:
     QComboBox* method_ = nullptr;
+    QDoubleSpinBox* frequency_ = nullptr;
+    QComboBox* unit_ = nullptr;
+    QDoubleSpinBox* angle_ = nullptr;
+    QComboBox* shape_ = nullptr;
+    QComboBox* pattern_ = nullptr;
 };
 
 } // namespace pictura
