@@ -1,11 +1,11 @@
 # Feature parity tracker
 
 Assessed: 2026-11-28
-Pictura commit: ec3346bcd
+Pictura commit: c5e0bd090
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
-Coverage includes the #558 HDR merge workflow, #577 Selective Color channel gating, and #523 numeric opacity and fill shortcuts.
+Coverage includes the #558 HDR merge workflow, #577 Selective Color channel gating, #523 numeric opacity and fill shortcuts, and #532 Merge Shape Components.
 
 This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
@@ -209,7 +209,7 @@ Source list: CS6 toolbox tools (73 catalogue entries) plus named brush-engine, b
 | P-TOOL-48 | Vertical Type | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-49 | Horizontal Type Mask | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-50 | Vertical Type Mask | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-TOOL-51 | Path Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Path operations, align/arrange, constrained dragging, and multi-select remain | TOOL-18 |
+| P-TOOL-51 | Path Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/tool_path_selection.cpp; crates/pictura-select/src/merge_shape_components.rs | none | Merge Shape Components (#532) preserves effective fill with polygon approximation; overlap-mode editing, align/arrange, constrained dragging, and multi-select remain | TOOL-18 |
 | P-TOOL-52 | Direct Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Path operations, align/arrange, constrained dragging, and multi-select remain | TOOL-18 |
 | P-TOOL-53 | Rectangle | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |
 | P-TOOL-54 | Rounded Rectangle | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |
@@ -529,6 +529,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-28 | c5e0bd090 | 218/350 (62.3%) | 219/367 (59.7%) | 28.0 | 220/375 (58.7%) |
 | 2026-11-28 | ec3346bcd | 218/350 (62.3%) | 219/367 (59.7%) | 28.0 | 220/375 (58.7%) |
 | 2026-11-27 | 73f469e1 | 216/350 (61.7%) | 217/367 (59.1%) | 28.0 | 218/375 (58.1%) |
 | 2026-11-27 | a876cd9fd | 215/350 (61.4%) | 216/367 (58.9%) | 28.0 | 217/375 (57.9%) |
