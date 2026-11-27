@@ -66,8 +66,8 @@ public:
     void setChannelsPanel(ChannelsPanel* channels);
     void updateSelectiveColorAvailability();
     void refresh();
-    bool filterZeroOpacityShortcut(QWidget* source, QEvent* event);
-    void clearZeroOpacityShortcut();
+    bool filterOpacityShortcut(QWidget* source, QEvent* event);
+    void clearOpacityShortcut();
 
     /// While a transform is pending the layer list stays selectable but the
     /// panel's editing controls are disabled. A change of the active layer
@@ -578,13 +578,19 @@ private:
     // Synthesize a left-click with `mods` on `path`'s mask thumbnail.
     bool clickMaskThumbWithModifiersForTest(const QString& path, Qt::KeyboardModifiers mods);
 
-    struct ZeroOpacityShortcut {
+    bool canUseOpacityShortcut(const QWidget* source, bool fill) const;
+    void finishOpacityShortcut(int nextDigit = -1);
+
+    struct OpacityShortcut {
         QElapsedTimer elapsed;
         QPointer<QWidget> source;
         QStringList paths;
         quint64 generation = 0;
+        int firstDigit = 0;
         bool fill = false;
-    } zeroShortcut_;
+        bool awaitingPress = false;
+    } opacityShortcut_;
+    QTimer* opacityShortcutTimer_ = nullptr;
 
     PictureView* view_ = nullptr;
     // The app's shared foreground/background colours; null when the panel was

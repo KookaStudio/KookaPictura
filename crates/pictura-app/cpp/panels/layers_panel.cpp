@@ -119,6 +119,12 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     : QWidget(parent)
     , colors_(colors)
 {
+    opacityShortcutTimer_ = new QTimer(this);
+    opacityShortcutTimer_->setSingleShot(true);
+    opacityShortcutTimer_->setTimerType(Qt::PreciseTimer);
+    connect(opacityShortcutTimer_, &QTimer::timeout, this,
+            [this] { finishOpacityShortcut(); });
+
     QWidget* body = this;
     auto* layout = new QVBoxLayout(body);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -468,7 +474,7 @@ void LayersPanel::setView(PictureView* view)
     }
     if (view_ != view
         || (view_ && view && view->document_generation() != rememberedGeneration_)) {
-        clearZeroOpacityShortcut();
+        clearOpacityShortcut();
         rememberedTarget_.clear();
         rememberedAnchor_.clear();
     }
@@ -502,7 +508,7 @@ void LayersPanel::setView(PictureView* view)
         // One queued refresh per burst of changes; a synchronous refresh
         // before it runs (New Layer from the panel) consumes it.
         viewConnection_ = connect(view_, &PictureView::changed, this, [this] {
-            clearZeroOpacityShortcut();
+            clearOpacityShortcut();
             // A notifying edit supersedes any in-place visibility patch.
             visibilityPatched_ = false;
             if (refreshQueued_) {

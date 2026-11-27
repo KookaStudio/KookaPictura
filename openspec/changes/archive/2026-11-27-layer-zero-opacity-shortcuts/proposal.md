@@ -1,10 +1,10 @@
 ## Why
 
-The Layers panel has Opacity and Fill controls, but #523's keyboard path to set either value to zero is missing.
+The Layers panel has Opacity and Fill controls, but #523's keyboard path to enter percentages is incomplete.
 
 ## What Changes
 
-- Recognize two quick zero presses for Opacity and two quick Shift+zero presses for Fill.
+- Recognize single digits and quick two-digit percentages for Opacity and for Fill with Shift.
 - Apply the edit to the eligible selected layers in one undo step through the existing Layers controls' transaction.
 - Keep typing, pending-transform input, and existing modified command shortcuts available in their own contexts. Recognize the zero key across keyboard layouts.
 

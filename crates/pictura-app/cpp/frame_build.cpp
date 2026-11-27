@@ -385,7 +385,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
 
     connect(tools_, &ToolController::activeToolChanged, this, [this](ToolId id) {
         if (auto* panel = panels_->layersPanel()) {
-            panel->clearZeroOpacityShortcut();
+            panel->clearOpacityShortcut();
         }
         if (optionsBar_) {
             optionsBar_->showTool(id);
@@ -696,7 +696,7 @@ bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
         canvas && documents_ && panels_ && tools_ && canvas == imageView()
         && tools_->activeTool() == ToolId::Move) {
         if (auto* panel = panels_->layersPanel();
-            panel && panel->filterZeroOpacityShortcut(canvas, event)) {
+            panel && panel->filterOpacityShortcut(canvas, event)) {
             return true;
         }
     }

@@ -36,7 +36,7 @@ void LayersPanel::setTransformPending(bool pending)
         return;
     }
     transformPending_ = pending;
-    clearZeroOpacityShortcut();
+    clearOpacityShortcut();
     // The layer list stays selectable; the editing controls follow the flag.
     syncControls();
     syncStripButtons();
@@ -183,7 +183,7 @@ void LayersPanel::rememberTarget()
     const quint64 generation = view_->document_generation();
     if (targets != rememberedTarget_ || anchor != rememberedAnchor_
         || generation != rememberedGeneration_) {
-        clearZeroOpacityShortcut();
+        clearOpacityShortcut();
     }
     rememberedTarget_ = targets;
     rememberedAnchor_ = anchor;

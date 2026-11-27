@@ -10,7 +10,10 @@
 #include "panels/layers_panel.h"
 #include "qt_test_support.h"
 
+#include <QtCore/QThread>
 #include <QtGui/QKeyEvent>
+#include <QtGui/QShortcut>
+#include <QtTest/QSignalSpy>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QTreeView>
 
@@ -25,6 +28,17 @@ void pressPair(QWidget* target, Qt::Key key = Qt::Key_0,
     QTest::keyClick(target, key, modifiers);
 }
 
+void waitOutShortcut()
+{
+    // No signal marks the end of a canceled shortcut's 500 ms window.
+    QTest::qWait(550);
+}
+
+int percentByte(int percent)
+{
+    return qRound(percent * 255.0 / 100.0);
+}
+
 } // namespace
 
 class LayerZeroShortcutsTest : public QObject {
@@ -35,6 +49,10 @@ private slots:
     void cleanup();
     void canvasOpacity();
     void treeFill();
+    void singleDigits();
+    void exactPairs();
+    void registeredNumericShortcut();
+    void paintingCanvas();
     void eligibilityAndNoOp();
     void interruptedSequence();
     void contextChanges();
@@ -60,7 +78,7 @@ void LayerZeroShortcutsTest::init()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_);
-    QVERIFY(window_->newDocument(QStringLiteral("Zero shortcuts"), 16, 16,
+    QVERIFY(window_->newDocument(QStringLiteral("Numeric shortcuts"), 16, 16,
                                  QStringLiteral("rgb"), 8, QStringLiteral("white")));
     view_ = window_->activeView();
     QVERIFY(view_);
@@ -171,34 +189,151 @@ void LayerZeroShortcutsTest::eligibilityAndNoOp()
     QCOMPARE(view_->history_count(), history + 1);
 }
 
+void LayerZeroShortcutsTest::singleDigits()
+{
+    QCOMPARE(view_->set_layers_opacity({layer_}, 128), 1);
+    QCOMPARE(view_->set_layers_fill({layer_}, 128), 1);
+    select({layer_});
+    for (const bool fill : {false, true}) {
+        QWidget* source = fill ? static_cast<QWidget*>(tree_)
+                               : static_cast<QWidget*>(canvas_);
+        source->setFocus();
+        QVERIFY(source->hasFocus());
+        const auto value = [&] { return fill ? row(layer_).fill : row(layer_).opacity; };
+        const auto other = [&] { return fill ? row(layer_).opacity : row(layer_).fill; };
+        const int otherBefore = other();
+        for (int digit = 0; digit <= 9; ++digit) {
+            const int before = value();
+            const int history = view_->history_count();
+            QTest::keyClick(source, Qt::Key(Qt::Key_0 + digit),
+                            fill ? Qt::ShiftModifier : Qt::NoModifier);
+            // Process queued events well before the 500 ms deadline to catch early commits.
+            QTest::qWait(100);
+            QCOMPARE(value(), before);
+            QCOMPARE(view_->history_count(), history);
+            QTRY_COMPARE_WITH_TIMEOUT(value(), percentByte(digit == 0 ? 100 : digit * 10),
+                                      2000);
+            QCOMPARE(other(), otherBefore);
+            QCOMPARE(view_->history_count(), history + 1);
+        }
+    }
+}
+
+void LayerZeroShortcutsTest::exactPairs()
+{
+    for (const bool fill : {false, true}) {
+        QWidget* source = fill ? static_cast<QWidget*>(tree_)
+                               : static_cast<QWidget*>(canvas_);
+        source->setFocus();
+        QVERIFY(source->hasFocus());
+        for (const int percent : {5, 54, 99}) {
+            Qt::KeyboardModifiers modifiers = fill ? Qt::ShiftModifier : Qt::NoModifier;
+            if (percent == 54) {
+                modifiers |= Qt::KeypadModifier;
+            }
+            const int history = view_->history_index();
+            const auto value = [&] { return fill ? row(layer_).fill : row(layer_).opacity; };
+            QCOMPARE(value(), 255);
+            QTest::keyClick(source, Qt::Key(Qt::Key_0 + percent / 10), modifiers);
+            QCOMPARE(value(), 255);
+            QCOMPARE(view_->history_index(), history);
+            QTest::keyClick(source, Qt::Key(Qt::Key_0 + percent % 10), modifiers);
+            QCOMPARE(value(), percentByte(percent));
+            QCOMPARE(view_->history_index(), history + 1);
+            QVERIFY(view_->undo());
+            QCOMPARE(value(), 255);
+            QCOMPARE(view_->history_index(), history);
+        }
+    }
+}
+
+void LayerZeroShortcutsTest::registeredNumericShortcut()
+{
+    canvas_->setFocus();
+    QVERIFY(canvas_->hasFocus());
+    QShortcut shortcut(QKeySequence(Qt::Key_8), canvas_);
+    QSignalSpy activated(&shortcut, &QShortcut::activated);
+    const int history = view_->history_count();
+
+    QTest::keyClick(canvas_, Qt::Key_4);
+    QTest::keyClick(canvas_, Qt::Key_8);
+    QCOMPARE(activated.count(), 1);
+    QTest::keyClick(canvas_, Qt::Key_5);
+
+    QCOMPARE(row(layer_).opacity, 255);
+    QCOMPARE(view_->history_count(), history);
+    QTRY_COMPARE_WITH_TIMEOUT(row(layer_).opacity, percentByte(50), 2000);
+    QCOMPARE(view_->history_count(), history + 1);
+
+    // A registered action can enter a nested loop before returning to Qt.
+    connect(&shortcut, &QShortcut::activated, this, waitOutShortcut);
+    QTest::keyClick(canvas_, Qt::Key_4);
+    QTest::keyClick(canvas_, Qt::Key_8);
+    QCOMPARE(activated.count(), 2);
+    QCOMPARE(row(layer_).opacity, percentByte(50));
+    QCOMPARE(view_->history_count(), history + 1);
+}
+
+void LayerZeroShortcutsTest::paintingCanvas()
+{
+    window_->setActiveTool(pictura::ToolId::Brush);
+    canvas_->setFocus();
+    QVERIFY(canvas_->hasFocus());
+    const int history = view_->history_count();
+
+    pressPair(canvas_, Qt::Key_9);
+    pressPair(canvas_, Qt::Key_5, Qt::ShiftModifier);
+    QTest::keyClick(canvas_, Qt::Key_3);
+    waitOutShortcut();
+
+    QCOMPARE(row(layer_).opacity, 255);
+    QCOMPARE(row(layer_).fill, 255);
+    QCOMPARE(view_->history_count(), history);
+}
+
 void LayerZeroShortcutsTest::interruptedSequence()
 {
     canvas_->setFocus();
     const int history = view_->history_count();
 
-    QTest::keyPress(canvas_, Qt::Key_0);
-    QKeyEvent repeat(QEvent::KeyPress, Qt::Key_0, Qt::NoModifier,
-                     QStringLiteral("0"), true);
+    QTest::keyPress(canvas_, Qt::Key_4);
+    QKeyEvent repeat(QEvent::KeyPress, Qt::Key_4, Qt::NoModifier,
+                     QStringLiteral("4"), true);
     QCoreApplication::sendEvent(canvas_, &repeat);
-    QTest::keyRelease(canvas_, Qt::Key_0);
-    QCOMPARE(row(layer_).opacity, 255);
-    // No signal marks the end of the 500 ms shortcut window.
-    QTest::qWait(550);
-    QTest::keyClick(canvas_, Qt::Key_0);
-    QCOMPARE(row(layer_).opacity, 255);
-
-    QTest::keyClick(canvas_, Qt::Key_0, Qt::ShiftModifier);
-    QTest::keyClick(canvas_, Qt::Key_0);
-    QCOMPARE(row(layer_).opacity, 255);
-    QCOMPARE(row(layer_).fill, 255);
-
-    QTest::keyClick(canvas_, Qt::Key_1);
-    QTest::keyClick(canvas_, Qt::Key_0);
-    QCOMPARE(row(layer_).opacity, 255);
-    tree_->setFocus();
-    QTest::keyClick(tree_, Qt::Key_0);
+    QTest::keyRelease(canvas_, Qt::Key_4);
     QCOMPARE(row(layer_).opacity, 255);
     QCOMPARE(view_->history_count(), history);
+    QTRY_COMPARE_WITH_TIMEOUT(row(layer_).opacity, percentByte(40), 2000);
+    QCOMPARE(view_->history_count(), history + 1);
+
+    QTest::keyClick(canvas_, Qt::Key_5);
+    QTRY_COMPARE_WITH_TIMEOUT(row(layer_).opacity, percentByte(50), 2000);
+    QCOMPARE(view_->history_count(), history + 2);
+
+    QTest::keyClick(canvas_, Qt::Key_7);
+    QTest::keyClick(canvas_, Qt::Key_3, Qt::ShiftModifier);
+    QCOMPARE(row(layer_).fill, 255);
+    QTRY_COMPARE_WITH_TIMEOUT(row(layer_).fill, percentByte(30), 2000);
+    QCOMPARE(row(layer_).opacity, percentByte(50));
+    QCOMPARE(view_->history_count(), history + 3);
+
+    QTest::keyClick(canvas_, Qt::Key_6);
+    // Stall without processing timer events, then deliver a different-mode digit directly.
+    QThread::msleep(550);
+    QKeyEvent shiftedDigit(QEvent::KeyPress, Qt::Key_8, Qt::ShiftModifier,
+                           QStringLiteral("8"));
+    QCoreApplication::sendEvent(canvas_, &shiftedDigit);
+    QCOMPARE(row(layer_).opacity, percentByte(60));
+    QCOMPARE(row(layer_).fill, percentByte(30));
+    QCOMPARE(view_->history_count(), history + 4);
+    QTRY_COMPARE_WITH_TIMEOUT(row(layer_).fill, percentByte(80), 2000);
+    QCOMPARE(view_->history_count(), history + 5);
+
+    QTest::keyClick(canvas_, Qt::Key_9);
+    QTest::keyClick(canvas_, Qt::Key_F12);
+    waitOutShortcut();
+    QCOMPARE(row(layer_).opacity, percentByte(60));
+    QCOMPARE(view_->history_count(), history + 5);
 }
 
 void LayerZeroShortcutsTest::contextChanges()
@@ -206,24 +341,6 @@ void LayerZeroShortcutsTest::contextChanges()
     const QString other = view_->add_layer_in(QString());
     QVERIFY(!other.isEmpty());
     select({layer_});
-    canvas_->setFocus();
-    QVERIFY(canvas_->hasFocus());
-    const int history = view_->history_count();
-
-    QTest::keyClick(canvas_, Qt::Key_0);
-    select({other});
-    select({layer_});
-    QTest::keyClick(canvas_, Qt::Key_0);
-    QCOMPARE(row(layer_).opacity, 255);
-    QCOMPARE(row(other).opacity, 255);
-
-    tree_->setFocus();
-    QVERIFY(tree_->hasFocus());
-    canvas_->setFocus();
-    QVERIFY(canvas_->hasFocus());
-    QTest::keyClick(canvas_, Qt::Key_0);
-    QCOMPARE(row(layer_).opacity, 255);
-
     const int original = window_->activeDocumentIndex();
     QVERIFY(window_->newDocument(QStringLiteral("Second"), 16, 16,
                                  QStringLiteral("rgb"), 8, QStringLiteral("transparent")));
@@ -235,17 +352,46 @@ void LayerZeroShortcutsTest::contextChanges()
     QCOMPARE(window_->activeView(), view_);
     canvas_->setFocus();
     QVERIFY(canvas_->hasFocus());
-    QTest::keyClick(canvas_, Qt::Key_0);
+    const int history = view_->history_count();
+
+    QTest::keyClick(canvas_, Qt::Key_6);
+    select({other});
+    select({layer_});
+    waitOutShortcut();
+    QCOMPARE(row(layer_).opacity, 255);
+    QCOMPARE(row(other).opacity, 255);
+
+    QTest::keyClick(canvas_, Qt::Key_6);
+    tree_->setFocus();
+    QVERIFY(tree_->hasFocus());
+    canvas_->setFocus();
+    QVERIFY(canvas_->hasFocus());
+    waitOutShortcut();
+    QCOMPARE(row(layer_).opacity, 255);
+
+    QTest::keyClick(canvas_, Qt::Key_6);
     window_->setActiveDocumentIndex(secondIndex);
     QCOMPARE(window_->activeView(), second);
     window_->setActiveDocumentIndex(original);
     QCOMPARE(window_->activeView(), view_);
     canvas_->setFocus();
     QVERIFY(canvas_->hasFocus());
-    QTest::keyClick(canvas_, Qt::Key_0);
+    waitOutShortcut();
+    QCOMPARE(row(layer_).opacity, 255);
+    QCOMPARE(second->history_count(), secondHistory);
+
+    QTest::keyClick(canvas_, Qt::Key_6);
+    window_->setActiveTool(pictura::ToolId::Brush);
+    window_->setActiveTool(pictura::ToolId::Move);
+    canvas_->setFocus();
+    waitOutShortcut();
+    QCOMPARE(row(layer_).opacity, 255);
+
+    QTest::keyClick(canvas_, Qt::Key_6);
+    QTest::mouseClick(canvas_, Qt::MiddleButton, Qt::NoModifier, canvas_->rect().center());
+    waitOutShortcut();
     QCOMPARE(row(layer_).opacity, 255);
     QCOMPARE(view_->history_count(), history);
-    QCOMPARE(second->history_count(), secondHistory);
 }
 
 void LayerZeroShortcutsTest::modifiedKeys()
@@ -275,15 +421,19 @@ void LayerZeroShortcutsTest::modifiedKeys()
     tree_->setFocus();
     canvas_->setFocus();
 
+    QCOMPARE(view_->set_layers_opacity({layer_}, 179), 1);
+    const int beforeReset = view_->history_count();
     window_->setUiScalePercent(120);
     QCOMPARE(window_->uiScalePercent(), 120);
     QTest::keyClick(canvas_, Qt::Key_0);
     QTest::keyClick(canvas_, Qt::Key_0, Qt::ControlModifier | Qt::AltModifier);
     QCOMPARE(window_->uiScalePercent(), 100);
     QTest::keyClick(canvas_, Qt::Key_0);
-    QCOMPARE(row(layer_).opacity, 255);
+    QCOMPARE(row(layer_).opacity, 179);
     QCOMPARE(row(layer_).fill, 255);
-    QCOMPARE(view_->history_count(), history);
+    QCOMPARE(view_->history_count(), beforeReset);
+    QTRY_COMPARE_WITH_TIMEOUT(row(layer_).opacity, 255, 2000);
+    QCOMPARE(view_->history_count(), beforeReset + 1);
 }
 
 void LayerZeroShortcutsTest::pendingTransform()
