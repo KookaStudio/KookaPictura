@@ -9,6 +9,12 @@ Both Curves surfaces SHALL expose exact numeric input/output and movable black a
 - **WHEN** a user drags the white endpoint to 243 and changes grid or overlay settings
 - **THEN** inputs at and above 243 map to maximum output and display changes leave the curve data intact
 
+#### Scenario: Accept or cancel display options [CURVE-DISPLAY-DIALOG]
+
+- **WHEN** a user opens Curves Display Options from the Properties menu or the destructive Curves dialog and changes the amount units, grid density, or overlays
+- **THEN** the modal starts with the editor's current options, applies changes only on OK, and leaves the encoded adjustment and undo history unchanged
+- **AND** Properties SHALL expose no in-content display options button, and Lab SHALL keep its native units
+
 #### Scenario: View mode-appropriate channels and values [CURVE-MODES]
 
 - **WHEN** a user opens Curves on Gray, CMYK or Lab documents

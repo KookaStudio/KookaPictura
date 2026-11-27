@@ -3,6 +3,7 @@
 #include "api/document_bridge.h"
 #include "api/filters_bridge.h"
 #include "api/layers_bridge.h"
+#include "commands.h"
 #include "curves_dialog.h"
 #include "frame.h"
 #include "image_view.h"
@@ -14,12 +15,16 @@
 #include "qt_test_support.h"
 #include "tools.h"
 
+#include <QtCore/QPointer>
 #include <QtCore/QScopeGuard>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QRadioButton>
 #include <QtWidgets/QScrollBar>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
@@ -32,6 +37,7 @@ private slots:
     void initTestCase();
     void cleanup();
     void curvesDisplayOnBothSurfaces();
+    void curvesDisplayOptionsTransactions();
     void curvesPropertiesLayout();
     void curvesModeChannels();
     void curvesPencilHistory();
@@ -125,13 +131,11 @@ void CurvesControlsTest::curvesDisplayOnBothSurfaces()
 {
     QVERIFY(openPatch());
     auto dialog = makeDialog();
-    const auto editAndCheck = [](QWidget& owner, const QString& name) {
+    const auto editAndCheck = [](QWidget& owner, const QString& name, const auto& openOptions) {
         auto* curve = owner.findChild<pictura::CurveWidget*>(name);
         auto* white = owner.findChild<QSlider*>(QStringLiteral("curvesWhiteSlider"));
-        auto* grid = owner.findChild<QCheckBox*>(QStringLiteral("curvesDetailedGrid"));
-        auto* overlays = owner.findChild<QCheckBox*>(QStringLiteral("curvesOverlays"));
         auto* endpoints = owner.findChild<pictura::TriangleSlider*>(QStringLiteral("curvesEndpoints"));
-        QVERIFY(curve && (white || endpoints) && grid && overlays);
+        QVERIFY(curve && (white || endpoints));
         const auto moveWhite = [&](int value) {
             if (white) {
                 white->setValue(value);
@@ -145,19 +149,127 @@ void CurvesControlsTest::curvesDisplayOnBothSurfaces()
         QCOMPARE(curve->outputAt(243), 255);
         QCOMPARE(curve->outputAt(250), 255);
         const QString before = curve->pointsText();
-        grid->toggle();
+        openOptions();
+        QPointer<QDialog> options = owner.findChild<QDialog*>(QStringLiteral("curvesDisplayOptions"));
+        QVERIFY(options && options->isVisible());
+        auto* grid = options->findChild<QRadioButton*>(QStringLiteral("curvesDetailedGrid"));
+        auto* overlays = options->findChild<QCheckBox*>(QStringLiteral("curvesOverlays"));
+        auto* buttons = options->findChild<QDialogButtonBox*>();
+        QVERIFY(grid && overlays && buttons);
+        grid->click();
         overlays->toggle();
+        buttons->button(QDialogButtonBox::Ok)->click();
         QCOMPARE(curve->pointsText(), before);
         curve->setPointsText(QStringLiteral("0,33 255,211"));
         moveWhite(230);
         QCOMPARE(qRound(curve->points().last().y() * 255), 211);
     };
-    editAndCheck(*dialog, QStringLiteral("curve"));
+    auto* options = dialog->findChild<QToolButton*>(QStringLiteral("curvesDisplayToggle"));
+    QVERIFY(options);
+    editAndCheck(*dialog, QStringLiteral("curve"), [options] { options->click(); });
     dialog->reject();
     auto* panel = addCurves();
     QVERIFY(panel);
-    editAndCheck(*panel, QStringLiteral("adjustmentCurve"));
+    editAndCheck(*panel, QStringLiteral("adjustmentCurve"), [this] {
+        window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::PanelPropertiesCurvesDisplay));
+    });
     panel->flushPending();
+}
+
+void CurvesControlsTest::curvesDisplayOptionsTransactions()
+{
+    QVERIFY(openPatch());
+    const auto exercise = [](QWidget& owner, pictura::CurveWidget* graph, QSpinBox* input,
+                             const auto& openOptions) {
+        QVERIFY(graph && input);
+        graph->selectFirstPoint();
+        QCOMPARE(input->maximum(), 255);
+        const QString points = graph->pointsText();
+        QSignalSpy edits(graph, &pictura::CurveWidget::curveChanged);
+        const auto choose = [&](bool applied, QDialogButtonBox::StandardButton result) {
+            openOptions();
+            QPointer<QDialog> options = owner.findChild<QDialog*>(QStringLiteral("curvesDisplayOptions"));
+            QVERIFY(options && options->isVisible());
+            QCOMPARE(options->windowModality(), Qt::WindowModal);
+            auto* light = options->findChild<QRadioButton*>(QStringLiteral("curvesLightUnits"));
+            auto* ink = options->findChild<QRadioButton*>(QStringLiteral("curvesInkUnits"));
+            auto* standard = options->findChild<QRadioButton*>(QStringLiteral("curvesStandardGrid"));
+            auto* detailed = options->findChild<QRadioButton*>(QStringLiteral("curvesDetailedGrid"));
+            auto* overlays = options->findChild<QCheckBox*>(QStringLiteral("curvesOverlays"));
+            auto* histogram = options->findChild<QCheckBox*>(QStringLiteral("curvesHistogram"));
+            auto* baseline = options->findChild<QCheckBox*>(QStringLiteral("curvesBaseline"));
+            auto* guides = options->findChild<QCheckBox*>(QStringLiteral("curvesIntersectionLine"));
+            auto* buttons = options->findChild<QDialogButtonBox*>();
+            QVERIFY(light && ink && standard && detailed && overlays && histogram && baseline && guides && buttons);
+            QCOMPARE(light->isChecked(), !applied);
+            QCOMPARE(ink->isChecked(), applied);
+            QCOMPARE(standard->isChecked(), !applied);
+            QCOMPARE(detailed->isChecked(), applied);
+            QCOMPARE(overlays->isChecked(), applied);
+            QCOMPARE(histogram->isChecked(), !applied);
+            QCOMPARE(baseline->isChecked(), !applied);
+            QCOMPARE(guides->isChecked(), applied);
+            (applied ? light : ink)->click();
+            (applied ? standard : detailed)->click();
+            overlays->setChecked(!applied);
+            histogram->setChecked(applied);
+            baseline->setChecked(applied);
+            guides->setChecked(!applied);
+            QCOMPARE(input->maximum(), applied ? 100 : 255);
+            QCOMPARE(graph->pointsText(), points);
+            buttons->button(result)->click();
+            QTRY_VERIFY(options.isNull());
+        };
+        choose(false, QDialogButtonBox::Cancel);
+        QCOMPARE(input->maximum(), 255);
+        choose(false, QDialogButtonBox::Ok);
+        QCOMPARE(input->maximum(), 100);
+        choose(true, QDialogButtonBox::Cancel);
+        QCOMPARE(input->maximum(), 100);
+        QCOMPARE(graph->pointsText(), points);
+        QCOMPARE(edits.count(), 0);
+    };
+
+    auto dialog = makeDialog();
+    const QByteArray opening = dialog->block();
+    auto* button = dialog->findChild<QToolButton*>(QStringLiteral("curvesDisplayToggle"));
+    QVERIFY(button);
+    exercise(*dialog, dialog->findChild<pictura::CurveWidget*>(QStringLiteral("curve")),
+             dialog->findChild<QSpinBox*>(QStringLiteral("curvesInput")), [button] { button->click(); });
+    QCOMPARE(dialog->block(), opening);
+    dialog->reject();
+
+    auto* panel = addCurves();
+    QVERIFY(panel);
+    QVERIFY(!panel->findChild<QToolButton*>(QStringLiteral("curvesDisplayToggle")));
+    const int history = view_->history_count();
+    const QString path = panel->currentPath();
+    const auto capture = [this, &path] {
+        const auto bytes = pictura::adjustment_block(*view_, path);
+        return QByteArray(reinterpret_cast<const char*>(bytes.data()), qsizetype(bytes.size()));
+    };
+    const QByteArray layerOpening = capture();
+    QVERIFY(!layerOpening.isEmpty());
+    exercise(*panel, panel->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve")),
+             panel->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveInput")), [this] {
+                 window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::PanelPropertiesCurvesDisplay));
+             });
+    panel->flushPending();
+    QCOMPARE(view_->history_count(), history);
+    QCOMPARE(capture(), layerOpening);
+
+    QVERIFY(pictura::convert_image_mode(*view_, QStringLiteral("lab")));
+    auto lab = makeDialog();
+    auto* labButton = lab->findChild<QToolButton*>(QStringLiteral("curvesDisplayToggle"));
+    QVERIFY(labButton);
+    labButton->click();
+    auto* labOptions = lab->findChild<QDialog*>(QStringLiteral("curvesDisplayOptions"));
+    QVERIFY(labOptions && labOptions->isVisible());
+    auto* labLight = labOptions->findChild<QRadioButton*>(QStringLiteral("curvesLightUnits"));
+    auto* labInk = labOptions->findChild<QRadioButton*>(QStringLiteral("curvesInkUnits"));
+    QVERIFY(labLight && labInk && !labLight->isEnabled() && !labInk->isEnabled());
+    labOptions->reject();
+    lab->reject();
 }
 
 void CurvesControlsTest::curvesPropertiesLayout()

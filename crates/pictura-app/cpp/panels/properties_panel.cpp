@@ -1013,7 +1013,7 @@ void PropertiesPanel::performPanelMenuAction(const QString& id)
         applyAuto(true);
     } else if (id == QLatin1String("curvesDisplay")) {
         if (auto* curves = controls_->curves(); curves && kind_ == QLatin1String("curves")) {
-            curves->toggleDisplayOptions();
+            curves->openDisplayOptions();
         }
     }
 }

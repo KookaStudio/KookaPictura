@@ -28,3 +28,5 @@ Implement the secondary controls on both Curves surfaces. Preserve existing spli
 ## Properties layout follow-up
 
 Keep the inner editor named and keyboard-accessible with existing Pictura widgets. Move the configured Properties Auto button into the channel row, retaining Alt-click, saved defaults and the menu. Without an override, normal Curves Auto uses the selected channel's factory stretch. Use one endpoint track with two handles and draw the plot at the width available beside the strip. Share the existing Properties clipping preview with its menu, reset it on target changes, and keep the dialog layout independent. Reuse Pictura icons and register original theme-tinted icons for missing tools.
+
+Keep display options as editor-local state. The Properties menu and the existing destructive Curves button open the same modal, which edits a copy and applies it only on acceptance. Display changes update the graph and coordinate fields without staging a document edit.

@@ -9,7 +9,6 @@
 #include <functional>
 #include <utility>
 
-class QCheckBox;
 class QComboBox;
 class QHBoxLayout;
 class QPushButton;
@@ -51,7 +50,7 @@ public:
     void setAutoButton(QPushButton* button);
     void setClippingPreview(bool enabled);
     bool autoAvailable() const;
-    void toggleDisplayOptions();
+    void openDisplayOptions();
     CurveWidget* graph() const { return graph_; }
 
 signals:
@@ -70,18 +69,21 @@ private:
     int storedCode(int display) const;
     bool reversed() const;
 
+    struct DisplayOptions {
+        bool ink = false;
+        bool detailedGrid = false;
+        bool channelOverlays = false;
+        bool histogram = true;
+        bool baseline = true;
+        bool intersectionLines = false;
+    };
+
+    DisplayOptions displayOptions_;
     QString mode_;
     CurveHistograms histograms_{};
     QComboBox* channel_ = nullptr;
     QHBoxLayout* channelRow_ = nullptr;
     CurveWidget* graph_ = nullptr;
-    QWidget* display_ = nullptr;
-    QCheckBox* ink_ = nullptr;
-    QCheckBox* detailed_ = nullptr;
-    QCheckBox* histogram_ = nullptr;
-    QCheckBox* baseline_ = nullptr;
-    QCheckBox* overlays_ = nullptr;
-    QCheckBox* guides_ = nullptr;
     QSpinBox* input_ = nullptr;
     QSpinBox* output_ = nullptr;
     QSlider* black_ = nullptr;

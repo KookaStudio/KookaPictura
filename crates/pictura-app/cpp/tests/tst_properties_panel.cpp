@@ -19,17 +19,21 @@
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMenu>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QPointer>
 #include <QtGui/QImage>
 #include <QtGui/QAction>
 
@@ -225,7 +229,7 @@ void PropertiesPanelTest::curvesControlsAndMenu()
     auto* display = menu.addAction(QStringLiteral("Display"));
     display->setData(QStringLiteral("panel.properties.curvesDisplay"));
     connect(display, &QAction::triggered, panel_, [this] {
-        panel_->performPanelMenuAction(QStringLiteral("curvesDisplay"));
+        window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::PanelPropertiesCurvesDisplay));
     });
     auto* clipping = menu.addAction(QStringLiteral("Clipping"));
     clipping->setData(QStringLiteral("properties.showClipping"));
@@ -233,10 +237,16 @@ void PropertiesPanelTest::curvesControlsAndMenu()
     panel_->updatePanelMenu(&menu);
     QVERIFY(display->isEnabled());
     QVERIFY(clipping->isEnabled());
-    auto* options = panel_->findChild<QWidget*>(QStringLiteral("curvesDisplayOptions"));
-    QVERIFY(options && options->isHidden());
+    QVERIFY(window_->registry()->isModal(QString::fromLatin1(pictura::command_ids::PanelPropertiesCurvesDisplay)));
+    QVERIFY(!panel_->findChild<QToolButton*>(QStringLiteral("curvesDisplayToggle")));
+    QVERIFY(!panel_->findChild<QDialog*>(QStringLiteral("curvesDisplayOptions")));
     display->trigger();
-    QVERIFY(!options->isHidden());
+    QPointer<QDialog> options = panel_->findChild<QDialog*>(QStringLiteral("curvesDisplayOptions"));
+    QVERIFY(options && options->isVisible());
+    auto* buttons = options->findChild<QDialogButtonBox*>();
+    QVERIFY(buttons && buttons->button(QDialogButtonBox::Ok) && buttons->button(QDialogButtonBox::Cancel));
+    buttons->button(QDialogButtonBox::Cancel)->click();
+    QVERIFY(!options || !options->isVisible());
 }
 
 void PropertiesPanelTest::curvesPointFields()

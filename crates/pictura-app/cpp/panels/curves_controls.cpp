@@ -15,10 +15,14 @@
 #include <QtGui/QPalette>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QGridLayout>
+#include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
@@ -299,38 +303,20 @@ CurvesControls::CurvesControls(bool dialog, QWidget* parent)
         connect(clipping_, &QToolButton::toggled, this, &CurvesControls::clippingPreviewChanged);
     }
 
-    auto* show = tool(this, tr("Display Options"), QStringLiteral("curvesDisplayToggle"), true);
-    show->setChecked(dialog);
-    layout->addWidget(show);
-    display_ = new QWidget(this);
-    display_->setObjectName(QStringLiteral("curvesDisplayOptions"));
-    auto* display = new QGridLayout(display_);
-    display->setContentsMargins(0, 0, 0, 0);
-    ink_ = new QCheckBox(tr("Pigment/Ink %"), display_);
-    detailed_ = new QCheckBox(tr("Detailed Grid"), display_);
-    histogram_ = new QCheckBox(tr("Histogram"), display_);
-    baseline_ = new QCheckBox(tr("Baseline"), display_);
-    overlays_ = new QCheckBox(tr("Channel Overlays"), display_);
-    guides_ = new QCheckBox(tr("Intersection Lines"), display_);
-    histogram_->setChecked(true);
-    baseline_->setChecked(true);
-    int index = 0;
-    for (auto* control : {ink_, detailed_, histogram_, baseline_, overlays_, guides_}) {
-        display->addWidget(control, dialog ? index / 2 : index, dialog ? index % 2 : 0);
-        ++index;
-        connect(control, &QCheckBox::toggled, this, &CurvesControls::refreshGraph);
+    if (dialog) {
+        auto* options = tool(this, tr("Display Options…"), QStringLiteral("curvesDisplayToggle"));
+        layout->addWidget(options, 0, Qt::AlignLeft);
+        connect(options, &QToolButton::clicked, this, &CurvesControls::openDisplayOptions);
     }
-    detailed_->setObjectName(QStringLiteral("curvesDetailedGrid"));
-    overlays_->setObjectName(QStringLiteral("curvesOverlays"));
-    display_->setVisible(dialog);
-    layout->addWidget(display_);
-    connect(show, &QToolButton::toggled, display_, &QWidget::setVisible);
     connect(channel_, &QComboBox::currentIndexChanged, this, [this] {
         disarm();
         emit gestureEnded();
         reload();
     });
-    connect(graph_, &CurveWidget::gridToggled, detailed_, &QCheckBox::toggle);
+    connect(graph_, &CurveWidget::gridToggled, this, [this] {
+        displayOptions_.detailedGrid = !displayOptions_.detailedGrid;
+        refreshGraph();
+    });
     connect(graph_, &CurveWidget::selectionChanged, this, &CurvesControls::refreshFields);
     connect(graph_, &CurveWidget::curveChanged, this, [this] {
         refreshFields();
@@ -369,7 +355,6 @@ void CurvesControls::setContext(const QString& mode, const CurveHistograms& hist
         disarm();
         mode_ = mode;
         const QSignalBlocker block(channel_);
-        const QSignalBlocker inkBlock(ink_);
         channel_->clear();
         if (mode == QLatin1String("cmyk")) {
             channel_->addItems({tr("CMYK"), tr("Cyan"), tr("Magenta"), tr("Yellow"), tr("Black")});
@@ -382,8 +367,11 @@ void CurvesControls::setContext(const QString& mode, const CurveHistograms& hist
         } else {
             channel_->addItems({tr("RGB"), tr("Red"), tr("Green"), tr("Blue")});
         }
-        ink_->setChecked(mode == QLatin1String("cmyk"));
-        ink_->setEnabled(mode != QLatin1String("lab"));
+        displayOptions_.ink = mode == QLatin1String("cmyk");
+        if (auto* options = findChild<QDialog*>(QStringLiteral("curvesDisplayOptions"),
+                                               Qt::FindDirectChildrenOnly)) {
+            options->reject();
+        }
     }
     refreshGraph();
 }
@@ -400,7 +388,7 @@ bool CurvesControls::autoAvailable() const
 
 bool CurvesControls::reversed() const
 {
-    return ink_->isChecked() != (mode_ == QLatin1String("cmyk"));
+    return displayOptions_.ink != (mode_ == QLatin1String("cmyk"));
 }
 
 int CurvesControls::displayCode(int code) const
@@ -408,7 +396,7 @@ int CurvesControls::displayCode(int code) const
     if (reversed()) {
         code = 255 - code;
     }
-    if (ink_->isChecked() || (mode_ == QLatin1String("lab") && channel() == 0)) {
+    if (displayOptions_.ink || (mode_ == QLatin1String("lab") && channel() == 0)) {
         return qRound(code / 2.55);
     }
     return mode_ == QLatin1String("lab") ? code - 128 : code;
@@ -416,7 +404,7 @@ int CurvesControls::displayCode(int code) const
 
 int CurvesControls::storedCode(int display) const
 {
-    if (ink_->isChecked() || (mode_ == QLatin1String("lab") && channel() == 0)) {
+    if (displayOptions_.ink || (mode_ == QLatin1String("lab") && channel() == 0)) {
         display = qRound(display * 2.55);
     } else if (mode_ == QLatin1String("lab")) {
         display += 128;
@@ -434,7 +422,7 @@ void CurvesControls::refreshFields()
         const int zero = displayCode(0);
         const int full = displayCode(255);
         field->setRange(std::min(zero, full), std::max(zero, full));
-        field->setSuffix(ink_->isChecked() ? QStringLiteral(" %") : QString());
+        field->setSuffix(displayOptions_.ink ? QStringLiteral(" %") : QString());
         field->setEnabled(point);
         const QPointF current = point ? points[selected] : QPointF();
         field->setValue(displayCode(qRound((field == input_ ? current.x() : current.y()) * 255)));
@@ -480,12 +468,12 @@ void CurvesControls::refreshFields()
 
 void CurvesControls::refreshGraph()
 {
-    graph_->setGraphOptions(detailed_->isChecked(), guides_->isChecked(), reversed());
-    graph_->setShowHistogram(histogram_->isChecked());
-    graph_->setShowBaseline(baseline_->isChecked());
+    graph_->setGraphOptions(displayOptions_.detailedGrid, displayOptions_.intersectionLines, reversed());
+    graph_->setShowHistogram(displayOptions_.histogram);
+    graph_->setShowBaseline(displayOptions_.baseline);
     graph_->setBins(histograms_[channel()]);
     QVector<QPair<QColor, QString>> curves;
-    if (source_ && channel() == 0 && overlays_->isChecked()) {
+    if (source_ && channel() == 0 && displayOptions_.channelOverlays) {
         const QList<QColor> colors = mode_ == QLatin1String("cmyk")
             ? QList<QColor>{Qt::cyan, Qt::magenta, Qt::yellow, palette().color(QPalette::Mid)}
             : QList<QColor>{Qt::red, Qt::green, Qt::blue};
@@ -546,11 +534,76 @@ void CurvesControls::setClippingPreview(bool enabled)
     }
 }
 
-void CurvesControls::toggleDisplayOptions()
+void CurvesControls::openDisplayOptions()
 {
-    if (auto* toggle = findChild<QToolButton*>(QStringLiteral("curvesDisplayToggle"))) {
-        toggle->toggle();
+    const auto name = QStringLiteral("curvesDisplayOptions");
+    if (auto* existing = findChild<QDialog*>(name, Qt::FindDirectChildrenOnly);
+        existing && existing->isVisible()) {
+        existing->raise();
+        existing->activateWindow();
+        return;
     }
+
+    auto* options = new QDialog(this);
+    options->setObjectName(name);
+    options->setWindowTitle(tr("Curves Display Options"));
+    options->setAttribute(Qt::WA_DeleteOnClose);
+    auto* layout = new QVBoxLayout(options);
+
+    auto* amount = new QGroupBox(tr("Show Amount Of"), options);
+    auto* amountRow = new QHBoxLayout(amount);
+    auto* light = new QRadioButton(tr("Light (0–255)"), amount);
+    auto* ink = new QRadioButton(tr("Pigment/Ink %"), amount);
+    light->setObjectName(QStringLiteral("curvesLightUnits"));
+    ink->setObjectName(QStringLiteral("curvesInkUnits"));
+    light->setChecked(!displayOptions_.ink);
+    ink->setChecked(displayOptions_.ink);
+    amount->setEnabled(mode_ != QLatin1String("lab"));
+    amountRow->addWidget(light);
+    amountRow->addWidget(ink);
+    layout->addWidget(amount);
+
+    auto* grid = new QGroupBox(tr("Grid"), options);
+    auto* gridRow = new QHBoxLayout(grid);
+    auto* standard = new QRadioButton(tr("Standard"), grid);
+    auto* detailed = new QRadioButton(tr("Detailed"), grid);
+    standard->setObjectName(QStringLiteral("curvesStandardGrid"));
+    detailed->setObjectName(QStringLiteral("curvesDetailedGrid"));
+    standard->setChecked(!displayOptions_.detailedGrid);
+    detailed->setChecked(displayOptions_.detailedGrid);
+    gridRow->addWidget(standard);
+    gridRow->addWidget(detailed);
+    layout->addWidget(grid);
+
+    auto* show = new QGroupBox(tr("Show"), options);
+    auto* showLayout = new QVBoxLayout(show);
+    const auto addCheckbox = [&](const QString& label, const QString& objectName, bool checked) {
+        auto* box = new QCheckBox(label, show);
+        box->setObjectName(objectName);
+        box->setChecked(checked);
+        showLayout->addWidget(box);
+        return box;
+    };
+    auto* overlays = addCheckbox(tr("Channel Overlays"), QStringLiteral("curvesOverlays"),
+                                 displayOptions_.channelOverlays);
+    auto* histogram = addCheckbox(tr("Histogram"), QStringLiteral("curvesHistogram"),
+                                  displayOptions_.histogram);
+    auto* baseline = addCheckbox(tr("Baseline"), QStringLiteral("curvesBaseline"),
+                                 displayOptions_.baseline);
+    auto* guides = addCheckbox(tr("Intersection Line"), QStringLiteral("curvesIntersectionLine"),
+                               displayOptions_.intersectionLines);
+    layout->addWidget(show);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, options);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, options, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, options, &QDialog::reject);
+    connect(options, &QDialog::accepted, this, [this, ink, detailed, overlays, histogram, baseline, guides] {
+        displayOptions_ = {ink->isChecked(), detailed->isChecked(), overlays->isChecked(),
+                           histogram->isChecked(), baseline->isChecked(), guides->isChecked()};
+        refreshGraph();
+    });
+    options->open();
 }
 
 void CurvesControls::setCanvas(ToolController* tools, CanvasSample sample)
