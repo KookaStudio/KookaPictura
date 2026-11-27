@@ -29,7 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 
-COPY = ("test-report.sh", "report_tests.py")
+COPY = ("test-report.sh", "report_tests.py", "qt_test_timings.py")
 
 # The executor only uses build_lock_enter_managed from the real helper. The lock
 # behavior has its own check, so the sandbox gets a stub: no cgroup routing and

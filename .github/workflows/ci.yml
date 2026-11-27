@@ -362,5 +362,22 @@ jobs:
             --cmake-arg -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             --cmake-arg -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
 
+      - name: Upload Qt Test timing evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: qt-test-timings
+          path: |
+            build/qt-test-results/*.xml
+            build/ctest-junit.xml
+            build/qt-test-timings.json
+          if-no-files-found: warn
+
+      - name: Verify the shard plan and Qt fixed waits
+        if: always()
+        run: |
+          python3 scripts/qt_test_timings.py verify --plan cmake/qt-test-shards.json
+          python3 scripts/check-qt-test-waits.py
+
       - name: Control e2e
         run: bash scripts/verify-control.sh

@@ -1,0 +1,76 @@
+{
+  "generated_by": "scripts/qt_test_timings.py",
+  "note": "Shard membership and count are duration-derived. This file is regenerated from the retained CI timing store with `python3 scripts/qt_test_timings.py plan --timings .ci/qt-test-timings.json --out cmake/qt-test-shards.json`; until the store is populated, each entry's evidence names the last recorded duration it came from.",
+  "suites": [
+    {
+      "name": "tst_canvas_mask_domain",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_document_arrange",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_document_float",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_document_navigate",
+      "count": 4,
+      "evidence": "inherited four-share registration from #1566; regenerate from measured per-function timings"
+    },
+    {
+      "name": "tst_document_windows",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_edit_refresh",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_floating_workspaces",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_import_pdf",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_loading_tab",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_print",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_quick_mask",
+      "count": 4,
+      "evidence": "inherited four-share registration from #1566; regenerate from measured per-function timings"
+    },
+    {
+      "name": "tst_save_pdf",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    },
+    {
+      "name": "tst_ui_scale",
+      "count": 8,
+      "evidence": "inherited eight-share registration, slowest functions concentrated; regenerate from the timing store"
+    },
+    {
+      "name": "tst_workspaces",
+      "count": 4,
+      "evidence": "inherited four-share registration; regenerate from the timing store"
+    }
+  ]
+}
