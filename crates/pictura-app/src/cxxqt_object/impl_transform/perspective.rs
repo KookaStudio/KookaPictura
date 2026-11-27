@@ -12,8 +12,8 @@
 use super::super::document_session::TransformSession;
 use super::distort::{carry_pivot as carry_projective_pivot, map_qtransform};
 use super::geometry::{
-    handle_source_point, opposite_handle, projective_coefficients, quad_is_degenerate,
-    session_quad, set_pivot, source_corners, store_quad, unmap_quad, MapParams,
+    opposite_handle, projective_coefficients, session_quad_is_degenerate, session_quad, set_pivot,
+    store_quad, unmap_quad, MapParams,
 };
 
 type Quad = [(f64, f64); 4];
@@ -138,7 +138,7 @@ pub(super) fn gesture_perspective(
     };
     let pivot = carry_pivot(&start, &quad, session.start_pivot);
     if session.free_perspective {
-        if quad_is_degenerate(&quad) {
+        if session_quad_is_degenerate(session, &quad) {
             return false;
         }
         // Move the similarity's pivot first (its image is unchanged), then
@@ -172,12 +172,11 @@ pub(super) fn gesture_scale_base(
     y: f64,
     shift: bool,
 ) -> bool {
-    let rect = session.orig_rect;
     let h = session.handle;
     if !(0..=7).contains(&h) {
         return false;
     }
-    let source = source_corners(rect);
+    let source = session.source_corners();
     let (Some(forward), Some(inverse)) = (
         projective_coefficients(source, session.start_quad),
         projective_coefficients(session.start_quad, source),
@@ -190,8 +189,9 @@ pub(super) fn gesture_scale_base(
     ) else {
         return false;
     };
-    let handle = handle_source_point(rect, h);
-    let anchor = handle_source_point(rect, opposite_handle(h));
+    let handles = super::geometry::handle_points(&source);
+    let handle = handles[h as usize];
+    let anchor = handles[opposite_handle(h) as usize];
     let drag = (
         handle.0 + pointer.0 - pressed.0,
         handle.1 + pointer.1 - pressed.1,
@@ -210,15 +210,15 @@ pub(super) fn gesture_scale_base(
         sx = uniform;
         sy = uniform;
     }
-    let min = |s: f64, len: i32| {
-        let floor = 1.0 / f64::from(len.max(1));
+    let min = |s: f64, len: f64| {
+        let floor = 1.0 / len.max(1.0);
         if s.abs() < floor {
             floor.copysign(s)
         } else {
             s
         }
     };
-    let (sx, sy) = (min(sx, rect.width()), min(sy, rect.height()));
+    let (sx, sy) = (min(sx, source[1].0 - source[0].0), min(sy, source[3].1 - source[0].1));
     let mut quad = source;
     for p in &mut quad {
         let scaled = (
@@ -230,7 +230,7 @@ pub(super) fn gesture_scale_base(
         };
         *p = mapped;
     }
-    if quad_is_degenerate(&quad) {
+    if session_quad_is_degenerate(session, &quad) {
         return false;
     }
     let Some(base) = unmap_quad(&MapParams::of(session), &quad) else {

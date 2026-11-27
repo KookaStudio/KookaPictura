@@ -14,6 +14,7 @@
 #include <QtCore/QStringList>
 
 #include <cmath>
+#include <cstdint>
 
 namespace pictura {
 
@@ -47,6 +48,63 @@ bool ToolController::beginFreeTransform(const QString& path)
 bool ToolController::beginTransformMode(const QString& path, const QString& mode)
 {
     return beginTransformImpl(path, mode);
+}
+
+bool ToolController::canPathTransform(bool points, bool repeat) const
+{
+    PictureView* v = view();
+    auto* selection = dynamic_cast<PathSelectionSession*>(registry_.forTool(active_));
+    if (!v || !selection || transformPending()) {
+        return false;
+    }
+    const QList<int> components = points ? QList<int>() : selection->selectedComponents();
+    const QList<int> anchors = points ? selection->selectedAnchors() : QList<int>();
+    return path_transform_can_begin(*v, ::rust::Slice<const std::int32_t>(components.constData(), components.size()),
+                                    ::rust::Slice<const std::int32_t>(anchors.constData(), anchors.size()), repeat);
+}
+
+bool ToolController::beginPathTransform(const QString& mode, bool points, bool repeat)
+{
+    PictureView* v = view();
+    auto* selection = dynamic_cast<PathSelectionSession*>(registry_.forTool(active_));
+    if (!v || !selection || !canPathTransform(points, repeat)) {
+        return false;
+    }
+    const QList<int> components = points ? QList<int>() : selection->selectedComponents();
+    const QList<int> anchors = points ? selection->selectedAnchors() : QList<int>();
+    const QString initial = mode == QLatin1String("warp") ? QStringLiteral("free") : mode;
+    if (!path_transform_begin(*v, ::rust::Slice<const std::int32_t>(components.constData(), components.size()),
+                              ::rust::Slice<const std::int32_t>(anchors.constData(), anchors.size()), initial, repeat)) {
+        return false;
+    }
+    if (mode == QLatin1String("warp") && !transform_enter_warp(*v)) {
+        v->cancel_transform();
+        return false;
+    }
+    transform_set_controls(*v, false);
+    if (canvas_) {
+        canvas_->beginTransformOverlay();
+        updateTransformOverlay(v);
+        canvas_->setSpacePan(false);
+        canvas_->setPanEnabled(false);
+        canvas_->setFocus();
+    }
+    emit transformChanged();
+    return true;
+}
+
+bool ToolController::repeatPathTransform(bool points)
+{
+    PictureView* v = view();
+    if (!v || !path_transform_has_repeat(*v) || !beginPathTransform(QStringLiteral("free"), points, true)) {
+        return false;
+    }
+    if (!path_transform_repeat(*v)) {
+        cancelFreeTransform();
+        return false;
+    }
+    commitFreeTransform();
+    return true;
 }
 
 bool ToolController::beginTransformSelection()
@@ -198,6 +256,14 @@ void ToolController::updateTransformOverlay(PictureView* v)
     // Warp mode has no reference point: the grid replaces the box.
     canvas_->setTransformPivot(QPointF(transform_pivot_x(*v), transform_pivot_y(*v)),
                                transform_show_pivot(*v) && !warping);
+    if (path_transform_active(*v)) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            handler->onOptionsChanged(*this);
+        }
+        canvas_->setTransformWarp(warping ? transform_api::warpOverlay(*v)
+                                          : transform_api::WarpOverlay());
+        return;
+    }
     if (transform_session_is_selection(*v)) {
         // No moving image: the box and the mapped border are the whole preview.
         canvas_->setTransformWarp(warping ? transform_api::warpOverlay(*v)
@@ -378,7 +444,9 @@ void ToolController::commitFreeTransform()
         return;
     }
     transform_set_controls(*v, false);
+    pathTransformCommitInProgress_ = path_transform_active(*v);
     const bool committed = runTransformCommit(canvas_ ? canvas_->window() : nullptr, *v);
+    pathTransformCommitInProgress_ = false;
     if (!committed && v->transform_session_active()) {
         // Cancelled from the progress window: the transform ends, as Esc ends it.
         v->cancel_transform();
@@ -431,6 +499,11 @@ void ToolController::resetTransformUi(bool keepPreview)
         canvas_->clearSmartGuides();
     }
     applyToolPolicy();
+    if (active_ == ToolId::PathSelection || active_ == ToolId::DirectSelection) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            handler->onOptionsChanged(*this);
+        }
+    }
     emit transformChanged();
 }
 

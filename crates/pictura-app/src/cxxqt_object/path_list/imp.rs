@@ -88,6 +88,9 @@ pub(super) fn paths_set_active(mut view: Pin<&mut PictureView>, i: i32) -> bool 
             None => return false,
         },
     };
+    if view.rust().session.live.transform().is_some_and(|session| session.path_transform.is_some()) {
+        view.as_mut().cancel_transform();
+    }
     {
         let mut rust = view.as_mut().rust_mut();
         if rust.session.doc.is_none() {

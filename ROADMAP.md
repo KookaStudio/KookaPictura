@@ -209,7 +209,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] Puppet Warp (#527) and Content-Aware Scale (#528)
 - [x] Transform ▸ Scale, Rotate and Again, the exact rotations, and flips (#529).
   `crates/pictura-script/src/command_catalogue/entries.rs`
-- [ ] The Transform Path and Transform Points submenus (#530)
+- [x] The Transform Path and Transform Points submenus (#530); projective and warp maps transform Bézier control points as an approximation.
 - [ ] Magnetic Pen (#531), and Merge Shape Components — path boolean
       operations (#532)
 - [x] Hand and Zoom multi-window options: Scroll All Windows, Zoom All

@@ -205,6 +205,11 @@ fn edit_target_with<T>(
     Some(out)
 }
 
+pub(super) fn path_selection_target_key(view: &PictureView) -> QString {
+    let rust = view.rust();
+    QString::from(format!("{}:{:?}:{:?}", rust.session.document_generation, rust.active_path, layer_target(&rust)))
+}
+
 pub(super) fn path_set_layer_target(mut view: Pin<&mut PictureView>, on: bool) {
     view.as_mut().rust_mut().path_on_layer = on;
 }
@@ -285,7 +290,7 @@ pub(super) fn path_point(view: &PictureView, sp: i32, pt: i32) -> Vec<f64> {
 }
 
 pub(super) fn path_overlay_points(view: &PictureView) -> Vec<f64> {
-    let Some(path) = path(view) else {
+    let Some(path) = super::super::impl_transform::mapped_path(view).or_else(|| path(view)) else {
         return Vec::new();
     };
     let mut fields = Vec::new();
@@ -713,6 +718,23 @@ pub(super) fn path_duplicate_subpath(view: Pin<&mut PictureView>, sp: i32) -> i3
 
 pub(super) fn path_commit_drag(view: Pin<&mut PictureView>, label: &str) {
     commit(view, label);
+}
+
+pub(super) fn path_remove_subpaths(mut view: Pin<&mut PictureView>, components: &[i32]) -> bool {
+    let Some(mut indices) = components.iter().map(|&i| index(i)).collect::<Option<Vec<_>>>() else {
+        return false;
+    };
+    indices.sort_unstable();
+    indices.dedup();
+    let Some(path) = path(&view) else { return false; };
+    if indices.is_empty() || indices.last().is_some_and(|&i| i >= path.subpaths.len()) {
+        return false;
+    }
+    let removed = edit(view.as_mut(), |path| {
+        for &i in indices.iter().rev() { path.remove_subpath(i); }
+    }).is_some();
+    if removed { commit(view, "Delete Path"); }
+    removed
 }
 
 pub(super) fn path_remove_subpath(mut view: Pin<&mut PictureView>, sp: i32) -> bool {

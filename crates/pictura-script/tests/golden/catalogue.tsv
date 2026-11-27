@@ -74,14 +74,14 @@ edit.transform.rotate90cw	Edit/Transform/Rotate 90° Clockwise	Rotate 90° Clock
 edit.transform.rotate90ccw	Edit/Transform/Rotate 90° Counter Clockwise	Rotate 90° Counter Clockwise		1	0
 edit.transform.flipHorizontal	Edit/Transform/Flip Horizontal	Flip Horizontal		1	0
 edit.transform.flipVertical	Edit/Transform/Flip Vertical	Flip Vertical		1	0
-edit.transform.path.again	Edit/Transform Path/Again	Again		0	0
-edit.transform.path.scale	Edit/Transform Path/Scale	Scale		0	0
-edit.transform.path.rotate	Edit/Transform Path/Rotate	Rotate		0	0
-edit.transform.path.skew	Edit/Transform Path/Skew	Skew		0	0
-edit.transform.path.distort	Edit/Transform Path/Distort	Distort		0	0
-edit.transform.path.perspective	Edit/Transform Path/Perspective	Perspective		0	0
-edit.transform.path.warp	Edit/Transform Path/Warp	Warp		0	0
-edit.transform.points.again	Edit/Transform Points/Again	Again		0	0
+edit.transform.path.again	Edit/Transform Path/Again	Again		1	0
+edit.transform.path.scale	Edit/Transform Path/Scale	Scale		1	0
+edit.transform.path.rotate	Edit/Transform Path/Rotate	Rotate		1	0
+edit.transform.path.skew	Edit/Transform Path/Skew	Skew		1	0
+edit.transform.path.distort	Edit/Transform Path/Distort	Distort		1	0
+edit.transform.path.perspective	Edit/Transform Path/Perspective	Perspective		1	0
+edit.transform.path.warp	Edit/Transform Path/Warp	Warp		1	0
+edit.transform.points.again	Edit/Transform Points/Again	Again		1	0
 edit.auto.align.layers	Edit/Auto-Align Layers…	Auto-Align Layers…		1	0
 edit.auto.blend.layers	Edit/Auto-Blend Layers…	Auto-Blend Layers…		1	0
 edit.define.brush.preset	Edit/Define Brush Preset…	Define Brush Preset…		0	0

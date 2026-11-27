@@ -24,5 +24,5 @@ pub(super) use stroke::{
     StrokeFinish, StrokePlan, StrokeSession,
 };
 pub(super) use transform::{
-    RepeatTransform, TransformMode, TransformSession, TransformTarget, WarpDrag,
+    PathTransform, RepeatTransform, TransformMode, TransformSession, TransformTarget, WarpDrag,
 };

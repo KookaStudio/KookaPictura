@@ -71,6 +71,7 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// The last committed similarity transform, for `Edit > Transform > Again`.
     /// Projective and Warp commits clear it (they are not repeatable this way).
     pub(in crate::cxxqt_object) last_transform: Option<RepeatTransform>,
+    pub(in crate::cxxqt_object) last_path_transform: Option<RepeatTransform>,
     pub(in crate::cxxqt_object) link_sets: HashMap<String, u32>,
     /// Link sets a structural command remapped instead of clearing. The edit
     /// transaction installs them; `None` clears the links as before.
@@ -296,6 +297,7 @@ impl DocumentSession {
     pub(in crate::cxxqt_object) fn clear_edit_state(&mut self) {
         self.fade = None;
         self.last_transform = None;
+        self.last_path_transform = None;
         self.link_sets.clear();
         self.link_remap = None;
         self.solo_snapshot = None;

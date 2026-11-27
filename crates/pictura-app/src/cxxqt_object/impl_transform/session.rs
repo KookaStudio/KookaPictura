@@ -263,6 +263,9 @@ impl qobject::PictureView {
         if self.rust().selection_transform_live() {
             return self.as_mut().commit_selection_transform();
         }
+        if self.rust().session.live.transform().is_some_and(|s| s.path_transform.is_some()) {
+            return super::path::commit(self.as_mut());
+        }
         let Some((
             path,
             members,

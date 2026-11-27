@@ -35,6 +35,43 @@ void MenuRegistrar::wireTransformMenu()
         return tools_ && tools_->transformPending();
     };
 
+    const struct {
+        const char* id;
+        const char* mode;
+    } pathModes[] = {
+        {"edit.transform.path.scale", "scale"},
+        {"edit.transform.path.rotate", "rotate"},
+        {"edit.transform.path.skew", "skew"},
+        {"edit.transform.path.distort", "distort"},
+        {"edit.transform.path.perspective", "perspective"},
+        {"edit.transform.path.warp", "warp"},
+    };
+    for (const auto& entry : pathModes) {
+        const QString id = QString::fromLatin1(entry.id);
+        const QString mode = QString::fromLatin1(entry.mode);
+        commands_->setHandler(id, [this, mode]() {
+            if (tools_ && tools_->beginPathTransform(mode)) {
+                refresh();
+            }
+        });
+        commands_->setEnabledProvider(id, [this]() {
+            return tools_ && tools_->canPathTransform(false);
+        });
+    }
+    const auto registerPathAgain = [this](const QString& id, bool points) {
+        commands_->setHandler(id, [this, points]() {
+            if (tools_ && tools_->repeatPathTransform(points)) {
+                refresh();
+            }
+        });
+        commands_->setEnabledProvider(id, [this, points]() {
+            PictureView* view = activeView();
+            return view && path_transform_has_repeat(*view) && tools_ && tools_->canPathTransform(points, true);
+        });
+    };
+    registerPathAgain(QStringLiteral("edit.transform.path.again"), false);
+    registerPathAgain(QStringLiteral("edit.transform.points.again"), true);
+
     commands_->setHandler(command_ids::EditFreeTransform, [this, transformTarget]() {
         // A pending border transform is not silently replaced: Apply / Don't
         // Apply / Cancel decides, and Cancel keeps the session.

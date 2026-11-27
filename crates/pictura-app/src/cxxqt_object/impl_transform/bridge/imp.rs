@@ -16,6 +16,40 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use pictura_render::Interpolation;
 
+pub(super) fn path_transform_can_begin(view: &PictureView, components: &[i32], anchors: &[i32], repeat: bool) -> bool {
+    super::super::path::can_begin(view, components, anchors, repeat)
+}
+
+pub(super) fn path_transform_begin(view: Pin<&mut PictureView>, components: &[i32], anchors: &[i32], mode: &QString, repeat: bool) -> bool {
+    super::super::path::begin(view, components, anchors, mode, repeat)
+}
+
+pub(super) fn path_transform_active(view: &PictureView) -> bool {
+    view.rust().session.live.transform().is_some_and(|s| s.path_transform.is_some())
+}
+
+pub(super) fn path_transform_has_repeat(view: &PictureView) -> bool {
+    view.rust().session.last_path_transform.is_some()
+}
+
+pub(super) fn path_transform_repeat(mut view: Pin<&mut PictureView>) -> bool {
+    let Some(last) = view.rust().session.last_path_transform else { return false; };
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.session.live.transform_mut() else { return false; };
+    if session.path_transform.is_none() { return false; }
+    let (cx, cy) = session.source_center();
+    session.pivot = (cx + last.pivot_offset.0, cy + last.pivot_offset.1);
+    session.pivot_origin = (cx, cy);
+    session.scale_x = last.scale_x;
+    session.scale_y = last.scale_y;
+    session.angle = last.angle;
+    session.skew_x = last.skew_x;
+    session.skew_y = last.skew_y;
+    session.dx = last.dx;
+    session.dy = last.dy;
+    true
+}
+
 /// The projective-mode readouts derived from the live quad: `(width_pct,
 /// height_pct, angle_deg, h_skew_deg, v_skew_deg)`. The rotation is the
 /// balanced estimate `(top_edge_angle − left_edge_deviation)/2`; the skews are
@@ -29,10 +63,8 @@ pub(super) fn derived_readouts(session: &TransformSession) -> (f64, f64, f64, f6
     let top_angle = u.1.atan2(u.0);
     let left_dev = v.0.atan2(v.1);
     let rotation = (top_angle - left_dev) / 2.0;
-    let (w, h) = (
-        f64::from(session.orig_rect.width()),
-        f64::from(session.orig_rect.height()),
-    );
+    let source = session.source_corners();
+    let (w, h) = (source[1].0 - source[0].0, source[3].1 - source[0].1);
     let width_pct = if w > 0.0 {
         u.0.hypot(u.1) / w * 100.0
     } else {
@@ -80,6 +112,9 @@ pub(super) fn transform_is_identity(view: &PictureView) -> bool {
     let Some(session) = view.rust().session.live.transform() else {
         return true;
     };
+    if session.path_transform.is_some() {
+        return super::super::path::is_identity(session);
+    }
     identity_transform(
         session_quad(session),
         session.orig_rect,
@@ -240,7 +275,7 @@ pub(super) fn transform_preview_matrix_extents(view: &PictureView) -> Vec<f64> {
         return vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
     }
     let coeffs = if quad_driven(session) {
-        projective_coefficients(source_corners(session.orig_rect), session_quad(session))
+        projective_coefficients(session.source_corners(), session_quad(session))
     } else {
         let params = MapParams::of(session);
         let a = params.linear();
@@ -640,9 +675,8 @@ pub(super) fn transform_begin_free_perspective(mut view: Pin<&mut PictureView>) 
     {
         return false;
     }
-    session
-        .base_quad
-        .get_or_insert(source_corners(session.orig_rect));
+    let source = session.source_corners();
+    session.base_quad.get_or_insert(source);
     session.free_perspective = true;
     session.free_distort = false;
     session.free_skew = false;
@@ -662,9 +696,8 @@ pub(super) fn transform_begin_free_distort(mut view: Pin<&mut PictureView>) -> b
     {
         return false;
     }
-    session
-        .base_quad
-        .get_or_insert(source_corners(session.orig_rect));
+    let source = session.source_corners();
+    session.base_quad.get_or_insert(source);
     session.free_distort = true;
     session.free_skew = false;
     session.free_perspective = false;
@@ -683,9 +716,8 @@ pub(super) fn transform_begin_free_skew(mut view: Pin<&mut PictureView>) -> bool
     {
         return false;
     }
-    session
-        .base_quad
-        .get_or_insert(source_corners(session.orig_rect));
+    let source = session.source_corners();
+    session.base_quad.get_or_insert(source);
     session.free_skew = true;
     session.free_distort = false;
     session.free_perspective = false;

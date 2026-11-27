@@ -541,6 +541,7 @@ public:
         QList<QPointF> anchors;
         int activeAnchor = -1;
         bool anchorsSolid = false;
+        QList<int> selectedAnchors;
         QList<QLineF> handles;
         QPainterPath preview;
         QRectF bounds;
@@ -588,6 +589,24 @@ public:
     int pathOverlayAnchorCountForTest() const { return int(pathOverlay_.anchors.size()); }
     bool pathOverlayHasPreviewForTest() const { return !pathOverlay_.preview.isEmpty(); }
     bool pathOverlayAnchorsSolidForTest() const { return pathOverlay_.anchorsSolid; }
+    int pathOverlaySelectedAnchorCountForTest() const
+    {
+        return pathOverlay_.anchorsSolid ? int(pathOverlay_.anchors.size())
+                                        : int(pathOverlay_.selectedAnchors.size());
+    }
+    QList<QPointF> pathOverlaySelectedAnchorPositionsForTest() const
+    {
+        if (pathOverlay_.anchorsSolid) {
+            return pathOverlay_.anchors;
+        }
+        QList<QPointF> selected;
+        for (int index : pathOverlay_.selectedAnchors) {
+            if (index >= 0 && index < pathOverlay_.anchors.size()) {
+                selected.append(pathOverlay_.anchors[index]);
+            }
+        }
+        return selected;
+    }
     int pathOverlayActiveAnchorForTest() const { return pathOverlay_.activeAnchor; }
     QRectF pathOverlayBoundsForTest() const { return pathOverlay_.bounds; }
     QRectF pathOverlayCurveBoundsForTest() const { return pathOverlay_.curve.boundingRect(); }

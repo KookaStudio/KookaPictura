@@ -7,6 +7,7 @@ mod group;
 mod mask_move;
 mod mode_switch;
 mod perspective;
+mod path;
 mod selection;
 mod session;
 mod skew;
@@ -16,6 +17,7 @@ mod warp;
 pub(in crate::cxxqt_object) use dispatch::land_hdr_conversion;
 pub(in crate::cxxqt_object) use geometry::{rect_center, source_corners};
 pub(in crate::cxxqt_object) use session::{MoveView, MoveViewPixels};
+pub(in crate::cxxqt_object) use path::mapped as mapped_path;
 
 use super::helpers::*;
 use super::helpers_composite::*;

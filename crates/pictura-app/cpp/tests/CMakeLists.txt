@@ -161,6 +161,7 @@ set(PICTURA_QT_TEST_DRIVER_paint
     tst_bristle_brushes
     tst_pen_tools
     tst_path_selection_tools
+    tst_path_component_transform
     tst_shape_tools
     tst_shape_transform
     tst_rotate_view
