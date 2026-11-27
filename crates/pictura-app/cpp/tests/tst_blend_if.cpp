@@ -9,6 +9,7 @@
 #include <QtCore/QtEndian>
 #include "panels/layers_panel.h"
 
+#include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "blend_if_slider.h"
 #include "frame.h"
@@ -263,10 +264,11 @@ void BlendIfTest::unsupportedModes()
     QVERIFY(directory.isValid());
     auto window = pictura::test::makeMainWindow();
     for (const QString& mode : {QStringLiteral("cmyk"), QStringLiteral("lab")}) {
-        QVERIFY(window->newDocument(QStringLiteral("Blend"), 20, 20, mode, 8,
+        QVERIFY(window->newDocument(QStringLiteral("Blend"), 20, 20, QStringLiteral("rgb"), 8,
                                     QStringLiteral("white")));
         auto* view = window->activeView();
         QVERIFY(addLayer(view));
+        QVERIFY(pictura::convert_image_mode(*view, mode));
         const QString path = QStringLiteral("1");
         const QString file = directory.filePath(mode + QStringLiteral(".psd"));
         QVERIFY(window->saveActiveAs(file));
@@ -407,7 +409,9 @@ void BlendIfTest::opaqueRanges()
         QVERIFY(replace->isEnabled());
         QTimer::singleShot(0, [] {
             auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
-            if (box) box->done(QMessageBox::No);
+            if (box) {
+                box->button(QMessageBox::No)->click();
+            }
         });
         QTest::mouseClick(replace, Qt::LeftButton);
         QCOMPARE(pictura::layer_style_blend_if_status(*view, path), 1);
@@ -427,7 +431,9 @@ void BlendIfTest::opaqueRanges()
         QVERIFY(slider && replace);
         QTimer::singleShot(0, [] {
             auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
-            if (box) box->done(QMessageBox::Yes);
+            if (box) {
+                box->button(QMessageBox::Yes)->click();
+            }
         });
         QTest::mouseClick(replace, Qt::LeftButton);
         QVERIFY(slider->isEnabled());
