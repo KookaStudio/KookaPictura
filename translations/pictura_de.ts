@@ -3816,6 +3816,22 @@ GPU-Treiber: %5</translation>
         <translation>Scharfzeichnen: Zum Scharfzeichnen ziehen; wiederholtes Überstreichen verstärkt den Effekt</translation>
     </message>
     <message>
+        <source>Single Column Marquee</source>
+        <translation>Einzelne Spalte auswählen</translation>
+    </message>
+    <message>
+        <source>Single Column Marquee: click to select a column</source>
+        <translation>Einzelne Spalte auswählen: Klicken, um eine Spalte auszuwählen</translation>
+    </message>
+    <message>
+        <source>Single Row Marquee</source>
+        <translation>Einzelne Zeile auswählen</translation>
+    </message>
+    <message>
+        <source>Single Row Marquee: click to select a row</source>
+        <translation>Einzelne Zeile auswählen: Klicken, um eine Zeile auszuwählen</translation>
+    </message>
+    <message>
         <source>Slice</source>
         <translation>Slice</translation>
     </message>
