@@ -384,6 +384,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     });
 
     connect(tools_, &ToolController::activeToolChanged, this, [this](ToolId id) {
+        if (auto* panel = panels_->layersPanel()) {
+            panel->clearOpacityShortcut();
+        }
         if (optionsBar_) {
             optionsBar_->showTool(id);
         }
@@ -689,6 +692,14 @@ void PicturaMainWindow::installWorkspaceOpenGesture()
 
 bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
 {
+    if (auto* canvas = qobject_cast<ImageView*>(watched);
+        canvas && documents_ && panels_ && tools_ && canvas == imageView()
+        && tools_->activeTool() == ToolId::Move) {
+        if (auto* panel = panels_->layersPanel();
+            panel && panel->filterOpacityShortcut(canvas, event)) {
+            return true;
+        }
+    }
     // A press on a canvas activates its window, before the tool sees it.
     if (event->type() == QEvent::MouseButtonPress) {
         if (DocWindow* window = windowOfCanvas(qobject_cast<ImageView*>(watched));

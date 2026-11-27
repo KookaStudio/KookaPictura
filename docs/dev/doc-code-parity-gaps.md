@@ -117,7 +117,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | PAN-12 | `panels/navigator-panel.md` | Proxy colour, Ctrl-drag proxy positioning, zoom buttons, typed zoom | MISSING | `navigator_panel.cpp:138-159` | #520 |
 | PAN-13 | `panels/paths-panel.md` | Make Work Path, clipping-path designation, Panel Options thumbnail size | MISSING | `paths_panel.h:24-25` | #521 |
 | PAN-14 | `panels/note-panel.md` | Notes Author/Colour options + PSD/PDF/TIFF annotation round-trip | MISSING | `options_bar.cpp:593`; `annotations.rs:10` | #522 |
-| PAN-15 | `panels/layers-panel.md` | `00`/`Shift+00` layer opacity shortcut (the Panel Options thumbnail size shipped in #586) | MISSING | `crates/pictura-app/cpp/panels/layers_panel_events.cpp` | #523 |
+| PAN-15 | `panels/layers-panel.md` | `00`/`Shift+00` layer opacity and fill shortcuts (Panel Options thumbnail size shipped in #586) | SHIPPED | `crates/pictura-app/cpp/panels/layers_panel_events.cpp` | #523 |
 
 ### 03-tools
 

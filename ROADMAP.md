@@ -165,7 +165,7 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
 - [ ] Relink and convert-to-linked for smart objects (#113)
 - [x] The Layers panel thumbnail-size option (#586).
   `crates/pictura-app/cpp/panels/layers_panel.cpp`
-- [ ] The `00` / `Shift+00` layer opacity shortcut (#523)
+- [x] Numeric shortcuts for layer Opacity and Fill (#523)
 - [x] Shape layer naming `<Tool> N` (#588).
   `crates/pictura-render/src/document_ops/layer_ops/shape_layer.rs`
 - [x] **Export Layers To Files — core** (#587)

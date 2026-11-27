@@ -37,6 +37,8 @@
 #include <QtGui/QFont>
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
+#include <QtGui/QKeyEvent>
+#include <QtGui/private/qkeymapper_p.h>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPalette>
@@ -70,6 +72,155 @@
 
 namespace pictura {
 
+namespace {
+
+constexpr int kOpacityShortcutWindowMs = 500;
+
+int opacityDigit(const QKeyEvent* event, bool shifted)
+{
+    const auto digitOf = [](int key) {
+        return key >= Qt::Key_0 && key <= Qt::Key_9 ? key - Qt::Key_0 : -1;
+    };
+    if (const int digit = digitOf(event->key()); digit >= 0 || !shifted) {
+        return digit;
+    }
+    // The resulting punctuation varies by layout, so match Qt's native
+    // shortcut candidate for Shift plus the underlying number key.
+    for (const auto candidate : QKeyMapper::possibleKeys(event)) {
+        if ((candidate.keyboardModifiers() & ~Qt::KeypadModifier) == Qt::ShiftModifier) {
+            if (const int digit = digitOf(candidate.key()); digit >= 0) {
+                return digit;
+            }
+        }
+    }
+    return -1;
+}
+
+} // namespace
+
+void LayersPanel::setupOpacityShortcut()
+{
+    opacityShortcutTimer_ = new QTimer(this);
+    opacityShortcutTimer_->setSingleShot(true);
+    opacityShortcutTimer_->setTimerType(Qt::PreciseTimer);
+    connect(opacityShortcutTimer_, &QTimer::timeout, this,
+            [this] { finishOpacityShortcut(); });
+}
+
+bool LayersPanel::canUseOpacityShortcut(const QWidget* source, bool fill) const
+{
+    return view_ && source->hasFocus() && !QApplication::activePopupWidget()
+        && !QApplication::activeModalWidget() && !transformPending_ && !gesture_.valid
+        && (fill ? fill_ : opacity_)->isEnabled();
+}
+
+bool LayersPanel::filterOpacityShortcut(QWidget* source, QEvent* event)
+{
+    const auto type = event->type();
+    if (type == QEvent::FocusOut || type == QEvent::MouseButtonPress
+        || type == QEvent::MouseButtonDblClick) {
+        clearOpacityShortcut();
+        return false;
+    }
+    if (type != QEvent::KeyPress && type != QEvent::ShortcutOverride) {
+        return false;
+    }
+    auto* key = static_cast<QKeyEvent*>(event);
+    if (key->key() == Qt::Key_Shift) {
+        return false;
+    }
+    const auto modifiers = key->modifiers() & ~Qt::KeypadModifier;
+    const bool fill = modifiers == Qt::ShiftModifier;
+    const int digit = modifiers == Qt::NoModifier || fill ? opacityDigit(key, fill) : -1;
+    if (digit < 0 || !canUseOpacityShortcut(source, fill)) {
+        clearOpacityShortcut();
+        return false;
+    }
+    if (type == QEvent::ShortcutOverride) {
+        // A registered shortcut can consume the key before the widget sees a
+        // press. Keep the old digit from committing while Qt resolves the key.
+        if (!key->isAutoRepeat() && opacityShortcut_.elapsed.isValid()) {
+            if (opacityShortcut_.awaitingPress) {
+                clearOpacityShortcut();
+            } else {
+                opacityShortcut_.awaitingPress = true;
+                QTimer::singleShot(0, this, [this] {
+                    if (opacityShortcut_.awaitingPress) {
+                        clearOpacityShortcut();
+                    }
+                });
+            }
+        }
+        return false;
+    }
+    if (key->isAutoRepeat()) {
+        key->accept();
+        return true;
+    }
+
+    QStringList paths = propertyPaths();
+    if (paths.isEmpty()) {
+        clearOpacityShortcut();
+        return false;
+    }
+    key->accept();
+    opacityShortcut_.awaitingPress = false;
+    const quint64 generation = view_->document_generation();
+    if (opacityShortcut_.elapsed.isValid() && opacityShortcut_.source == source
+        && opacityShortcut_.generation == generation && opacityShortcut_.paths == paths) {
+        if (opacityShortcut_.elapsed.hasExpired(kOpacityShortcutWindowMs)) {
+            // A key can arrive after the deadline but before Qt delivers the timer.
+            const QPointer<LayersPanel> panelGuard(this);
+            const QPointer<QWidget> sourceGuard(source);
+            const QPointer<PictureView> viewGuard(view_);
+            finishOpacityShortcut();
+            if (!panelGuard || !sourceGuard || !viewGuard || view_ != viewGuard.data()
+                || !canUseOpacityShortcut(sourceGuard.data(), fill)
+                || view_->document_generation() != generation || propertyPaths() != paths) {
+                return true;
+            }
+        } else if (opacityShortcut_.fill == fill) {
+            finishOpacityShortcut(digit);
+            return true;
+        }
+    }
+
+    opacityShortcut_.source = source;
+    opacityShortcut_.generation = generation;
+    opacityShortcut_.paths = std::move(paths);
+    opacityShortcut_.firstDigit = digit;
+    opacityShortcut_.fill = fill;
+    opacityShortcut_.elapsed.start();
+    opacityShortcutTimer_->start(kOpacityShortcutWindowMs);
+    return true;
+}
+
+void LayersPanel::finishOpacityShortcut(int nextDigit)
+{
+    const auto pending = opacityShortcut_;
+    clearOpacityShortcut();
+    if (!pending.elapsed.isValid() || pending.awaitingPress || !pending.source
+        || !canUseOpacityShortcut(pending.source, pending.fill)
+        || pending.generation != view_->document_generation() || pending.paths != propertyPaths()) {
+        return;
+    }
+
+    const int prefix = pending.firstDigit * 10;
+    const int percent = nextDigit >= 0 ? prefix + nextDigit : (prefix == 0 ? 100 : prefix);
+    const int value = qRound(percent * 255.0 / 100.0);
+    if (pending.fill) {
+        view_->set_layers_fill(pending.paths, value);
+    } else {
+        view_->set_layers_opacity(pending.paths, value);
+    }
+}
+
+void LayersPanel::clearOpacityShortcut()
+{
+    opacityShortcutTimer_->stop();
+    opacityShortcut_ = {};
+}
+
 bool LayersPanel::rowControlAt(const QModelIndex& index, const QPoint& pos) const
 {
     if (!delegate_ || !tree_ || !index.isValid()) {
@@ -92,6 +243,12 @@ bool LayersPanel::rowControlAt(const QModelIndex& index, const QPoint& pos) cons
 
 bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
 {
+    if (watched == tree_ && filterOpacityShortcut(tree_, event)) {
+        return true;
+    }
+    if (watched == tree_->viewport() && event->type() == QEvent::MouseButtonPress) {
+        clearOpacityShortcut();
+    }
     if (auto* button = qobject_cast<QToolButton*>(watched)) {
         const QString dropAction = button->property("layerDropAction").toString();
         if (!dropAction.isEmpty()) {

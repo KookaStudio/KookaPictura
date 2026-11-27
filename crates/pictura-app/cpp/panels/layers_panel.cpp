@@ -119,6 +119,8 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     : QWidget(parent)
     , colors_(colors)
 {
+    setupOpacityShortcut();
+
     QWidget* body = this;
     auto* layout = new QVBoxLayout(body);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -230,6 +232,7 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     tree_->setHeaderHidden(true);
     tree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree_->setContextMenuPolicy(Qt::CustomContextMenu);
+    tree_->installEventFilter(this);
     tree_->viewport()->installEventFilter(this);
     // Mouse tracking so the viewport filter can show the pointing-hand cursor on
     // a row.
@@ -467,6 +470,7 @@ void LayersPanel::setView(PictureView* view)
     }
     if (view_ != view
         || (view_ && view && view->document_generation() != rememberedGeneration_)) {
+        clearOpacityShortcut();
         rememberedTarget_.clear();
         rememberedAnchor_.clear();
     }
@@ -500,6 +504,7 @@ void LayersPanel::setView(PictureView* view)
         // One queued refresh per burst of changes; a synchronous refresh
         // before it runs (New Layer from the panel) consumes it.
         viewConnection_ = connect(view_, &PictureView::changed, this, [this] {
+            clearOpacityShortcut();
             // A notifying edit supersedes any in-place visibility patch.
             visibilityPatched_ = false;
             if (refreshQueued_) {
