@@ -7,6 +7,8 @@
 #include "memory_refusal.h"
 #include "commands.h"
 #include "frame.h"
+#include "panels/history_panel.h"
+#include "session.h"
 #include "image_size_dialog.h"
 #include "preferences.h"
 #include "preferences_dialog.h"
@@ -84,6 +86,9 @@ void ImageOpsTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    auto* history = window_->findChild<pictura::HistoryPanel*>(QStringLiteral("historyPanel"));
+    QVERIFY(history);
+    history->setOptionsForTest(false, false, false, false, false);
 }
 
 void ImageOpsTest::cleanup()

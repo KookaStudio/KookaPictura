@@ -1,6 +1,7 @@
 #include "selftest_report.h"
 #include "api/layers_api.h"
 #include "api/document_bridge.h"
+#include "api/history_api.h"
 #include "api/layers_bridge.h"
 #include "api/selection_bridge.h"
 
@@ -864,9 +865,11 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             const bool snapAdded =
                 propView && propView->history_add_snapshot(QStringLiteral("Checkpoint"));
             const int snapCount = propView ? pictura::history_snapshot_count(*propView) : -1;
-            const bool snapLabelOk =
-                propView && pictura::history_snapshot_label(*propView, 0) == QStringLiteral("Checkpoint");
-            const bool snapRestored = propView && propView->history_restore_snapshot(0);
+            const bool snapLabelOk = propView && snapCount >= 1
+                && pictura::history_snapshot_label(*propView, snapCount - 1)
+                    == QStringLiteral("Checkpoint");
+            const bool snapRestored =
+                propView && snapCount >= 1 && propView->history_restore_snapshot(snapCount - 1);
             ST_BEGIN("history_states");
             ST_PASS("history states=%d open_label=%d grew=%d "
                          "jump=%d snapshot=%d", histBefore,
@@ -2599,8 +2602,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
 
         // 8.3 m39_solo (106): Alt-solo hides every other row, a second Alt
         // restores the exact prior per-row visibility, and undo restores.
-        const QString soloHidden = QStringLiteral("1/1");
-        anatomyView->set_layers_visible(QStringList{soloHidden}, false);
+        pictura::history_api::setHistoryOptions(*anatomyView, false, true, false);
+        anatomyView->set_layers_visible(QStringList{QStringLiteral("1/1")}, false);
         anatomyPanel->refresh();
         QStringList priorHidden;
         for (int i = 0; i < pictura::layers_api::rowCount(*anatomyView); ++i) {
@@ -2620,21 +2623,18 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const bool soloUndo = anatomyView->undo();
         anatomyPanel->refresh();
         bool soloUndoOk = soloUndo;
-        for (int i = 0; i < pictura::layers_api::rowCount(*anatomyView); ++i) {
-            soloUndoOk = soloUndoOk
-                            && pictura::layers_api::rowAt(*anatomyView, i).visible
-                                   == !priorHidden.contains(pictura::layers_api::rowAt(*anatomyView, i).path);
+        for (int i = 0; soloUndoOk && i < pictura::layers_api::rowCount(*anatomyView); ++i) {
+            soloUndoOk = pictura::layers_api::rowAt(*anatomyView, i).visible
+                == !priorHidden.contains(pictura::layers_api::rowAt(*anatomyView, i).path);
         }
         const bool soloRedo = anatomyView->redo();
         anatomyPanel->refresh();
         anatomyPanel->toggleSoloForTest(anatomyGroup);
         anatomyPanel->refresh();
         bool soloRestoreOk = soloRedo;
-        for (int i = 0; i < pictura::layers_api::rowCount(*anatomyView); ++i) {
-            soloRestoreOk =
-                soloRestoreOk
-                && pictura::layers_api::rowAt(*anatomyView, i).visible
-                       == !priorHidden.contains(pictura::layers_api::rowAt(*anatomyView, i).path);
+        for (int i = 0; soloRestoreOk && i < pictura::layers_api::rowCount(*anatomyView); ++i) {
+            soloRestoreOk = pictura::layers_api::rowAt(*anatomyView, i).visible
+                == !priorHidden.contains(pictura::layers_api::rowAt(*anatomyView, i).path);
         }
         ST_BEGIN("solo_solo");
         ST_PASS("solo solo=%d restore=%d undo=%d", soloOk ? 1 : 0, soloRestoreOk ? 1 : 0, soloUndoOk ? 1 : 0);

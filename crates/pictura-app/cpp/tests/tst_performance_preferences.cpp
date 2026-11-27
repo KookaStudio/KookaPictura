@@ -18,6 +18,8 @@
 #include <QtWidgets/QToolButton>
 
 #include "frame.h"
+#include "panels/history_panel.h"
+#include "session.h"
 #include "preferences.h"
 #include "preferences_dialog.h"
 #include "status_readouts.h"
@@ -71,6 +73,9 @@ void PerformancePreferencesTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    auto* history = window_->findChild<pictura::HistoryPanel*>(QStringLiteral("historyPanel"));
+    QVERIFY(history);
+    history->setOptionsForTest(false, false, false, false, false);
 }
 
 void PerformancePreferencesTest::init()

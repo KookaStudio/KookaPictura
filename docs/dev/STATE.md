@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **History Options, Clear History/purge, and New Document from state, #514**
+  (OpenSpec change `history-options-clear-new-document`; capabilities
+  `ui/history-panel`, `document/edit-history` modified). The History panel menu
+  now enables all three rows. The five CS6 options persist in the UI session
+  store; non-linear capture appends a full anchor instead of truncating redo,
+  layer visibility is tracked only when its option is on, and the first/save
+  automatic snapshots follow their toggles. Plain Clear History keeps named
+  snapshots; Alt clears them too. New Document materializes the selected state
+  or snapshot into an untitled document with one `Duplicate State` history row.
+  A multi-step or non-linear branch jump now rebuilds the display from the
+  restored document, so later brush strokes no longer linger on the canvas.
 - **Fujifilm SuperCCD and EXR RAF, #1621** (OpenSpec change
   `vendor-raw-raf-superccd-exr`; `codec/vendor-raw-containers`,
   `codec/raw-demosaic`, `codec/camera-matrices`, `document/raw-save-image`

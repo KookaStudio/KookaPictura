@@ -642,6 +642,9 @@ panel.channels.channelOptions		Channel Options…		1	0
 panel.history.stepForward		Step Forward		1	0
 panel.history.stepBackward		Step Backward		1	0
 panel.history.newSnapshot		New Snapshot…		1	0
+panel.history.clear		Clear History		1	0
+panel.history.newDocument		New Document		1	0
+panel.history.options		History Options…		1	0
 actions.buttonMode		Button Mode		1	0
 actions.newAction		New Action…		1	0
 actions.newSet		New Set…		1	0

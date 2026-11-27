@@ -13,6 +13,7 @@
 
 #include <QtCore/QHash>
 #include <QtGui/QAction>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QToolButton>
@@ -214,9 +215,9 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Step Backward")), QStringLiteral("stepBackward")),
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "New Snapshot…")), QStringLiteral("newSnapshot"), true),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Delete"))),
-             dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Clear History"))),
-             dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "New Document")), true),
-             dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "History Options…")), true),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Clear History")), QStringLiteral("clearHistory")),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "New Document")), QStringLiteral("newDocument"), true),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "History Options…")), QStringLiteral("historyOptions"), true),
          }},
         {QStringLiteral("actionsPanel"),
          {
@@ -381,6 +382,9 @@ QString panelCommandId(const QString& panel, const QString& action)
             {QStringLiteral("stepForward"), command_ids::PanelHistoryStepForward},
             {QStringLiteral("stepBackward"), command_ids::PanelHistoryStepBackward},
             {QStringLiteral("newSnapshot"), command_ids::PanelHistoryNewSnapshot},
+            {QStringLiteral("clearHistory"), command_ids::PanelHistoryClear},
+            {QStringLiteral("newDocument"), command_ids::PanelHistoryNewDocument},
+            {QStringLiteral("historyOptions"), command_ids::PanelHistoryOptions},
         };
         return map.contains(action) ? QString::fromLatin1(map.value(action)) : QString();
     }
@@ -528,6 +532,7 @@ void PanelGroup::updateHeaderMenu()
                                   ? tr("Panel Menu")
                                   : tr("%1 Panel Menu").arg(titleForPanel(panel)));
     headerMenu_ = new QMenu(headerButton_);
+    headerMenu_->installEventFilter(this);
     populatePanelMenu(headerMenu_, panel,
                       [this](const QString& id) { runPanelPreference(id); },
                       owningHost() ? owningHost()->commands() : nullptr);
@@ -539,6 +544,7 @@ void PanelGroup::updateHeaderMenu()
         }
     }
     QObject::connect(headerMenu_, &QMenu::aboutToShow, headerMenu_, [this, panel] {
+        menuModifiersValid_ = false;
         // The menu is built once; re-read every command's state so a document
         // opened (or a selection changed) since then is reflected.
         if (PanelHost* host = owningHost()) {
@@ -607,6 +613,17 @@ bool PanelGroup::panelHasMenu(const QString& panelName)
     // The Clone Source spec lists no menu entries, so its live menu carries
     // only Close / Close Group.
     return !rowsForPanel(panelName).isEmpty() || panelName == QLatin1String("cloneSourcePanel");
+}
+
+void PanelGroup::setLastMenuModifiersForTest(Qt::KeyboardModifiers modifiers)
+{
+    menuModifiers_ = modifiers;
+    menuModifiersValid_ = true;
+}
+
+Qt::KeyboardModifiers PanelGroup::lastMenuModifiers() const
+{
+    return menuModifiersValid_ ? menuModifiers_ : QApplication::keyboardModifiers();
 }
 
 QStringList PanelGroup::menuTextsForPanel(const QString& panelName)

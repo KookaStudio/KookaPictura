@@ -120,6 +120,16 @@ SessionState loadSession()
         obj.value(QStringLiteral("layersUseDefaultMasksOnFill")).toBool(true);
     state.layersAddMaskByDefault =
         obj.value(QStringLiteral("layersAddMaskByDefault")).toBool(true);
+    state.historyAutoFirstSnapshot =
+        obj.value(QStringLiteral("historyAutoFirstSnapshot")).toBool(true);
+    state.historyAutoSnapshotOnSave =
+        obj.value(QStringLiteral("historyAutoSnapshotOnSave")).toBool(false);
+    state.historyAllowNonLinear =
+        obj.value(QStringLiteral("historyAllowNonLinear")).toBool(false);
+    state.historyShowSnapshotDialog =
+        obj.value(QStringLiteral("historyShowSnapshotDialog")).toBool(false);
+    state.historyVisibilityUndoable =
+        obj.value(QStringLiteral("historyVisibilityUndoable")).toBool(false);
     state.toolsColumns =
         obj.value(QStringLiteral("toolsColumns")).toInt(1) == 2 ? 2 : 1;
     state.rulersVisible = obj.value(QStringLiteral("rulersVisible")).toBool(false);
@@ -268,6 +278,11 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("layersAddCopyOnDuplicate"), state.layersAddCopyOnDuplicate);
     obj.insert(QStringLiteral("layersUseDefaultMasksOnFill"), state.layersUseDefaultMasksOnFill);
     obj.insert(QStringLiteral("layersAddMaskByDefault"), state.layersAddMaskByDefault);
+    obj.insert(QStringLiteral("historyAutoFirstSnapshot"), state.historyAutoFirstSnapshot);
+    obj.insert(QStringLiteral("historyAutoSnapshotOnSave"), state.historyAutoSnapshotOnSave);
+    obj.insert(QStringLiteral("historyAllowNonLinear"), state.historyAllowNonLinear);
+    obj.insert(QStringLiteral("historyShowSnapshotDialog"), state.historyShowSnapshotDialog);
+    obj.insert(QStringLiteral("historyVisibilityUndoable"), state.historyVisibilityUndoable);
     obj.insert(QStringLiteral("toolsColumns"), state.toolsColumns);
     obj.insert(QStringLiteral("rulersVisible"), state.rulersVisible);
     obj.insert(QStringLiteral("guidesVisible"), state.guidesVisible);

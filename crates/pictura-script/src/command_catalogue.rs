@@ -203,6 +203,7 @@ pub fn modal_ids() -> &'static [&'static str] {
         "panel.layers.refineMask",
         "panel.layers.maskOptions",
         "panel.history.newSnapshot",
+        "panel.history.options",
         "paragraph.justification",
         "panel.properties.autoOptions",
         "panel.properties.savePreset",

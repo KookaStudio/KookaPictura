@@ -101,6 +101,17 @@ bool purgeAll(PictureView& view)
     return purge_all(view);
 }
 
+void setHistoryOptions(PictureView& view, bool allowNonLinear, bool visibilityUndoable,
+                       bool autoSnapshotOnSave)
+{
+    set_history_options(view, allowNonLinear, visibilityUndoable, autoSnapshotOnSave);
+}
+
+bool newDocumentFromState(const PictureView& source, PictureView& target, bool snapshot, int index)
+{
+    return history_new_document(source, target, snapshot, index);
+}
+
 QMetaObject::Connection connectChanged(PictureView& view, const QObject* context,
                                        const std::function<void()>& fn)
 {

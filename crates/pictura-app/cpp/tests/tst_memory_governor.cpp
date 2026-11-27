@@ -25,6 +25,7 @@
 #include "command_ids.h"
 #include "control_server.h"
 #include "frame.h"
+#include "panels/history_panel.h"
 #include "image_size_dialog.h"
 #include "image_view.h"
 #include "memory_refusal.h"
@@ -100,6 +101,9 @@ void MemoryGovernorTest::initTestCase()
     QVERIFY(files_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    auto* history = window_->findChild<pictura::HistoryPanel*>(QStringLiteral("historyPanel"));
+    QVERIFY(history);
+    history->setOptionsForTest(false, false, false, false, false);
     server_ = std::make_unique<pictura::ControlServer>(window_.get(), QString());
 }
 

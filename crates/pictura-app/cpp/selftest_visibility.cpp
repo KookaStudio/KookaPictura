@@ -1,6 +1,7 @@
 #include "selftest_visibility.h"
 #include "selftest_report.h"
 
+#include "api/history_api.h"
 #include "api/transform_api.h"
 #include "frame.h"
 #include "image_view.h"
@@ -36,6 +37,7 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
             return pictura::selfTest().fail(pictura::selftest_codes::kCode363, "visibility region fixture");
         }
         const int doc = frame.activeDocumentIndex();
+        pictura::history_api::setHistoryOptions(*view, false, true, false);
         // Grow the canvas around the small layer so the toggle's region is the
         // layer, not the whole document.
         const bool resized = view->resize_canvas(QStringLiteral("center"), 4000, 4000);

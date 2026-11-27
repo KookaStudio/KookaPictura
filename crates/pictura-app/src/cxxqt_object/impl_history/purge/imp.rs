@@ -1,5 +1,6 @@
 use super::*;
 
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -39,6 +40,58 @@ pub(super) fn apply_history_states(mut view: Pin<&mut PictureView>) -> bool {
         view.as_mut().changed();
     }
     trimmed
+}
+
+pub(super) fn set_history_options(
+    mut view: Pin<&mut PictureView>,
+    allow_non_linear: bool,
+    visibility_undoable: bool,
+    auto_snapshot_on_save: bool,
+) {
+    let mut rust = view.as_mut().rust_mut();
+    rust.history_allow_non_linear = allow_non_linear;
+    rust.history_visibility_undoable = visibility_undoable;
+    rust.history_auto_snapshot_on_save = auto_snapshot_on_save;
+    rust.session.history.set_non_linear(allow_non_linear);
+}
+
+pub(super) fn history_new_document(
+    source: &PictureView,
+    mut target: Pin<&mut PictureView>,
+    snapshot: bool,
+    index: i32,
+) -> bool {
+    if index < 0 {
+        return false;
+    }
+    let index = index as usize;
+    let state = {
+        let rust = source.rust();
+        if rust.session.doc.is_none() {
+            return false;
+        }
+        if snapshot {
+            rust.session.history.snapshot(index)
+        } else {
+            rust.session.history.state_snapshot(index)
+        }
+    };
+    let Some(state) = state else {
+        return false;
+    };
+    {
+        let mut rust = target.as_mut().rust_mut();
+        rust.replace_document(
+            Some(state.doc),
+            Default::default(),
+            Default::default(),
+            None,
+        );
+        rust.select_only_layer("0");
+    }
+    target.as_mut().edit("Duplicate State", |_| Edit::Full);
+    target.as_mut().session_cancelled();
+    true
 }
 
 pub(super) fn current_history_label(view: &PictureView) -> QString {

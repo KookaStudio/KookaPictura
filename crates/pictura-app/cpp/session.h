@@ -22,6 +22,11 @@ struct SessionState {
     bool layersAddCopyOnDuplicate = true;   // name a duplicate "<name> copy"
     bool layersUseDefaultMasksOnFill = true;  // fill layer takes selection mask
     bool layersAddMaskByDefault = true;       // new adjustment gets a mask
+    bool historyAutoFirstSnapshot = true;
+    bool historyAutoSnapshotOnSave = false;
+    bool historyAllowNonLinear = false;
+    bool historyShowSnapshotDialog = false;
+    bool historyVisibilityUndoable = false;
     int toolsColumns = 1;            // 1 or 2; out-of-range loads the default
     bool rulersVisible = false;
     bool guidesVisible = true;

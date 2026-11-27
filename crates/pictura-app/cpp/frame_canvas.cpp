@@ -5,12 +5,14 @@
 #include "frame_canvas.h"
 
 #include "frame_includes.h"
+#include "panels/history_panel.h"
 #include "panels/info_panel.h"
 #include "panels/layers_panel.h"
 
 #include "import_save_coordinator.h"
 
 #include "api/document_api.h"
+#include "api/history_api.h"
 #include "api/paint_api.h"
 #include "file_drop_router.h"
 #include "pictura_debug_timing.h"
@@ -131,6 +133,11 @@ void PicturaMainWindow::wireCanvas(DocWindow& window)
 void PicturaMainWindow::wireDocument(DocEntry& doc)
 {
     PictureView* view = doc.view;
+    if (view->has_document() && panels_ && panels_->historyPanel()
+        && panels_->historyPanel()->autoFirstSnapshot()
+        && history_api::snapshotCount(*view) == 0 && history_api::count(*view) <= 1) {
+        history_api::addSnapshot(*view, QStringLiteral("Snapshot 1"));
+    }
     doc.selectionGeneration = view->selection_generation();
     connect(view, &PictureView::changed, this, [this, view]() {
         if (view != activeView()) {

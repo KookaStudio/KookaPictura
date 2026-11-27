@@ -39,6 +39,11 @@ pub struct PictureViewRust {
     /// The document, the selection, and the history: the state the document
     /// session owns.
     pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
+    /// History Options that affect capture: non-linear append, visibility
+    /// states, and the automatic save snapshot.
+    pub(super) history_allow_non_linear: bool,
+    pub(super) history_visibility_undoable: bool,
+    pub(super) history_auto_snapshot_on_save: bool,
     pub(super) pending_vector_place: Option<PendingVectorPlace>,
     /// A decoded camera raw file waiting for the Pictura Raw dialog (#400).
     pub(super) pending_raw: Option<Box<super::open_jobs::PendingRaw>>,
@@ -271,6 +276,9 @@ impl Default for PictureViewRust {
     fn default() -> Self {
         Self {
             session: Default::default(),
+            history_allow_non_linear: false,
+            history_visibility_undoable: false,
+            history_auto_snapshot_on_save: false,
             pending_vector_place: None,
             pending_raw: None,
             vector_place_result: VectorPlaceResult::Pending,

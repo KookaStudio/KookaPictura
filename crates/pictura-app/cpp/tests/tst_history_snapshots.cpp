@@ -1,10 +1,12 @@
 #include <QtTest/QtTest>
 
 #include "frame.h"
+#include "panels/history_panel.h"
 
 #include "api/document_bridge.h"
 #include "api/history_api.h"
 #include "api/paint_bridge.h"
+#include "session.h"
 
 #include "qt_test_support.h"
 
@@ -28,6 +30,9 @@ void HistorySnapshotsTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    auto* history = window_->findChild<pictura::HistoryPanel*>(QStringLiteral("historyPanel"));
+    QVERIFY(history);
+    history->setOptionsForTest(false, false, false, false, false);
 }
 
 void HistorySnapshotsTest::snapshotEditRestoreRoundTrip()

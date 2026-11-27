@@ -22,6 +22,7 @@
 #include "commands.h"
 #include "file_drop_router.h"
 #include "frame.h"
+#include "panels/history_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/layers_panel_internal.h"
 #include "panels/properties_panel.h"
@@ -170,6 +171,9 @@ void LayerTargetTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    auto* history = window_->findChild<pictura::HistoryPanel*>(QStringLiteral("historyPanel"));
+    QVERIFY(history);
+    history->setOptionsForTest(false, false, false, false, false);
 }
 
 void LayerTargetTest::cleanup()

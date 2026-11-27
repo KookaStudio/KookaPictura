@@ -46,6 +46,27 @@ pub mod ffi {
         /// when a state went. Returns whether one did.
         fn apply_history_states(view: Pin<&mut PictureView>) -> bool;
 
+        /// Apply the capture-affecting History Options to this view: non-linear
+        /// append, layer-visibility states, and the automatic save snapshot.
+        fn set_history_options(
+            view: Pin<&mut PictureView>,
+            allow_non_linear: bool,
+            visibility_undoable: bool,
+            auto_snapshot_on_save: bool,
+        );
+
+        /// Create a new document in `target` from state or named snapshot
+        /// `index` of `source`, with one `Duplicate State` history entry.
+        /// `snapshot` selects a named snapshot; otherwise the argument is a
+        /// retained state index. False without a source document or when the
+        /// index is out of range.
+        fn history_new_document(
+            source: &PictureView,
+            target: Pin<&mut PictureView>,
+            snapshot: bool,
+            index: i32,
+        ) -> bool;
+
         /// The label of the current history state, or empty without a document.
         fn current_history_label(view: &PictureView) -> QString;
 

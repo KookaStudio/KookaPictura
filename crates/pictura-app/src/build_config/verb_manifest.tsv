@@ -67,6 +67,7 @@ free	hdr_result_error	hdr_result_error	api/document_bridge.h	pictura_app/src/cxx
 free	hdr_result_install	hdr_result_install	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	hdr_result_preview	hdr_result_preview	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	hdr_result_tone	hdr_result_tone	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	history_new_document	history_new_document	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	history_snapshot_count	history_snapshot_count	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	history_snapshot_label	history_snapshot_label	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	image_depth_available	image_depth_available	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
@@ -143,6 +144,7 @@ free	save_set_delay	save_set_delay	api/document_bridge.h	pictura_app/src/cxxqt_o
 free	save_set_fault_for_test	save_set_fault_for_test	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	save_set_sync_failure	save_set_sync_failure	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	save_start	save_start	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
+free	set_history_options	set_history_options	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	tiles_pending	tiles_pending	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	transform_commit_cancel	transform_commit_cancel	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	transform_commit_finish	transform_commit_finish	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
