@@ -130,6 +130,8 @@ public:
     QToolButton* headerMenuButtonForTest() const { return headerButton_; }
     bool headerMenuAtRightForTest() const;
     QStringList panelMenuTextsForTest() const;
+    Qt::KeyboardModifiers lastMenuModifiers() const;
+    void setLastMenuModifiersForTest(Qt::KeyboardModifiers modifiers);
     bool panelMenuEnabledForTest(const QString& text) const;
     QString panelMenuToolTipForTest(const QString& text) const;
     bool triggerPanelMenuForTest(const QString& text);
@@ -187,6 +189,8 @@ private:
     // M45: the flyout-only close control in the header corner.
     QToolButton* flyoutCloseButton_ = nullptr;
     QMenu* headerMenu_ = nullptr;
+    Qt::KeyboardModifiers menuModifiers_ = Qt::NoModifier;
+    bool menuModifiersValid_ = false;
     QHash<QString, PanelMenuHook> panelMenuHooks_;
     // M48: panel icons are kept off the normal tabs but retained here for the
     // iconic/icon strip and the tab-drag payloads, keyed by panel objectName.

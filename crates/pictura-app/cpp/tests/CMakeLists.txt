@@ -59,6 +59,7 @@ set(PICTURA_QT_TEST_DRIVER_document
     tst_session_ports
     tst_edit_clipboard
     tst_history_snapshots
+    tst_history_options
     tst_edit_refresh
     tst_image_ops
     tst_image_rotate

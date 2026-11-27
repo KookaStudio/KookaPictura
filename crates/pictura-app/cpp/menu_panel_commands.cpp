@@ -1,5 +1,6 @@
 #include "menu_registrar.h"
 #include <QtCore/QCoreApplication>
+#include <QtWidgets/QApplication>
 
 #include "menu_registrar_internal.h"
 
@@ -8,6 +9,7 @@
 #include "commands.h"
 #include "document_command.h"
 
+#include "api/history_api.h"
 #include "api/layers_api.h"
 #include "api/layers_bridge.h"
 
@@ -15,6 +17,8 @@
 #include "panels/channels_panel.h"
 #include "panels/character_panel.h"
 #include "panels/history_panel.h"
+#include "panels/panel_column.h"
+#include "panels/panel_group.h"
 #include "panels/layers_panel.h"
 #include "panels/paragraph_panel.h"
 #include "panels/properties_panel.h"
@@ -210,6 +214,47 @@ void MenuRegistrar::wirePanelMenuCommands()
             panels_->historyPanel()->performPanelMenuAction(QStringLiteral("newSnapshot"));
         }
     });
+    bindPanel(command_ids::PanelHistoryClear, [this]() {
+        if (!panels_ || !panels_->historyPanel()) {
+            return;
+        }
+        Qt::KeyboardModifiers modifiers = QApplication::keyboardModifiers();
+        if (PanelColumn* column = panels_->columnForPanel(QStringLiteral("historyPanel"))) {
+            if (PanelGroup* group = column->groupForPanel(QStringLiteral("historyPanel"))) {
+                modifiers = group->lastMenuModifiers();
+            }
+        }
+        panels_->historyPanel()->clearHistory(modifiers.testFlag(Qt::AltModifier));
+    });
+    bindPanel(command_ids::PanelHistoryNewDocument, [this]() {
+        PictureView* source = activeView();
+        if (!source || !source->has_document() || !panels_ || !panels_->historyPanel()) {
+            return;
+        }
+        const HistoryPanel::Target target = panels_->historyPanel()->selectedTarget();
+        if (!target.valid()) {
+            return;
+        }
+        auto* view = new PictureView(dialogParent());
+        if (!history_api::newDocumentFromState(*source, *view, target.snapshot, target.index)) {
+            delete view;
+            return;
+        }
+        documents_->addDocument(view, QString());
+        refresh();
+    });
+    bindPanel(command_ids::PanelHistoryOptions, [this]() {
+        if (panels_->historyPanel()) {
+            panels_->historyPanel()->openHistoryOptions();
+        }
+    });
+    const auto historyDocumentEnabled = [this]() {
+        return activeView() && activeView()->has_document();
+    };
+    for (const char* id : {command_ids::PanelHistoryClear, command_ids::PanelHistoryNewDocument}) {
+        commands_->setEnabledProvider(id, historyDocumentEnabled);
+    }
+    commands_->setEnabledProvider(command_ids::PanelHistoryOptions, []() { return true; });
     const char* const actionIds[] = {
         command_ids::ActionsButtonMode,       command_ids::ActionsNewAction,
         command_ids::ActionsNewSet,           command_ids::ActionsDuplicate,

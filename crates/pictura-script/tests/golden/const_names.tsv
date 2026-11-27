@@ -377,6 +377,9 @@ PanelChannelsChannelOptions	panel.channels.channelOptions
 PanelHistoryStepForward	panel.history.stepForward
 PanelHistoryStepBackward	panel.history.stepBackward
 PanelHistoryNewSnapshot	panel.history.newSnapshot
+PanelHistoryClear	panel.history.clear
+PanelHistoryNewDocument	panel.history.newDocument
+PanelHistoryOptions	panel.history.options
 ActionsButtonMode	actions.buttonMode
 ActionsNewAction	actions.newAction
 ActionsNewSet	actions.newSet

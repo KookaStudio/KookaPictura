@@ -8,9 +8,6 @@ use pictura_core::{Document, PsdRect};
 pub(super) struct Damage {
     pub(super) kinds: Vec<PlaneKind>,
     pub(super) height: usize,
-    /// The document keeps no stored composite (#1216): its layer tiles are
-    /// the picture's change, grown by their reach.
-    pub(super) layer_tiles: bool,
     pub(super) rect: Option<PsdRect>,
     pub(super) everywhere: bool,
     /// The walk left a segment, so its tiles no longer tell the whole change.
@@ -22,7 +19,6 @@ impl Damage {
         Self {
             kinds: plane_kinds(doc),
             height: doc.height as usize,
-            layer_tiles: !pictura_render::DocumentComposite::is_stored(doc),
             rect: None,
             everywhere: false,
             crossed: false,
@@ -59,17 +55,18 @@ impl Damage {
                         });
                     }
                 }
+                // Layer tiles bound the picture even when a stored composite's
+                // own delta is absent: a region refresh can drop the stored
+                // composite between states, and the layer tiles still cover the
+                // change the display must rebuild.
                 Some(PlaneKind::Mask(mask, reach)) => {
-                    let grow = if self.layer_tiles { reach } else { 0 };
                     for tile in &delta.tiles {
-                        self.union(placed(tile, mask, grow));
+                        self.union(placed(tile, mask, reach));
                     }
                 }
                 Some(PlaneKind::LayerChannel { rect, reach }) => {
-                    if self.layer_tiles {
-                        for tile in &delta.tiles {
-                            self.union(placed(tile, rect, reach));
-                        }
+                    for tile in &delta.tiles {
+                        self.union(placed(tile, rect, reach));
                     }
                 }
                 // No canvas view draws these planes directly.

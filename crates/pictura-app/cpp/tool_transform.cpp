@@ -6,6 +6,7 @@
 #include "memory_refusal.h"
 #include "transform_commit.h"
 
+#include "api/layers_api.h"
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
 #include "api/transform_bridge.h"
@@ -462,9 +463,10 @@ void ToolController::syncTransformControls()
     // The content scan runs only when the layer, its rect, or the history step
     // changed; a refresh or a press on an unchanged box reuses the last one.
     const QString key = want && !active.isEmpty()
-        ? QStringLiteral("%1 %2 %3 %4")
+        ? QStringLiteral("%1 %2 %3 %4 %5")
               .arg(active, transform_api::layerRect(*v, active).toString())
               .arg(v->history_index())
+              .arg(layers_api::rowForPath(*v, active).visible ? 1 : 0)
               .arg(layer_link_key(*v, active))
         : QString();
     if (controlsIdle_ && !key.isEmpty() && key == controlsKey_) {

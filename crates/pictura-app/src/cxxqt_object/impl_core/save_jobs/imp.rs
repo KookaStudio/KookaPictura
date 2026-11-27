@@ -387,6 +387,13 @@ fn finish(rust: &mut PictureViewRust) -> NativeSaveResult {
     if replaced {
         return result;
     }
+    if !job.copy && outcome == SaveOutcome::Saved && rust.history_auto_snapshot_on_save {
+        let label = format!("Snapshot {}", rust.session.history.snapshot_count() + 1);
+        if let Some(snapshot) = rust.named_snapshot() {
+            let target = rust.layer_target.clone();
+            rust.session.history.add_snapshot(&label, snapshot, target);
+        }
+    }
     let session = &mut rust.session;
     session.skipped_xmp_mirror = worker_result.unwrap_or(false);
     session.history_log_save_warning = (outcome == SaveOutcome::Saved && job.history_log_omitted)

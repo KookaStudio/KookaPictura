@@ -883,3 +883,28 @@ fn admission_status_is_owned_by_the_save_attempt() {
     assert_eq!(rust.last_native_save.code, ErrorCode::Host.status().raw());
     assert_eq!(rust.last_native_save.admission, 1);
 }
+
+#[test]
+fn save_finish_adds_snapshot_when_enabled() {
+    let mut rust = view();
+    rust.history_auto_snapshot_on_save = true;
+    let target = path("auto-snapshot.psd");
+    assert!(save_start_rust(&mut rust, &target, -1, false));
+    wait(&rust);
+    assert!(save_finish_rust(&mut rust));
+    assert_eq!(rust.session.history.snapshot_count(), 1);
+    assert_eq!(rust.session.history.snapshot_label(0), "Snapshot 1");
+    let _ = std::fs::remove_file(&target);
+}
+
+#[test]
+fn save_copy_does_not_add_snapshot() {
+    let mut rust = view();
+    rust.history_auto_snapshot_on_save = true;
+    let target = path("auto-snapshot-copy.psd");
+    assert!(save_start_rust(&mut rust, &target, -1, true));
+    wait(&rust);
+    assert!(save_finish_rust(&mut rust));
+    assert_eq!(rust.session.history.snapshot_count(), 0);
+    let _ = std::fs::remove_file(&target);
+}

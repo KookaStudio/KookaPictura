@@ -723,6 +723,9 @@ impl PictureViewRust {
         self.session.install(doc, history, pdf_password);
         self.hdr_merged_current = false;
         self.hdr_merged_history_ids.clear();
+        self.session
+            .history
+            .set_non_linear(self.history_allow_non_linear);
         self.session.vanishing_planes = self
             .session
             .doc

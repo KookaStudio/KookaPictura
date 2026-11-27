@@ -11,6 +11,7 @@ mod budget;
 mod damage;
 mod depth;
 pub use depth::{set_state_limit, state_limit};
+mod nonlinear;
 mod planes;
 mod recovery;
 pub(crate) use recovery::{apply_recovery_delta, recovery_delta};
@@ -153,6 +154,7 @@ pub struct History {
     cursor: usize,
     snapshots: Vec<Named>,
     current: Option<Snapshot>,
+    non_linear: bool,
     brush_source: BrushSource,
     pinned: Option<Snapshot>,
     pinned_id: Option<u64>,
@@ -225,6 +227,16 @@ impl History {
         self.revision = self.revision.wrapping_add(1);
         if matches!(self.brush_source, BrushSource::State(i) if i > self.cursor) {
             self.pin_source();
+        }
+        // Non-linear history keeps the states after the cursor and appends the
+        // new state as a full anchor. A later undo crosses back into the
+        // previous segment and re-materializes the state recorded before it,
+        // so undo follows recording order rather than a branch tree.
+        // ponytail: a non-linear branch capture keeps a whole document; the
+        // linear path stays delta-based (#1215's tiling).
+        if self.non_linear && self.cursor + 1 < self.states.len() {
+            self.append_non_linear(doc, selection, target, label);
+            return;
         }
         self.truncate_states(self.cursor + 1);
         if std::mem::take(&mut self.panic_after_truncation_for_test) {
@@ -902,6 +914,12 @@ impl History {
             damage.crossed = true;
             live = None;
             if target < anchor {
+                // A backward walk leaving a full anchor (a non-linear branch
+                // capture) has no delta for that state's pixels: the display
+                // must rebuild in full rather than trust the crossed tiles.
+                if matches!(self.states[anchor].stored, Stored::Full(_)) {
+                    damage.everywhere = true;
+                }
                 // Back across this segment's anchor: it keeps the state it is,
                 // and the previous segment's full anchor turns hollow.
                 self.census

@@ -9,6 +9,7 @@ mod cache;
 mod depth;
 mod hint;
 mod mask_damage;
+mod options;
 mod sharing;
 mod tiles;
 

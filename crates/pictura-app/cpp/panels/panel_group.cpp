@@ -685,6 +685,12 @@ QToolButton* PanelGroup::makeIconButton(const QIcon& icon, const QString& title,
 
 bool PanelGroup::eventFilter(QObject* watched, QEvent* event)
 {
+    if (headerMenu_ && watched == headerMenu_
+        && (event->type() == QEvent::MouseButtonPress
+            || event->type() == QEvent::MouseButtonRelease)) {
+        menuModifiers_ = static_cast<QMouseEvent*>(event)->modifiers();
+        menuModifiersValid_ = true;
+    }
     if ((watched == tabs_ || (tabs_ && watched == tabs_->tabBar()))
         && event->type() == QEvent::Resize) {
         updateHeaderBand();

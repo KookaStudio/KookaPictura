@@ -210,19 +210,29 @@ impl PictureViewRust {
     /// Execute the pixel half, then capture one state, and report what the
     /// presenter must show.
     pub(super) fn apply_edit(&mut self, label: &str, edit: Edit) -> Presentation {
-        self.apply_edit_with(label, edit, true, false)
+        self.apply_edit_with(label, edit, true, false, true)
+    }
+
+    /// As [`Self::apply_edit`] with an explicit record flag.
+    pub(super) fn apply_edit_with_record(
+        &mut self,
+        label: &str,
+        edit: Edit,
+        record: bool,
+    ) -> Presentation {
+        self.apply_edit_with(label, edit, true, false, record)
     }
 
     /// As [`Self::apply_edit`] for a move of the topmost pixel layer, which
     /// leaves the cached move-preview base valid: no content-revision bump.
     pub(super) fn apply_edit_move(&mut self, label: &str, edit: Edit) -> Presentation {
-        self.apply_edit_with(label, edit, false, true)
+        self.apply_edit_with(label, edit, false, true, true)
     }
 
     /// As [`Self::apply_edit`] for a transform commit, which changes content
     /// but may still leave a large composite to a worker.
     pub(super) fn apply_transform(&mut self, label: &str, edit: Edit, defer: bool) -> Presentation {
-        self.apply_edit_with(label, edit, true, defer)
+        self.apply_edit_with(label, edit, true, defer, true)
     }
 
     fn apply_edit_with(
@@ -231,6 +241,7 @@ impl PictureViewRust {
         edit: Edit,
         bump_revision: bool,
         defer: bool,
+        record: bool,
     ) -> Presentation {
         // A structural command may have remapped the link sets instead of
         // invalidating them (an insertion or deletion that shifted indices).
@@ -314,7 +325,7 @@ impl PictureViewRust {
         if !deferred {
             let target = self.layer_target.clone();
             let t = Instant::now();
-            if !matches!(edit, Edit::SelectionPreview) {
+            if record && !matches!(edit, Edit::SelectionPreview) {
                 if bump_revision {
                     self.session
                         .capture_live_without_bookkeeping(&target, label, hint.as_deref());
@@ -413,9 +424,27 @@ impl PictureViewRust {
 impl qobject::PictureView {
     /// Commit a document edit through the transaction and return its outcome.
     pub(super) fn edit(
+        self: Pin<&mut Self>,
+        label: &str,
+        f: impl FnOnce(&mut PictureViewRust) -> Edit,
+    ) -> Edit {
+        self.edit_with_record(label, f, true)
+    }
+
+    /// As [`Self::edit`] without adding a history state.
+    pub(super) fn edit_untracked(
+        self: Pin<&mut Self>,
+        label: &str,
+        f: impl FnOnce(&mut PictureViewRust) -> Edit,
+    ) -> Edit {
+        self.edit_with_record(label, f, false)
+    }
+
+    fn edit_with_record(
         mut self: Pin<&mut Self>,
         label: &str,
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
+        record: bool,
     ) -> Edit {
         self.as_mut().settle_pending_composite();
         if self.rust().pending_vector_place.is_some() {
@@ -433,7 +462,10 @@ impl qobject::PictureView {
         if matches!(edit, Edit::None) {
             metrics::cancel_edit();
         }
-        let presentation = self.as_mut().rust_mut().apply_edit(label, edit.clone());
+        let presentation =
+            self.as_mut()
+                .rust_mut()
+                .apply_edit_with_record(label, edit.clone(), record);
         let outcome = presentation.declaration.clone().unwrap_or(edit);
         self.as_mut().present(presentation);
         outcome

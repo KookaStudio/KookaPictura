@@ -6,6 +6,7 @@ use super::helpers::*;
 use super::helpers_composite::*;
 use super::helpers_masks::*;
 use super::qobject;
+use super::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
@@ -133,7 +134,8 @@ impl qobject::PictureView {
     }
 
     pub fn set_layer_visible(mut self: Pin<&mut Self>, i: i32, visible: bool) {
-        let edit = self.as_mut().edit("Layer Visibility", |rust| {
+        let record = self.rust().history_visibility_undoable;
+        let apply = |rust: &mut PictureViewRust| {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
@@ -145,7 +147,12 @@ impl qobject::PictureView {
                 Some(rect) => Edit::regions(vec![rect], false),
                 None => Edit::Full,
             }
-        });
+        };
+        let edit = if record {
+            self.as_mut().edit("Layer Visibility", apply)
+        } else {
+            self.as_mut().edit_untracked("Layer Visibility", apply)
+        };
         if !matches!(edit, Edit::None) {
             let paths: QStringList = core::iter::once(QString::from(i.to_string())).collect();
             self.as_mut().layer_visibility_changed(paths, visible);
@@ -761,8 +768,9 @@ impl qobject::PictureView {
     pub fn set_layers_visible(mut self: Pin<&mut Self>, paths: &QStringList, visible: bool) -> i32 {
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
+        let record = self.rust().history_visibility_undoable;
         let mut changed = 0;
-        self.as_mut().edit("Set Visibility", |rust| {
+        let apply = |rust: &mut PictureViewRust| {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
@@ -775,7 +783,12 @@ impl qobject::PictureView {
                 Some(rect) => Edit::regions(vec![rect], false),
                 None => Edit::Full,
             }
-        });
+        };
+        if record {
+            self.as_mut().edit("Set Visibility", apply);
+        } else {
+            self.as_mut().edit_untracked("Set Visibility", apply);
+        }
         if changed == 0 {
             paint_timing::report();
         } else {
@@ -849,8 +862,9 @@ impl qobject::PictureView {
         let label = label.to_string();
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
+        let record = self.rust().history_visibility_undoable;
         let mut changed = 0;
-        self.as_mut().edit(&label, |rust| {
+        let apply = |rust: &mut PictureViewRust| {
             let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
@@ -863,7 +877,12 @@ impl qobject::PictureView {
                 Some(rect) => Edit::regions(vec![rect], true),
                 None => Edit::Full,
             }
-        });
+        };
+        if record {
+            self.as_mut().edit(&label, apply);
+        } else {
+            self.as_mut().edit_untracked(&label, apply);
+        }
         changed as i32
     }
 
