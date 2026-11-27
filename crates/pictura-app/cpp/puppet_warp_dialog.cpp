@@ -82,7 +82,7 @@ public:
     QPointF canvasPosition(QPointF source) const { return offset() + source * scale(); }
     QPointF imagePosition(QPointF screen) const { return (screen - offset()) / scale(); }
 
-    void present(QImage image, const rust::Vec<double>& mesh)
+    void present(QImage image, const ::rust::Vec<double>& mesh)
     {
         if (!image.isNull()) {
             preview_ = std::move(image);
@@ -172,7 +172,7 @@ class WarpDialog final : public QDialog {
     Q_DECLARE_TR_FUNCTIONS(WarpDialog)
 
 public:
-    WarpDialog(QWidget* parent, PictureView& view, rust::Box<PuppetWarpSession> session,
+    WarpDialog(QWidget* parent, PictureView& view, ::rust::Box<PuppetWarpSession> session,
                int width, int height)
         : QDialog(parent), view_(&view), session_(std::move(session))
     {
@@ -638,7 +638,7 @@ private:
             });
         }
         const auto state = puppet_warp_configure(*session_,
-            rust::Slice<const double>(packed.data(), packed.size()), mode_->currentIndex(),
+            ::rust::Slice<const double>(packed.data(), packed.size()), mode_->currentIndex(),
             density_->currentIndex(), expansion_->value());
         const double area = double(canvas_->width()) * canvas_->height();
         const double reduction = std::min(1.0, std::sqrt(kPreviewPixels / area));
@@ -666,7 +666,7 @@ private:
     }
 
     QPointer<PictureView> view_;
-    rust::Box<PuppetWarpSession> session_;
+    ::rust::Box<PuppetWarpSession> session_;
     WarpCanvas* canvas_ = nullptr;
     QComboBox* mode_ = nullptr;
     QComboBox* density_ = nullptr;

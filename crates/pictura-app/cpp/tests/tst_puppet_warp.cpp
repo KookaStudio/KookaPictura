@@ -255,7 +255,7 @@ void PuppetWarpTest::refusedOrIdentityAddsNoHistory()
     auto session = pictura::puppet_warp_begin(*view);
     const double nan = std::numeric_limits<double>::quiet_NaN();
     const double pins[] = {40, 60, 40, 60, nan, 0, 110, 60, 100000, 100000, nan, 1};
-    QCOMPARE(pictura::puppet_warp_configure(*session, rust::Slice<const double>(pins, 12),
+    QCOMPARE(pictura::puppet_warp_configure(*session, ::rust::Slice<const double>(pins, 12),
                                             1, 1, 0), 0);
     QVERIFY(!pictura::puppet_warp_commit(*view, *session));
     QCOMPARE(view->history_count(), history);
@@ -269,7 +269,7 @@ void PuppetWarpTest::staleTargetRefused()
     auto session = pictura::puppet_warp_begin(*view);
     const double nan = std::numeric_limits<double>::quiet_NaN();
     const double pins[] = {40, 60, 40, 60, nan, 0, 110, 60, 125, 75, nan, 1};
-    QCOMPARE(pictura::puppet_warp_configure(*session, rust::Slice<const double>(pins, 12),
+    QCOMPARE(pictura::puppet_warp_configure(*session, ::rust::Slice<const double>(pins, 12),
                                             1, 1, 0), 2);
     QVERIFY(view->select_rect(5, 5, 10, 10, QStringLiteral("new"), 0.0));
     QVERIFY(pictura::edit_fill(*view, qRgba(255, 0, 0, 255), -1,
@@ -297,7 +297,7 @@ void PuppetWarpTest::maskApplyUndo()
     auto session = pictura::puppet_warp_begin(*view);
     const double nan = std::numeric_limits<double>::quiet_NaN();
     const double pins[] = {30, 50, 30, 50, nan, 0, 80, 50, 100, 65, nan, 1};
-    QCOMPARE(pictura::puppet_warp_configure(*session, rust::Slice<const double>(pins, 12),
+    QCOMPARE(pictura::puppet_warp_configure(*session, ::rust::Slice<const double>(pins, 12),
                                             1, 1, 0), 2);
     QVERIFY(pictura::puppet_warp_commit(*view, *session));
     QCOMPARE(view->history_count(), history + 1);
@@ -327,13 +327,13 @@ void PuppetWarpTest::linkedMaskApplyUndo()
     auto session = pictura::puppet_warp_begin(*view);
     QCOMPARE(pictura::puppet_warp_size(*session).size(), size_t(2));
     const double unused = 0;
-    QCOMPARE(pictura::puppet_warp_configure(*session, rust::Slice<const double>(&unused, 0), 1, 1, 0), 1);
+    QCOMPARE(pictura::puppet_warp_configure(*session, ::rust::Slice<const double>(&unused, 0), 1, 1, 0), 1);
     const QImage initialPreview = pictura::puppet_warp_render(*session, 0, 0, 1.0, 160, 120);
     QVERIFY(!initialPreview.isNull());
     QCOMPARE(qAlpha(initialPreview.pixel(5, 25)), 0);
     QVERIFY(qAlpha(initialPreview.pixel(25, 25)) > 0);
     const double pins[] = {30, 50, 30, 50, 0, 0, 80, 50, 100, 65, 0, 1};
-    QCOMPARE(pictura::puppet_warp_configure(*session, rust::Slice<const double>(pins, 12),
+    QCOMPARE(pictura::puppet_warp_configure(*session, ::rust::Slice<const double>(pins, 12),
                                             1, 1, 0), 2);
     QVERIFY(pictura::puppet_warp_commit(*view, *session));
     QCOMPARE(view->history_count(), history + 1);
@@ -372,7 +372,7 @@ void PuppetWarpTest::foldPreviewCommit()
                            20, 100, 20, 100, 0, 2, 130, 100, 130, 100, 0, 3};
     const double reordered[] = {130, 30, 20, 30, 0, 1, 20, 30, 130, 30, 0, 0,
                                 20, 100, 20, 100, 0, 2, 130, 100, 130, 100, 0, 3};
-    QCOMPARE(pictura::puppet_warp_configure(*session, rust::Slice<const double>(pins, 24),
+    QCOMPARE(pictura::puppet_warp_configure(*session, ::rust::Slice<const double>(pins, 24),
                                             1, 1, 0), 2);
     auto bounds = pictura::puppet_warp_bounds(*session);
     QCOMPARE(bounds.size(), size_t(4));
@@ -381,7 +381,7 @@ void PuppetWarpTest::foldPreviewCommit()
     QVERIFY(!first.isNull());
     QCOMPARE(first, pictura::puppet_warp_render(*session, bounds[0], bounds[1], 1.0,
                                                 bounds[2], bounds[3]));
-    QCOMPARE(pictura::puppet_warp_configure(*session, rust::Slice<const double>(reordered, 24),
+    QCOMPARE(pictura::puppet_warp_configure(*session, ::rust::Slice<const double>(reordered, 24),
                                             1, 1, 0), 2);
     bounds = pictura::puppet_warp_bounds(*session);
     const QImage front = pictura::puppet_warp_render(*session, bounds[0], bounds[1], 1.0,
@@ -402,7 +402,7 @@ void PuppetWarpTest::samplingPreviewCommit()
     auto session = pictura::puppet_warp_begin(*view);
     const double nan = std::numeric_limits<double>::quiet_NaN();
     const double pins[] = {30, 30, 30, 30, nan, 0, 110, 80, 121, 87, nan, 1};
-    QCOMPARE(pictura::puppet_warp_configure(*session, rust::Slice<const double>(pins, 12),
+    QCOMPARE(pictura::puppet_warp_configure(*session, ::rust::Slice<const double>(pins, 12),
                                             1, 1, 10), 2);
     const auto bounds = pictura::puppet_warp_bounds(*session);
     QCOMPARE(bounds.size(), size_t(4));
