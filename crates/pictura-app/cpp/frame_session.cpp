@@ -252,6 +252,7 @@ void PicturaMainWindow::applyGpuComputePreference(bool on)
             entry->view->set_gpu_compute(on);
         }
     }
+    applyFlickPanning();
     saveSession();
     commandRegistry()->refresh();
     refresh();
@@ -294,6 +295,7 @@ void PicturaMainWindow::saveSession()
     prefs.openDocumentsAsTabs = openDocumentsAsTabs_;
     prefs.enableFloatingDocumentDocking = floatingDocumentDocking_;
     prefs.zoomResizesWindows = zoomResizesWindows_;
+    prefs.flickPanning = flickPanning_;
     prefs.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;
     prefs.typeShowAsianOptions = typeShowAsianOptions_;
     prefs.typeMiddleEastern = typeMiddleEastern_;

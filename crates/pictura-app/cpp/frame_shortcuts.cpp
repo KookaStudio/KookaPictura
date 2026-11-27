@@ -57,9 +57,15 @@ void PicturaMainWindow::rebuildToolShortcuts()
                 continue;
             }
             auto* shortcut = new QShortcut(sequence, this);
+            if (!shift && key.toUpper() == QLatin1Char('H')) {
+                shortcut->setAutoRepeat(false);
+            }
             connect(shortcut, &QShortcut::activated, this, [this, key, shift]() {
                 // The active Crop tool's own keys (P, H, O) outrank the tool letters.
                 if (tools_ && tools_->handleCropKey(key.toUpper().unicode(), shift)) {
+                    return;
+                }
+                if (!shift && key.toUpper() == QLatin1Char('H') && armBirdsEyeShortcut()) {
                     return;
                 }
                 if (toolbox_) {

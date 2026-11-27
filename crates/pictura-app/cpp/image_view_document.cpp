@@ -23,6 +23,7 @@ constexpr double kMaxZoom = 32.0;
 
 void ImageView::replaceImage(const QImage& image)
 {
+    cancelHandNavigation();
     image_ = image;
     docSize_ = image.size();
     ++frameKey_;
@@ -267,6 +268,7 @@ void ImageView::damageRegion(const QRect& damaged)
 
 void ImageView::setImage(const QImage& image)
 {
+    cancelHandNavigation();
     image_ = image;
     docSize_ = image.size();
     ++frameKey_;
@@ -356,6 +358,7 @@ QRectF ImageView::viewRect() const
 
 void ImageView::setRotation(double degrees)
 {
+    cancelHandNavigation();
     FrameViewportTiming timing(*this);
     double normalised = std::fmod(degrees, 360.0);
     if (normalised <= -180.0) {
@@ -384,6 +387,12 @@ void ImageView::zoomAt(const QPointF& cursor, int angleDelta)
 
 void ImageView::panBy(const QPointF& delta)
 {
+    cancelHandNavigation();
+    applyPanDelta(delta);
+}
+
+void ImageView::applyPanDelta(const QPointF& delta)
+{
     FrameViewportTiming timing(*this);
     timing.changed();
     userAdjusted_ = true;
@@ -396,6 +405,7 @@ void ImageView::panBy(const QPointF& delta)
 
 void ImageView::setOffset(const QPointF& offset)
 {
+    cancelHandNavigation();
     FrameViewportTiming timing(*this);
     timing.changed();
     userAdjusted_ = true;
@@ -418,6 +428,7 @@ void ImageView::zoomOut()
 
 void ImageView::setZoom(double zoom, const QPointF& anchor)
 {
+    cancelHandNavigation();
     FrameViewportTiming timing(*this);
     timing.changed();
     userAdjusted_ = true;
@@ -442,6 +453,7 @@ void ImageView::printSize(double ppi)
 
 void ImageView::fitOnScreen()
 {
+    cancelHandNavigation();
     FrameViewportTiming timing(*this);
     userAdjusted_ = false;
     if (docSize_.isEmpty()) {
@@ -462,6 +474,7 @@ void ImageView::fitOnScreen()
 
 void ImageView::actualPixels()
 {
+    cancelHandNavigation();
     FrameViewportTiming timing(*this);
     timing.changed();
     // 100% is an explicit user choice: keep it when the workspace scrollbars

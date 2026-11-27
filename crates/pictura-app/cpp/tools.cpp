@@ -362,6 +362,7 @@ void ToolController::setActiveTool(ToolId id)
     if (ToolHandler* old = registry_.forTool(active_)) {
         old->onDeactivate(*this);
     }
+    if (canvas_) canvas_->cancelHandNavigation();
     active_ = id;
     PictureView* v = view();
     if (v && v->is_painting()) {
@@ -739,12 +740,12 @@ void ToolController::unbindCanvas()
         return;
     }
     cancelSingleLineMarquee();
+    canvas_->cancelHandNavigation();
     disconnect(canvas_, nullptr, this, nullptr);
     // A floating or tiled canvas stays visible once it is no longer active; it
     // must not keep the blank cursor a brush ring stood in for.
     canvas_->unsetCursor();
-    // Let the active handler release anything tied to this canvas (an
-    // in-progress polygon, the warm Move preview) before it goes away.
+    // Release the outgoing handler’s canvas state before unbinding.
     if (ToolHandler* h = registry_.forTool(active_)) {
         h->onDeactivate(*this);
     }

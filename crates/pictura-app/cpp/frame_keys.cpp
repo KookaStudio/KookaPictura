@@ -45,6 +45,16 @@ QString hintKeyLabel(const QKeyEvent* event)
 
 } // namespace
 
+bool PicturaMainWindow::armBirdsEyeShortcut()
+{
+    ImageView* canvas = imageView();
+    return toolShortcut(ToolId::Hand) == QLatin1Char('H') && canvas
+        && !isTextInput(QApplication::focusWidget())
+        && tools_ && !tools_->dragging()
+        && (!tools_->transformSessionActive() || tools_->transformControlsSession())
+        && canvas->armBirdsEye();
+}
+
 void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
 {
     if (hintBar_) {
@@ -98,6 +108,13 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
     if (dispatchCommandKey(event)) {
         return;
     }
+    if (!event->isAutoRepeat() && event->key() == Qt::Key_H
+        && event->modifiers() == Qt::NoModifier
+        && commandRegistry()->commandForShortcut(QKeySequence(Qt::Key_H)).isEmpty()
+        && armBirdsEyeShortcut()) {
+        event->accept();
+        return;
+    }
     if (!event->isAutoRepeat() && event->key() == Qt::Key_Escape && tools_
         && tools_->handleEscape()) {
         return;
@@ -140,6 +157,11 @@ void PicturaMainWindow::keyReleaseEvent(QKeyEvent* event)
 {
     if (hintBar_) {
         hintBar_->setPressedKey(QString());
+    }
+    if (!event->isAutoRepeat() && event->key() == Qt::Key_H) {
+        if (ImageView* canvas = imageView(); canvas && canvas->releaseBirdsEyeKey() && toolbox_) {
+            toolbox_->handleToolKey(QLatin1Char('H'), false);
+        }
     }
     if (!event->isAutoRepeat() && event->key() == Qt::Key_Space) {
         if (ImageView* canvas = imageView(); canvas && canvas->spacePanForTest()) {

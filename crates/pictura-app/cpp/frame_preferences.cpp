@@ -147,6 +147,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setOpenDocumentsAsTabs(openDocumentsAsTabs_);
         preferencesDialog_->setFloatingDocumentDocking(floatingDocumentDocking_);
         preferencesDialog_->setZoomResizesWindows(zoomResizesWindows_);
+        preferencesDialog_->setFlickPanning(flickPanning_, gpuCompute_ && gpuAvailable_);
         preferencesDialog_->setAutoCollapseIconic(panels_->panelColumn()->autoCollapseIconic());
         preferencesDialog_->setAutoShowHidden(panels_->panelColumn()->autoShowHidden());
         preferencesDialog_->setBrightnessLevel(brightnessLevel_);
@@ -247,6 +248,12 @@ void PicturaMainWindow::showPreferences(const QString& page)
         connect(preferencesDialog_, &PreferencesDialog::zoomResizesWindowsChanged, this,
                 [this](bool on) {
                     zoomResizesWindows_ = on;
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::flickPanningChanged, this,
+                [this](int mode) {
+                    flickPanning_ = mode;
+                    applyFlickPanning();
                     saveSession();
                 });
         connect(preferencesDialog_, &PreferencesDialog::autoCollapseIconicChanged, this,

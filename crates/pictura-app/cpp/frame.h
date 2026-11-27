@@ -648,6 +648,9 @@ private:
     bool openDocumentsAsTabs_ = true;
     bool floatingDocumentDocking_ = true;
     bool zoomResizesWindows_ = false;
+    int flickPanning_ = 0;
+    bool armBirdsEyeShortcut();
+    void applyFlickPanning();
     bool updateChecksEnabled_ = true;
     // Set while a Hand pan is fanned out to the other windows, so the fan-out
     // never echoes.

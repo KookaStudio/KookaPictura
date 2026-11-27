@@ -19,6 +19,8 @@ struct HistoryLogSettings {
     QString path;
 };
 
+enum class FlickPanningMode { Automatic, On, Off };
+
 struct Preferences {
 #define PICTURA_PREF(Type, name) Type name{};
 #include "preference_fields.inc"

@@ -79,6 +79,7 @@ fields! {
     "general" / "imageInterpolation": String = "bicubic".into();
     "general" / "useShiftKeyForToolSwitch": bool = true;
     "general" / "zoomResizesWindows": bool = false;
+    "general" / "flickPanning": i32 = 0;
     "general" / "historyLogEnabled": bool = false;
     "general" / "historyLogDestination": i32 = 0;
     "general" / "historyLogVerbosity": i32 = 0;
@@ -258,6 +259,7 @@ fn normalize(key: &str, value: Json) -> Result<Json, String> {
                 .collect(),
         ),
         "colorPolicy" | "cmykPolicy" | "nativeSaveCompatibility" => Json::from(bounded(0..=2, 0)),
+        "flickPanning" => Json::from(bounded(0..=2, 0)),
         "renderIntent" => Json::from(bounded(0..=3, 1)),
         "pickerChoice" | "rawSettingsStore" => Json::from(bounded(0..=1, 0)),
         "imageInterpolation" => Json::from(

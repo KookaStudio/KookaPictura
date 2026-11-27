@@ -116,6 +116,7 @@ void ImageView::setFreePan(bool enabled)
     if (freePan_ == enabled) {
         return;
     }
+    cancelHandNavigation();
     freePan_ = enabled;
     clampOffset();
     update();
@@ -127,6 +128,7 @@ void ImageView::setSnapToWorkspace(bool enabled)
     if (snapToWorkspace_ == enabled) {
         return;
     }
+    cancelHandNavigation();
     snapToWorkspace_ = enabled;
     clampOffset();
     update();
@@ -148,6 +150,7 @@ void ImageView::setSpacePan(bool on)
     }
     spacePan_ = on;
     if (on) {
+        cancelHandNavigation();
         setPanEnabled(true);
         // Keep the closed hand if a middle-button pan is already in progress.
         setCursor(panning_ ? Qt::ClosedHandCursor : Qt::OpenHandCursor);
@@ -492,14 +495,31 @@ void ImageView::paintEvent(QPaintEvent* event)
     if (docSize_.isEmpty()) {
         return;
     }
+    const auto overview = birdsEye_;
+    const double originalZoom = zoom_;
+    const QPointF originalOffset = offset_;
+    const QPointF originalCropOffset = cropContentOffset_;
+    const auto restoreView = qScopeGuard([&] {
+        if (overview) {
+            zoom_ = originalZoom;
+            offset_ = originalOffset;
+            cropContentOffset_ = originalCropOffset;
+        }
+    });
+    if (overview) {
+        // Pyramid selection, tile crops and clipping all read this transform.
+        zoom_ = overview->fitZoom;
+        offset_ = overview->fitOffset;
+        cropContentOffset_ = {};
+    }
     // Everything below draws in the view frame; Rotate View turns it here.
     const QTransform rotation = viewRotation();
     painter.setTransform(rotation);
 
     // The canvas frame follows the box at every angle (backdrop pads past it).
     const bool straightening =
-        cropStraighten_ != 0.0 && !cropBox_.isNull() && !cropBoxRotates_;
-    const QRectF canvasDoc = cropBox_.isNull()
+        !overview && cropStraighten_ != 0.0 && !cropBox_.isNull() && !cropBoxRotates_;
+    const QRectF canvasDoc = overview || cropBox_.isNull()
                                  ? QRectF(0.0, 0.0, docSize_.width(), docSize_.height())
                                  : cropCanvasImageRect();
 
@@ -703,7 +723,7 @@ void ImageView::paintEvent(QPaintEvent* event)
     }
     painter.restore();
 
-    paintBrushOutline(painter);
+    if (!overview) paintBrushOutline(painter);
 
     painter.save();
     // One device pixel of slack lets a cosmetic stroke centred on the document
@@ -798,13 +818,17 @@ void ImageView::paintEvent(QPaintEvent* event)
     paintPixelGrid(painter);
     paintGuides(painter);
     paintSmartGuides(painter);
-    paintCropGroupOverlays(painter);
+    if (!overview) paintCropGroupOverlays(painter);
     paintAnnotations(painter);
     paintPathOverlay(painter);
     paintTargetPathOverlay(painter);
     paintLayerEdges(painter);
     paintTypeOverlay(painter);
     paintMoveOutline(painter);
+    if (overview) {
+        paintBirdsEye(painter, *overview, originalZoom);
+        return;
+    }
     if (compassVisible_) {
         paintCompass(painter);
     }
@@ -892,13 +916,27 @@ bool ImageView::event(QEvent* event)
 void ImageView::mousePressEvent(QMouseEvent* event)
 {
     const FrameViewportTiming timing(*this);
+    stopFlick();
+    if (event->button() == Qt::LeftButton && !birdsEye_) birdPointerCaptured_ = false;
+    if (beginBirdsEye(*event)) {
+        event->accept();
+        return;
+    }
+    if (birdPointerCaptured_) {
+        event->accept();
+        return;
+    }
     // The workspace snap lock pins a fitting canvas to the centre, so no pan
     // may start; a press that would otherwise pan falls through unhandled.
     const bool panPress =
         event->button() == Qt::MiddleButton
         || (event->button() == Qt::LeftButton
-            && (spacePan_
+            && (spacePan_ || birdKeyHeld_
                 || (panEnabled_ && !event->modifiers().testFlag(Qt::ControlModifier))));
+    if (event->button() == Qt::LeftButton && birdKeyHeld_) {
+        birdHandPan_ = true;
+        birdKeyUsed_ = true;
+    }
     if (panPress && workspaceSnapLocked()) {
         QWidget::mousePressEvent(event);
         return;
@@ -911,10 +949,11 @@ void ImageView::mousePressEvent(QMouseEvent* event)
         setCursor(Qt::ClosedHandCursor);
         update();
     } else if (event->button() == Qt::LeftButton
-               && (spacePan_
+               && (spacePan_ || birdKeyHeld_
                    || (panEnabled_ && !event->modifiers().testFlag(Qt::ControlModifier)))) {
-        // A Ctrl press goes to the controller, which pans if no guide is hit.
+        // A Ctrl press goes to the controller unless the held H owns the drag.
         beginPan(event->position());
+        beginFlickSample(*event);
         if (spacePan_) {
             setCursor(Qt::ClosedHandCursor);
         }
@@ -967,13 +1006,23 @@ void ImageView::mouseMoveEvent(QMouseEvent* event)
 {
     const FrameViewportTiming timing(*this);
     const Qt::MouseButtons buttons = event->buttons();
+    if (birdPointerCaptured_) {
+        if (buttons & Qt::LeftButton) {
+            moveBirdsEye(event->position());
+            event->accept();
+            return;
+        }
+        birdPointerCaptured_ = false;
+        cancelHandNavigation();
+    }
     if (panning_ && (buttons & (Qt::MiddleButton | Qt::LeftButton))) {
         // A screen-space drag moves the turned canvas along with the pointer.
         const QTransform unturn = QTransform().rotate(-rotation_);
         const QPointF delta = unturn.map(event->position() - last_);
-        panBy(delta);
+        sampleFlick(*event);
+        applyPanDelta(delta);
         last_ = event->position();
-        if ((buttons & Qt::LeftButton) && (spacePan_ || panEnabled_)) {
+        if ((buttons & Qt::LeftButton) && (spacePan_ || panEnabled_ || birdHandPan_)) {
             emit handPanned(delta, event->modifiers());
         }
     } else if (!(spacePan_ && buttons == Qt::NoButton)) {
@@ -993,19 +1042,25 @@ void ImageView::mouseMoveEvent(QMouseEvent* event)
     QWidget::mouseMoveEvent(event);
 }
 
-void ImageView::contextMenuEvent(QContextMenuEvent* event)
-{
-    // The frame decides which tool menu (if any) applies at this point.
-    emit contextMenuRequested(event->globalPos());
-    event->accept();
-}
-
 void ImageView::mouseReleaseEvent(QMouseEvent* event)
 {
     const FrameViewportTiming timing(*this);
+    if (releaseBirdsEyePointer(*event)) {
+        event->accept();
+        return;
+    }
+    if (birdPointerCaptured_) {
+        event->accept();
+        return;
+    }
+    const bool birdHandRelease = birdHandPan_ && event->button() == Qt::LeftButton;
+    if (birdHandRelease) birdHandPan_ = false;
     if (event->button() == Qt::MiddleButton || event->button() == Qt::LeftButton) {
         const bool wasPanning = panning_;
         panning_ = false;
+        if (wasPanning && event->button() == Qt::LeftButton) {
+            startFlick(*event);
+        }
         if (wasPanning && spacePan_ && event->button() == Qt::LeftButton) {
             setCursor(Qt::OpenHandCursor);
         }
@@ -1018,6 +1073,7 @@ void ImageView::mouseReleaseEvent(QMouseEvent* event)
             unsetCursor();
         }
     }
+    if (birdHandRelease) return event->accept();
     nonLeftReleaseWhileLeftHeld_ = event->button() != Qt::LeftButton
         && event->buttons().testFlag(Qt::LeftButton);
     emit mouseReleased(widgetToImage(event->position()));
@@ -1027,6 +1083,7 @@ void ImageView::mouseReleaseEvent(QMouseEvent* event)
 
 void ImageView::resizeEvent(QResizeEvent* event)
 {
+    cancelHandNavigation();
     // A fresh document set before layout runs its automatic fit against a
     // stale viewport, so while the settle is pending every resize re-fits;
     // the show pass ends it. A load/fit also leaves userAdjusted_ false until
@@ -1073,6 +1130,11 @@ void ImageView::showEvent(QShowEvent* event)
 
 void ImageView::keyPressEvent(QKeyEvent* event)
 {
+    if (event->key() == Qt::Key_Escape && birdsEye_) {
+        cancelHandNavigation();
+        event->accept();
+        return;
+    }
     // A modifier's own press may not carry its flag yet (platform-dependent).
     if (const int flag = modifierFlag(event->key())) {
         emit modifierKeyChanged(int(event->modifiers()) | flag);
@@ -1103,6 +1165,7 @@ void ImageView::keyReleaseEvent(QKeyEvent* event)
 
 void ImageView::hideEvent(QHideEvent* event)
 {
+    cancelHandNavigation();
     QWidget::hideEvent(event);
     updateAntsTimer();
 }

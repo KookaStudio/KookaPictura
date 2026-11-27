@@ -64,6 +64,7 @@ set(PICTURA_QT_TEST_DRIVER_document
     tst_image_ops
     tst_image_rotate
     tst_canvas_pan
+    tst_hand_navigation
     tst_initial_view
     tst_new_document
     tst_image_mode
