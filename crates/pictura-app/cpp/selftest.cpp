@@ -67,7 +67,7 @@
 
 int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 pictura::PicturaMainWindow& frame, pictura::PictureView* view,
-                const QImage& image, bool codecLoaded, int gpu)
+                QImage image, bool documentMode, int gpu)
 { pictura::selftest::SelfTestRun run(frame);
         ST_BEGIN("platform_headless");
         if (headless && qApp->platformName() != QStringLiteral("offscreen")) {
@@ -75,14 +75,6 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                     qPrintable(qApp->platformName()));
         }
         ST_PASS("offscreen");
-
-        std::fprintf(stderr,
-                     "pictura self-test: image=%dx%d codec_loaded=%d gpu=%d\n",
-                     image.width(),
-                     image.height(),
-                     codecLoaded ? 1 : 0,
-                     gpu);
-        std::fflush(stderr);
         ST_BEGIN("null_image");
         if (!view || image.isNull()) {
             ST_FAIL(pictura::selftest_codes::kCode002, "null image");
@@ -93,7 +85,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_FAIL(pictura::selftest_codes::kCode004, "GPU render was blank");
         }
         ST_PASS("gpu=%d", gpu);
-        if (!codecLoaded) {
+        if (!documentMode) {
             // E1: the scratch document is plain white and its first present must
             // be pure white across every pixel. The GPU smoke probe above must
             // not leak its gradient into the document's display image.
@@ -112,7 +104,15 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 ST_FAIL(pictura::selftest_codes::kCode005, "fresh document not white");
             }
         }
-        if (codecLoaded) {
+        if (!documentMode && !psdPath.isEmpty()) {
+            const int scratchDocument = frame.activeDocumentIndex();
+            documentMode = frame.openPath(psdPath);
+            if (documentMode && scratchDocument >= 0) frame.closeDocument(scratchDocument, false);
+            view = frame.activeView(); image = view ? view->image() : QImage();
+        }
+        std::fprintf(stderr, "pictura self-test: image=%dx%d codec_loaded=%d gpu=%d\n", image.width(), image.height(), documentMode ? 1 : 0, gpu);
+        std::fflush(stderr);
+        if (documentMode) {
             // two_layers.psd is an 8x8 layer stack: a red top-left quadrant and
             // a blue bottom-right quadrant; the other quadrants are uncovered.
             QSet<QRgb> seen;

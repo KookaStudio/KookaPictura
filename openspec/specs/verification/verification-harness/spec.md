@@ -71,7 +71,8 @@ can become a test that nothing runs. `scripts/verify-fast.sh` SHALL run the
 same nextest invocation, so the local fast gate and CI agree on the runner. The nextest run SHALL emit a JUnit XML artifact through
 the repository's `.config/nextest.toml`, and CI SHALL upload that artifact. CI
 SHALL build the Qt application under a pinned Qt 6 in a headless job and SHALL
-run its `--headless --self-test` mode there. That job SHALL run the Qt Test layer
+run its `--headless --self-test` mode there with the `two_layers.psd` fixture,
+once. That job SHALL run the Qt Test layer
 through CTest with a parallel level equal to the runner's CPU count, overridable
 through `CTEST_PARALLEL_LEVEL`, SHALL configure the C++ build with precompiled
 headers disabled, so a source that compiles only through a precompiled header
@@ -115,12 +116,12 @@ CI job SHALL set a `timeout-minutes` bound.
 #### Scenario: The JUnit artifact is uploaded
 
 - **WHEN** the workflow test step completes
-- **THEN** `target/nextest/default/junit.xml` has been written and is uploaded as an artifact
+- **THEN** `target/nextest/default/junit.xml` has been written and is uploaded as a workflow artifact
 
 #### Scenario: The Qt app self-tests headlessly
 
 - **WHEN** the workflow builds the Qt application with the pinned Qt 6 toolchain
-- **THEN** it runs `--headless --self-test` with and without a document fixture and fails the job on a non-zero exit
+- **THEN** it runs `--headless --self-test` once with `two_layers.psd` and fails the job on a non-zero exit
 
 #### Scenario: External oracles are exercised
 
@@ -140,7 +141,7 @@ CI job SHALL set a `timeout-minutes` bound.
 #### Scenario: A runaway job is bounded
 
 - **WHEN** a CI job exceeds its configured `timeout-minutes`
-- **THEN** the run is cancelled rather than consuming minutes indefinitely
+- **THEN** the run is cancelled rather than consuming more minutes
 
 #### Scenario: CI runs Qt Test suites concurrently [vh_ci_ctest_parallel]
 
@@ -149,8 +150,8 @@ CI job SHALL set a `timeout-minutes` bound.
 
 #### Scenario: CI builds without precompiled headers [vh_ci_no_pch]
 
-- **WHEN** the CI headless job configures and builds the C++
-- **THEN** precompiled headers are disabled in its configure and every source compiles without one
+- **WHEN** the CI headless job configures and builds the C++ project
+- **THEN** precompiled headers are disabled at configure time and every source compiles without one
 
 #### Scenario: CI exercises the configured linker [vh_ci_mold]
 
@@ -919,4 +920,4 @@ Build, Self-test, CTest, or Qt report steps that duplicate the shared executor.
 #### Scenario: CI keeps only one Qt orchestration step [qe_ci_orchestration]
 
 - **WHEN** the workflow is inspected
-- **THEN** one step invokes the shared Qt executor and no other step directly invokes the two self-test modes, CTest, or the Qt reporter
+- **THEN** one step invokes the shared Qt executor and no other step directly invokes the self-test, CTest, or the Qt reporter
