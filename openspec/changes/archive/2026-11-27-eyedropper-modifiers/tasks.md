@@ -17,4 +17,4 @@
 ## 4. Integration
 
 - [x] 4.1 Review and update ROADMAP.md and PARITY.md for the delivered coverage.
-- [ ] 4.2 Run the eleven planned Qt Test cases and appropriate project gates; execution, build, formatting and validation were not run by request.
+- [x] 4.2 Run the planned Qt Test cases and appropriate project gates in Arch x86-64 Docker.
