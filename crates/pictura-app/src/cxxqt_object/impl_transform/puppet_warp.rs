@@ -14,49 +14,6 @@ use pictura_core::{
 };
 use pictura_ops::puppet_warp::{Mesh, Pin as MeshPin, MAX_PIXELS};
 
-#[cxx_qt::bridge]
-pub mod ffi {
-    unsafe extern "C++" {
-        include!("cxx-qt-lib/qimage.h");
-        type QImage = cxx_qt_lib::QImage;
-
-        include!("pictura_app/src/cxxqt_object.cxxqt.h");
-        #[namespace = "pictura"]
-        type PictureView = super::PictureView;
-    }
-
-    #[namespace = "pictura"]
-    extern "Rust" {
-        type PuppetWarpSession;
-
-        fn puppet_warp_pin_angle(session: &PuppetWarpSession, ordinal: u32) -> f64;
-
-        fn puppet_warp_available(view: &PictureView) -> bool;
-        fn puppet_warp_begin(view: Pin<&mut PictureView>) -> Box<PuppetWarpSession>;
-        fn puppet_warp_size(session: &PuppetWarpSession) -> Vec<i32>;
-        // Pins are back to front: rest xy, target xy, angle (NaN for Auto), ordinal.
-        fn puppet_warp_configure(
-            session: &mut PuppetWarpSession,
-            pins: &[f64],
-            mode: i32,
-            density: i32,
-            expansion: i32,
-        ) -> i32;
-        fn puppet_warp_bounds(session: &PuppetWarpSession) -> Vec<i32>;
-        fn puppet_warp_triangles(session: &PuppetWarpSession) -> Vec<f64>;
-        fn puppet_warp_hit(session: &PuppetWarpSession, x: f64, y: f64) -> Vec<f64>;
-        fn puppet_warp_render(
-            session: &PuppetWarpSession,
-            x: f64,
-            y: f64,
-            scale: f64,
-            w: i32,
-            h: i32,
-        ) -> QImage;
-        fn puppet_warp_commit(view: Pin<&mut PictureView>, session: &PuppetWarpSession) -> bool;
-    }
-}
-
 const PREVIEW_PIXELS: u64 = 1024 * 1024;
 const PIN_FIELDS: usize = 6;
 
