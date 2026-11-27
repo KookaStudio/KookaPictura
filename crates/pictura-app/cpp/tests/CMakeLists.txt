@@ -194,6 +194,7 @@ set(PICTURA_QT_TEST_DRIVER_layers
     tst_layers_row_menu
     tst_layers_row_model
     tst_layers_preview_coalescing
+    tst_layer_zero_shortcuts
     tst_layer_content
     tst_layers_snapshot
     tst_canvas_backdrop

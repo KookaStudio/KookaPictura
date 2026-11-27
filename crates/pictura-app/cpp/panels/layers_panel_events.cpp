@@ -37,6 +37,8 @@
 #include <QtGui/QFont>
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
+#include <QtGui/QKeyEvent>
+#include <QtGui/private/qkeymapper_p.h>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPalette>
@@ -70,6 +72,85 @@
 
 namespace pictura {
 
+namespace {
+
+bool isZeroKey(const QKeyEvent* event, bool shifted)
+{
+    if (event->key() == Qt::Key_0) {
+        return true;
+    }
+    // The shifted character depends on the keyboard layout. Use the same
+    // native key candidates Qt uses to match shortcuts.
+    return shifted && QKeyMapper::possibleKeys(event).contains(Qt::ShiftModifier | Qt::Key_0);
+}
+
+} // namespace
+
+bool LayersPanel::filterZeroOpacityShortcut(QWidget* source, QEvent* event)
+{
+    const auto type = event->type();
+    if (type == QEvent::FocusOut || type == QEvent::MouseButtonPress
+        || type == QEvent::MouseButtonDblClick) {
+        clearZeroOpacityShortcut();
+        return false;
+    }
+    if (type != QEvent::KeyPress && type != QEvent::ShortcutOverride) {
+        return false;
+    }
+    auto* key = static_cast<QKeyEvent*>(event);
+    if (key->key() == Qt::Key_Shift) {
+        return false;
+    }
+    const auto modifiers = key->modifiers() & ~Qt::KeypadModifier;
+    const bool fill = modifiers == Qt::ShiftModifier;
+    if ((modifiers != Qt::NoModifier && !fill) || !isZeroKey(key, fill)) {
+        clearZeroOpacityShortcut();
+        return false;
+    }
+    // Leave Qt's registered shortcuts ahead of the gesture.
+    if (type == QEvent::ShortcutOverride) {
+        return false;
+    }
+    if (!view_ || !source->hasFocus() || transformPending_ || gesture_.valid
+        || !(fill ? fill_ : opacity_)->isEnabled()) {
+        clearZeroOpacityShortcut();
+        return false;
+    }
+    const QStringList paths = propertyPaths();
+    if (paths.isEmpty()) {
+        clearZeroOpacityShortcut();
+        return false;
+    }
+    key->accept();
+    if (key->isAutoRepeat()) {
+        return true;
+    }
+
+    const quint64 generation = view_->document_generation();
+    if (zeroShortcut_.elapsed.isValid() && !zeroShortcut_.elapsed.hasExpired(500)
+        && zeroShortcut_.source == source && zeroShortcut_.generation == generation
+        && zeroShortcut_.paths == paths && zeroShortcut_.fill == fill) {
+        clearZeroOpacityShortcut();
+        if (fill) {
+            view_->set_layers_fill(paths, 0);
+        } else {
+            view_->set_layers_opacity(paths, 0);
+        }
+    } else {
+        zeroShortcut_.source = source;
+        zeroShortcut_.generation = generation;
+        zeroShortcut_.paths = paths;
+        zeroShortcut_.fill = fill;
+        zeroShortcut_.elapsed.start();
+    }
+    return true;
+}
+
+void LayersPanel::clearZeroOpacityShortcut()
+{
+    zeroShortcut_.elapsed.invalidate();
+}
+
 bool LayersPanel::rowControlAt(const QModelIndex& index, const QPoint& pos) const
 {
     if (!delegate_ || !tree_ || !index.isValid()) {
@@ -92,6 +173,12 @@ bool LayersPanel::rowControlAt(const QModelIndex& index, const QPoint& pos) cons
 
 bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
 {
+    if (watched == tree_ && filterZeroOpacityShortcut(tree_, event)) {
+        return true;
+    }
+    if (watched == tree_->viewport() && event->type() == QEvent::MouseButtonPress) {
+        clearZeroOpacityShortcut();
+    }
     if (auto* button = qobject_cast<QToolButton*>(watched)) {
         const QString dropAction = button->property("layerDropAction").toString();
         if (!dropAction.isEmpty()) {

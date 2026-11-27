@@ -36,6 +36,7 @@ void LayersPanel::setTransformPending(bool pending)
         return;
     }
     transformPending_ = pending;
+    clearZeroOpacityShortcut();
     // The layer list stays selectable; the editing controls follow the flag.
     syncControls();
     syncStripButtons();
@@ -177,9 +178,16 @@ void LayersPanel::rememberTarget()
         rememberedGeneration_ = 0;
         return;
     }
-    rememberedTarget_ = selected_layer_paths(*view_);
-    rememberedAnchor_ = layer_selection_anchor(*view_);
-    rememberedGeneration_ = view_->document_generation();
+    const QStringList targets = selected_layer_paths(*view_);
+    const QString anchor = layer_selection_anchor(*view_);
+    const quint64 generation = view_->document_generation();
+    if (targets != rememberedTarget_ || anchor != rememberedAnchor_
+        || generation != rememberedGeneration_) {
+        clearZeroOpacityShortcut();
+    }
+    rememberedTarget_ = targets;
+    rememberedAnchor_ = anchor;
+    rememberedGeneration_ = generation;
 }
 
 void LayersPanel::projectTarget(const QString& selectedPath, bool wasEditing)

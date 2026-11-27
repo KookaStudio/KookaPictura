@@ -1,9 +1,11 @@
 #pragma once
 
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QObject>
 #include <QtCore/QPoint>
+#include <QtCore/QPointer>
 #include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
@@ -64,6 +66,8 @@ public:
     void setChannelsPanel(ChannelsPanel* channels);
     void updateSelectiveColorAvailability();
     void refresh();
+    bool filterZeroOpacityShortcut(QWidget* source, QEvent* event);
+    void clearZeroOpacityShortcut();
 
     /// While a transform is pending the layer list stays selectable but the
     /// panel's editing controls are disabled. A change of the active layer
@@ -573,6 +577,14 @@ private:
     void pruneThumbSelection();
     // Synthesize a left-click with `mods` on `path`'s mask thumbnail.
     bool clickMaskThumbWithModifiersForTest(const QString& path, Qt::KeyboardModifiers mods);
+
+    struct ZeroOpacityShortcut {
+        QElapsedTimer elapsed;
+        QPointer<QWidget> source;
+        QStringList paths;
+        quint64 generation = 0;
+        bool fill = false;
+    } zeroShortcut_;
 
     PictureView* view_ = nullptr;
     // The app's shared foreground/background colours; null when the panel was
