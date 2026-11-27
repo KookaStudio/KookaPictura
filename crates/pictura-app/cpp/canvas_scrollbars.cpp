@@ -5,6 +5,7 @@
 #include "image_view.h"
 
 #include <QtCore/QSignalBlocker>
+#include <QtGui/QMouseEvent>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QScrollBar>
 
@@ -24,6 +25,7 @@ CanvasScrollBars::CanvasScrollBars(QWidget* parent)
     hruler_ = new CanvasRuler(Qt::Horizontal, this);
     vruler_ = new CanvasRuler(Qt::Vertical, this);
     rulerCorner_ = new QWidget(this);
+    rulerCorner_->installEventFilter(this);
     rulerCorner_->setObjectName(QStringLiteral("canvasRulerCorner"));
     rulerCorner_->setAttribute(Qt::WA_StyledBackground, true);
     grid_->addWidget(rulerCorner_, 0, 0);
@@ -70,6 +72,27 @@ CanvasScrollBars::CanvasScrollBars(QWidget* parent)
             kCanvasRevealMarginPx, view_->snapToWorkspace());
         view_->setOffset(QPointF(view_->offset().x(), range.maxY - value));
     });
+}
+
+bool CanvasScrollBars::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched != rulerCorner_ || !view_) return QWidget::eventFilter(watched, event);
+    if (event->type() == QEvent::MouseButtonPress) {
+        auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::LeftButton) {
+            originDragging_ = true;
+            return true;
+        }
+    } else if (event->type() == QEvent::MouseButtonRelease && originDragging_) {
+        originDragging_ = false;
+        auto* mouse = static_cast<QMouseEvent*>(event);
+        const QPointF local = view_->mapFromGlobal(mouse->globalPosition());
+        if (view_->rect().contains(local.toPoint())) view_->setRulerOrigin(view_->widgetToImage(local));
+        return true;
+    } else if (event->type() == QEvent::MouseMove && originDragging_) {
+        return true;
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void CanvasScrollBars::setView(ImageView* view)

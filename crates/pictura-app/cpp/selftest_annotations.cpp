@@ -103,7 +103,7 @@ int pictura::runAnnotationChecks(pictura::PicturaMainWindow& frame)
         && std::abs(m[4] + 53.1301) < 1e-3 && m[5] == 5.0 && canvas->hasRulerLineForTest()
         && view->history_index() == base && readout
         && readout->text().contains(QStringLiteral("A: -53.1°"))
-        && readout->text().contains(QStringLiteral("D1: 5.0"));
+        && readout->text().contains(QStringLiteral("D1: ") + canvas->rulerLength(5.0, true));
     drag(QPointF(3, 4), QPointF(6, 8));
     const ::rust::Vec<double> e = pictura::ruler_measurement(*view);
     const bool edited = e.size() == 6 && e[0] == 0.0 && e[5] == 10.0;

@@ -173,7 +173,7 @@ Source list: CS6 toolbox tools (73 catalogue entries) plus named brush-engine, b
 | P-TOOL-12 | Slice Select | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Slice style and modifiers, Divide/Combine/Duplicate, and the Slice Options dialog remain | TOOL-19 |
 | P-TOOL-13 | Eyedropper | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Modifiers and Shift-click sampler remain | TOOL-12 |
 | P-TOOL-14 | Color Sampler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Modifiers and Shift-click sampler remain | TOOL-12 |
-| P-TOOL-15 | Ruler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Arbitrary rotation prefills from the ruler. Protractor and direct Straighten remain | TOOL-11 |
+| P-TOOL-15 | Ruler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Protractor, Straighten and unsnapped origin drag are available; origin snapping remains (#305) | TOOL-11 |
 | P-TOOL-16 | Note | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-17 | Count (Extended) | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-18 | Spot Healing Brush | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Healing Mode, Source, Sample All Layers, and depth/mode handling remain | TOOL-14 |

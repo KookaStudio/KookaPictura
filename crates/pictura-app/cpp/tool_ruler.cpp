@@ -33,7 +33,6 @@ double distanceToSegment(const QLineF& line, const QPointF& p)
 // Ruler: drag to draw the measuring line (Shift snaps to 45°), drag an end to
 // adjust it or the line to move it; Clear removes it. The line is view state,
 // shown only while the tool is active, and never recorded in history.
-// ponytail: no protractor (Alt-drag) or Straighten yet.
 // Ported from photorust's CanvasView::annotationPress / annotationDrag.
 class RulerToolHandler : public ToolHandler {
 public:
@@ -54,7 +53,7 @@ public:
 
     void onDocumentRefreshed(ToolServices& ctx) override { show(ctx); }
 
-    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         ctx_ = &ctx;
@@ -66,13 +65,27 @@ public:
         const double reach = 8.0 / qMax(zoom, 1e-6);
         press_ = imagePos;
         fresh_ = false;
+        moved_ = false;
+        armStart_.reset();
         if (const auto line = rulerOf(v)) {
             start_ = *line;
+            const auto arm = ruler_protractor(*v);
+            if (arm.size() == 4) {
+                const QPointF vertex(arm[0], arm[1]);
+                savedArmAtStart_ = QLineF(vertex, start_.p1()).length() < QLineF(vertex, start_.p2()).length();
+                armStart_ = QPointF(arm[2], arm[3]) - vertex;
+            }
             // The nearer end wins, so both ends of a short line stay grabbable.
             const double toA = QLineF(imagePos, start_.p1()).length();
             const double toB = QLineF(imagePos, start_.p2()).length();
             if (qMin(toA, toB) <= reach) {
-                grab_ = toA < toB ? Grab::A : Grab::B;
+                if (mods.testFlag(Qt::AltModifier)) {
+                    armAtStart_ = toA < toB;
+                    armConstrain_ = mods.testFlag(Qt::ShiftModifier);
+                    grab_ = Grab::Arm;
+                } else {
+                    grab_ = toA < toB ? Grab::A : Grab::B;
+                }
             } else if (distanceToSegment(start_, imagePos) <= reach) {
                 grab_ = Grab::Line;
             }
@@ -87,14 +100,36 @@ public:
         return true;
     }
 
+    bool onDoubleClick(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    {
+        const auto line = rulerOf(ctx.view());
+        const double reach = 8.0 / qMax(ctx.canvas() ? ctx.canvas()->zoom() : 1.0, 1e-6);
+        if (!line || distanceToSegment(*line, imagePos) > reach) return false;
+        start_ = *line;
+        armAtStart_ = QLineF(imagePos, start_.p1()).length() < QLineF(imagePos, start_.p2()).length();
+        grab_ = Grab::Arm;
+        armConstrain_ = mods.testFlag(Qt::ShiftModifier);
+        ctx_ = &ctx;
+        return true;
+    }
+
+    void onModifiers(ToolServices&, Qt::KeyboardModifiers mods) override
+    {
+        if (grab_ == Grab::Arm) armConstrain_ = mods.testFlag(Qt::ShiftModifier);
+    }
+
     void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (grab_ == Grab::None || !v) {
             return;
         }
-        const bool shift = mods.testFlag(Qt::ShiftModifier);
-        if (grab_ == Grab::Line) {
+        if (!fresh_ && grab_ != Grab::Arm && !moved_ && imagePos == press_) return;
+        moved_ = moved_ || imagePos != press_;
+        const bool shift = mods.testFlag(Qt::ShiftModifier) || (grab_ == Grab::Arm && armConstrain_);
+        if (grab_ == Grab::Arm) {
+            set_ruler_protractor(*v, armAtStart_, imagePos.x(), imagePos.y(), shift);
+        } else if (grab_ == Grab::Line) {
             const QLineF moved = start_.translated(imagePos - press_);
             set_ruler(*v, moved.x1(), moved.y1(), moved.x2(), moved.y2(), false);
         } else if (grab_ == Grab::B) {
@@ -106,6 +141,13 @@ public:
             const QLineF snapped = rulerOf(v).value_or(start_);
             set_ruler(*v, snapped.x2(), snapped.y2(), snapped.x1(), snapped.y1(), false);
         }
+        if (grab_ != Grab::Arm && !fresh_ && armStart_) {
+            if (const auto line = rulerOf(v)) {
+                const QPointF vertex = savedArmAtStart_ ? line->p1() : line->p2();
+                const QPointF end = vertex + *armStart_;
+                set_ruler_protractor(*v, savedArmAtStart_, end.x(), end.y(), false);
+            }
+        }
         show(ctx);
     }
 
@@ -114,7 +156,9 @@ public:
         if (grab_ == Grab::None) {
             return;
         }
-        onMove(ctx, imagePos, mods);
+        if (fresh_ || grab_ == Grab::Arm || moved_ || imagePos != press_) {
+            onMove(ctx, imagePos, mods);
+        }
         PictureView* v = ctx.view();
         const auto line = rulerOf(v);
         // A click without a drag measures nothing; leave no zero-length line.
@@ -137,13 +181,15 @@ public:
     }
 
 private:
-    enum class Grab { None, A, B, Line };
+    enum class Grab { None, A, B, Line, Arm };
 
     static void show(ToolServices& ctx)
     {
         if (ImageView* canvas = ctx.canvas()) {
             if (const auto line = rulerOf(ctx.view())) {
                 canvas->setRulerLine(*line);
+                const auto arm = ruler_protractor(*ctx.view());
+                if (arm.size() == 4) canvas->setRulerProtractor(QLineF(arm[0], arm[1], arm[2], arm[3]));
             } else {
                 canvas->clearRulerLine();
             }
@@ -153,6 +199,11 @@ private:
 
     Grab grab_ = Grab::None;
     bool fresh_ = false;
+    bool moved_ = false;
+    bool armAtStart_ = false;
+    bool armConstrain_ = false;
+    bool savedArmAtStart_ = false;
+    std::optional<QPointF> armStart_;
     QLineF start_;
     QPointF press_;
     ToolServices* ctx_ = nullptr;

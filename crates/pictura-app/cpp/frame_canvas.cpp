@@ -112,8 +112,14 @@ void PicturaMainWindow::wireCanvas(DocWindow& window)
 {
     connect(window.canvas, &ImageView::zoomChanged, this,
             &PicturaMainWindow::onCanvasZoomChanged);
-    connect(window.canvas, &ImageView::mouseMoved, this, [this](const QPointF& p) {
+    connect(window.canvas, &ImageView::rulerOriginChanged, this, [this, canvas = window.canvas]() {
+        if (imageView() != canvas) return;
+        if (panels_->infoPanel()) panels_->infoPanel()->setRulerCoordinates(canvas->rulerOrigin(), canvas->rulerUnit());
+        if (tools_) tools_->notifyRulerChanged();
+    });
+    connect(window.canvas, &ImageView::mouseMoved, this, [this, canvas = window.canvas](const QPointF& p) {
         if (panels_->infoPanel()) {
+            panels_->infoPanel()->setRulerCoordinates(canvas->rulerOrigin(), canvas->rulerUnit());
             panels_->infoPanel()->setCursorPosition(p);
         }
     });

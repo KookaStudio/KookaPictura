@@ -368,6 +368,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         commandRegistry()->dispatch(
             QString::fromLatin1(command_ids::TypeWarpText));
     });
+    connect(optionsBar_, &OptionsBar::rulerStraightenRequested, this, [this]() {
+        if (menu_) menu_->straightenRuler();
+    });
     panels_->brushPanel()->setController(tools_);
     panels_->cloneSourcePanel()->setController(tools_);
     panels_->glyphsPanel()->setController(tools_);
@@ -379,6 +382,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     // from the ruler, and a new measuring line re-reads them.
     connect(tools_, &ToolController::rulerChanged, this, [this]() {
         if (panels_->infoPanel()) {
+            if (imageView()) panels_->infoPanel()->setRulerCoordinates(imageView()->rulerOrigin(), imageView()->rulerUnit());
             panels_->infoPanel()->refresh();
         }
     });

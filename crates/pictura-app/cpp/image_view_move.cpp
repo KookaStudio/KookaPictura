@@ -63,10 +63,27 @@ void ImageView::endMovePreview()
     update();
 }
 
+void ImageView::setRulerOrigin(const QPointF& point)
+{
+    if (rulerOrigin_ == point) return;
+    rulerOrigin_ = point;
+    emit rulerOriginChanged();
+    emit viewChanged();
+    update();
+}
+
+QString ImageView::rulerLength(double pixels, bool horizontal) const
+{
+    const double ppi = measurePpi_ ? measurePpi_() : 72.0;
+    return formatRulerLength(pixels, RulerUnit(measureUnit_), ppi, measureTraditional_,
+                             horizontal ? docSize_.width() : docSize_.height());
+}
+
 void ImageView::setMeasureUnit(RulerUnit unit, bool traditionalPoints)
 {
     measureUnit_ = int(unit);
     measureTraditional_ = traditionalPoints;
+    emit rulerOriginChanged();
 }
 
 void ImageView::setPpiProvider(std::function<double()> ppi)

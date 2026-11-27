@@ -12,6 +12,7 @@
 #include "selftest_paint_fixture.h"
 #include "session.h"
 #include "preferences.h"
+#include "panels/info_panel.h"
 
 #include "api/document_bridge.h"
 #include "api/paint_bridge.h"
@@ -101,6 +102,9 @@ class RulersGuidesTest : public QObject {
 
 private slots:
     void initTestCase();
+    void originDrag();
+    void originUnsnapped();
+    void originViews();
     void rulerScale();
     void rulersToggle();
     void togglesDuringLoadingDoNotCrash();
@@ -126,6 +130,76 @@ void RulersGuidesTest::initTestCase()
     QVERIFY(window_ != nullptr);
     window_->show();
     QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+}
+
+void RulersGuidesTest::originDrag()
+{
+    Fixture f(*window_, seedImage(), QStringLiteral("ruler_origin_drag"));
+    QVERIFY(f.ok());
+    auto* host = hostOf(f);
+    QVERIFY(host);
+    host->setRulersVisible(true);
+    host->setRulerUnit(pictura::RulerUnit::Pixels, false);
+    const int history = f.view->history_count();
+    auto* info = window_->findChild<pictura::InfoPanel*>();
+    QVERIFY(info);
+    info->setCursorPosition({30, 25});
+    QVERIFY(info->positionTextForTest().contains(QStringLiteral("30")));
+    auto* corner = host->findChild<QWidget*>(QStringLiteral("canvasRulerCorner"));
+    QVERIFY(corner);
+    const QPoint end = f.canvas->mapToGlobal(f.canvas->imageToWidget({20, 15})).toPoint();
+    dragFromRuler(corner, corner->rect().center(), end);
+    QVERIFY(QLineF(f.canvas->rulerOrigin(), QPointF(20, 15)).length() < 1.0);
+    window_->setActiveTool(pictura::ToolId::Ruler);
+    pictura::set_ruler(*f.view, 30, 25, 40, 25, false);
+    emit f.tools->rulerChanged();
+    auto* readout = window_->findChild<QLabel*>(QStringLiteral("optionsRulerReadout"));
+    QVERIFY(readout);
+    QVERIFY(readout->text().contains(QStringLiteral("X: 10")));
+    info->setCursorPosition({30, 25});
+    QVERIFY(info->positionTextForTest().contains(QStringLiteral("10")));
+    const QPointF origin = f.canvas->rulerOrigin();
+    f.canvas->setZoom(f.canvas->zoom() * 1.5, f.canvas->rect().center());
+    f.canvas->setOffset(f.canvas->offset() + QPointF(5, 7));
+    QCOMPARE(f.canvas->rulerOrigin(), origin);
+    host->setRulerUnit(pictura::RulerUnit::Inches, false);
+    info->setCursorPosition({30, 25});
+    QVERIFY(info->positionTextForTest().contains(QStringLiteral("0.14")));
+    info->setMeasurementUnitForTest(0, QStringLiteral("Centimeters"));
+    info->setRulerCoordinates(f.canvas->rulerOrigin(), f.canvas->rulerUnit());
+    info->setCursorPosition({30, 25});
+    QVERIFY(info->positionTextForTest().contains(QStringLiteral("0.35")));
+    QCOMPARE(f.view->history_count(), history);
+}
+
+void RulersGuidesTest::originUnsnapped()
+{
+    Fixture f(*window_, seedImage(), QStringLiteral("ruler_origin_unsnapped"));
+    QVERIFY(f.ok());
+    auto* host = hostOf(f);
+    QVERIFY(host);
+    host->setRulersVisible(true);
+    auto* corner = host->findChild<QWidget*>(QStringLiteral("canvasRulerCorner"));
+    QVERIFY(corner);
+    f.canvas->setGuides({{true, 24.0}, {false, 18.0}});
+    f.canvas->setGuidesVisible(true);
+    f.canvas->setGrid(true, Qt::gray, 0, 24, 18, 1);
+    f.canvas->setSliceOverlay({{QRectF(24, 18, 20, 20), 1, true, false}});
+    f.canvas->setSlicesVisible(true);
+    const QPoint end = f.canvas->mapToGlobal(f.canvas->imageToWidget({23, 17})).toPoint();
+    dragFromRuler(corner, corner->rect().center(), end);
+    QVERIFY(QLineF(f.canvas->rulerOrigin(), QPointF(23, 17)).length() < 1.0);
+}
+
+void RulersGuidesTest::originViews()
+{
+    Fixture first(*window_, seedImage(), QStringLiteral("ruler_origin_first"));
+    QVERIFY(first.ok());
+    first.canvas->setRulerOrigin({20, 15});
+    Fixture second(*window_, seedImage(), QStringLiteral("ruler_origin_second"));
+    QVERIFY(second.ok());
+    QCOMPARE(second.canvas->rulerOrigin(), QPointF());
+    QCOMPARE(first.canvas->rulerOrigin(), QPointF(20, 15));
 }
 
 void RulersGuidesTest::rulerScale()

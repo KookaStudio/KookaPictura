@@ -649,6 +649,11 @@ void ToolController::bindCanvas(ImageView* canvas)
         return;
     }
     connect(canvas_, &ImageView::mousePressed, this, &ToolController::handlePressed);
+    connect(canvas_, &ImageView::mouseDoubleClicked, this, [this](const QPointF& pos, int mods, bool* handled) {
+        if (ToolHandler* h = registry_.forTool(active_); h && !sliceEditingBlocked()) {
+            *handled = h->onDoubleClick(*this, pos, Qt::KeyboardModifiers(mods));
+        }
+    });
     connect(canvas_, &ImageView::pointerPressure, this, &ToolController::setPressure);
     connect(canvas_, &ImageView::pointerPose, this, &ToolController::setPointerPose);
     connect(canvas_, &ImageView::mouseMoved, this, &ToolController::handleMoved);

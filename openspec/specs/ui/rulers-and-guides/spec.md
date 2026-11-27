@@ -9,7 +9,7 @@ The Rulers toggle and the guides shown along the canvas edges.
 
 `View > Rulers` (`Ctrl+R`) SHALL be a checkable command that shows or hides a
 horizontal ruler above and a vertical ruler left of every open document
-canvas. The rulers SHALL measure from the document's top-left corner in the
+canvas. The rulers SHALL measure from the current ruler origin in the
 ruler unit at the document's resolution, SHALL label distances from 0 without
 a sign, SHALL follow the canvas pan and zoom, choosing a labelled major step
 of 1, 2, or 5 × 10ⁿ units at least 50 screen pixels apart (eighths for a
@@ -177,3 +177,22 @@ system numeric locale while preserving its unit and canonical numeric value.
   fractional value under a comma-decimal numeric locale
 - **THEN** their numbers use a comma, retain the existing units and precision,
   and represent the same document positions as under a period-decimal locale
+
+### Requirement: Ruler origin
+
+Dragging the rulers' intersection onto the canvas SHALL set the ruler origin in document coordinates. The ruler ticks and displayed coordinates SHALL follow the origin as the canvas pans and zooms. The origin SHALL default to the document top-left and be isolated per view. The origin drag SHALL place the origin at the released document point without snapping to guides, grid lines, or slice edges; target snapping is deferred with Snap / Snap To (#305). Changing the origin SHALL NOT change document pixels or history.
+
+#### Scenario: Drag origin and navigate [ruler_origin_drag]
+
+- **WHEN** the user drags the intersection to a canvas point, pans and zooms, and changes the ruler unit
+- **THEN** both rulers and the Ruler and Info coordinate readouts measure from that document point in the selected unit and the document history is unchanged
+
+#### Scenario: Origin placement near targets [ruler_origin_unsnapped]
+
+- **WHEN** the user releases the origin near a visible guide, grid line or slice edge
+- **THEN** the origin remains at the released document point without snapping
+
+#### Scenario: Independent views [ruler_origin_views]
+
+- **WHEN** the user moves the origin in one view and opens or selects another view
+- **THEN** the other view retains its own origin, initially the document top-left

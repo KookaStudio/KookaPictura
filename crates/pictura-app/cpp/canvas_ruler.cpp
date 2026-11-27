@@ -244,7 +244,8 @@ void CanvasRuler::paintEvent(QPaintEvent*)
     const double screenPerUnit = pxPerUnit * view_->zoom();
     const Scale scale = scaleFor(unit_, screenPerUnit);
     const double minor = scale.major / scale.subdivisions;
-    const double origin = toRuler(0.0);
+    const double originPx = horizontal ? view_->rulerOrigin().x() : view_->rulerOrigin().y();
+    const double origin = toRuler(originPx);
     const auto first = qint64(std::floor(-origin / screenPerUnit / minor)) - 1;
     const auto last = qint64(std::ceil((length - origin) / screenPerUnit / minor)) + 1;
     QFont font = painter.font();
@@ -252,7 +253,7 @@ void CanvasRuler::paintEvent(QPaintEvent*)
     painter.setFont(font);
     const int lineHeight = painter.fontMetrics().height() - 2;
     for (qint64 k = first; k <= last; ++k) {
-        const double at = std::floor(toRuler(k * minor * pxPerUnit)) + 0.5;
+        const double at = std::floor(toRuler(originPx + k * minor * pxPerUnit)) + 0.5;
         const int sub = scale.subdivisions;
         const bool major = k % sub == 0;
         const bool half = !major && sub % 2 == 0 && k % (sub / 2) == 0;

@@ -24,6 +24,7 @@ public:
 
     void setView(PictureView* view);
     void setCursorPosition(const QPointF& imagePos);
+    void setRulerCoordinates(const QPointF& origin, int unit);
     // The Ruler tool's mode: the panel shows A/L and points W/H at the ruler.
     void setRulerMode(bool on);
     bool rulerMode() const { return rulerMode_; }
@@ -95,6 +96,8 @@ private:
 
     PictureView* view_ = nullptr;
     QPointF cursor_;
+    QPointF rulerOrigin_;
+    int rulerUnit_ = -1;
     bool rulerMode_ = false;
     QGridLayout* grid_ = nullptr;
     Readout* topLeft_ = nullptr;
