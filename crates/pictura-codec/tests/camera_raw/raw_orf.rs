@@ -35,7 +35,8 @@ fn packed(data: Data) -> Orf {
     Orf::new(WIDTH, HEIGHT, samples(4095), data)
 }
 
-/// An ORF whose one strip is shorter than any uncompressed layout.
+/// An ORF whose one strip is shorter than any uncompressed layout, without
+/// the coding parameters a compressed stream needs.
 fn compressed(bits: u16) -> Orf {
     let mut o = packed(Data::Strips(vec![vec![0x5A; WIDTH * HEIGHT]]));
     o.bits = bits;
@@ -125,13 +126,13 @@ fn interlaced_compact_orfs_put_their_fields_back() {
 }
 
 #[test]
-fn compressed_orfs_are_refused() {
+fn compressed_orfs_without_their_coding_are_refused() {
     for bits in [12, 14] {
         let bytes = orf(&compressed(bits));
         assert_eq!(sniff_raw(&bytes), Some(RawFormat::Orf));
         match decode_raw_source(&bytes, &ImageBudget::default()) {
             Err(PsdError::Unsupported(why)) => {
-                assert!(why.contains("compressed sensor data"), "{why}")
+                assert!(why.contains("coding parameters"), "{why}")
             }
             other => panic!("{bits} bits: {:?}", other.err()),
         }
@@ -170,10 +171,11 @@ fn every_maker_note_layout_reads_alike() {
         Note::OlympRawInfo,
         Note::OlympMain,
     ];
-    for note in notes {
+    for (note, stray) in notes.into_iter().zip([true, false, true, false, false]) {
         let mut o = packed(Data::Msb);
         o.note = note;
         o.crop = Some([3, 2, 32, 20]);
+        o.stray = stray;
         let image = read(&orf(&o)).unwrap();
         assert_eq!(image.samples, normalized(&o, 4095.0), "{note:?}");
         assert_eq!(
@@ -316,7 +318,6 @@ fn orf_corpus_reads_when_present() {
         return;
     };
     let mut seen = 0;
-    let mut compressed = 0;
     let mut failures = Vec::new();
     for entry in std::fs::read_dir(dir).expect("corpus directory") {
         let path = entry.expect("corpus entry").path();
@@ -332,10 +333,6 @@ fn orf_corpus_reads_when_present() {
         assert_eq!(sniff_raw(&bytes), Some(RawFormat::Orf), "{name}");
         let image = match read(&bytes) {
             Ok(image) => image,
-            Err(PsdError::Unsupported(why)) if why.contains("compressed sensor data") => {
-                compressed += 1;
-                continue;
-            }
             Err(error) => {
                 failures.push(format!("{name}: {error}"));
                 continue;
@@ -370,7 +367,7 @@ fn orf_corpus_reads_when_present() {
             colour.map(|t| t.white_balance).ok(),
         );
     }
-    eprintln!("{seen} files, {compressed} compressed and refused");
+    eprintln!("{seen} files");
     assert!(seen > 0, "PICTURA_RAW_CORPUS holds no .ORF or .ORI file");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

@@ -49,6 +49,10 @@ pub struct Orf {
     /// The 6600 K balance, or the fine-weather one in RawInfo.
     pub daylight: Option<[u16; 2]>,
     pub matrix: [i16; 9],
+    /// ImageProcessing `0x0640`-`0x0653`, the compressed stream's coding.
+    pub params: Option<[u32; 14]>,
+    /// An entry in the note whose value lies before the file, as on the E-P1.
+    pub stray: bool,
 }
 
 impl Orf {
@@ -76,6 +80,8 @@ impl Orf {
             as_shot: Some([512, 384]),
             daylight: Some([554, 464]),
             matrix: [404, -148, 0, -64, 388, -68, -2, -96, 354],
+            params: None,
+            stray: false,
         }
     }
 }
@@ -91,6 +97,8 @@ enum Value {
     /// A directory stored as the value.
     Embedded(Vec<(u16, Value)>),
     Note(Note, Vec<(u16, Value)>),
+    /// 4608 bytes 3008 bytes before the offsets' base.
+    Stray,
 }
 
 struct Writer {
@@ -125,6 +133,7 @@ impl Writer {
         self.out.resize(at + 2 + 12 * tags.len() + 4, 0);
         for (i, (tag, value)) in tags.into_iter().enumerate() {
             let start = self.out.len();
+            let stray = matches!(value, Value::Stray);
             let (typ, count, inline): (u16, usize, Option<Vec<u8>>) = match value {
                 Value::Short(v) => (
                     3,
@@ -162,8 +171,10 @@ impl Writer {
                     self.directory(tags, if relative { start } else { 0 });
                     (7, self.out.len() - start, None)
                 }
+                Value::Stray => (7, 4608, None),
             };
             let field = match inline {
+                _ if stray => self.u32(3008u32.wrapping_neg()).to_vec(),
                 Some(mut bytes) if bytes.len() <= 4 => {
                     bytes.resize(4, 0);
                     bytes
@@ -296,6 +307,15 @@ fn maker_note(o: &Orf) -> Vec<(u16, Value)> {
             if raw_info { 0x0122 } else { 0x010C },
             Value::Short(vec![r, b]),
         ));
+    }
+    if o.stray {
+        dir.push((0x1104, Value::Stray));
+    }
+    if let Some(params) = o.params {
+        let tags = (0x0640..=0x0649).chain(0x0650..=0x0653);
+        for (tag, v) in tags.zip(params) {
+            dir.push((tag, Value::Short(vec![v as u16])));
+        }
     }
     match o.note {
         Note::OlympRawInfo => vec![(0x3000, Value::Embedded(dir))],

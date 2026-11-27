@@ -7,6 +7,7 @@
 
 use pictura_color::chroma::{self, Mat3, D50_XY};
 
+use super::orf_decode::{Params, PARAM_TAGS};
 use super::tiff::{Entry, Ifd, Tiff};
 use super::vendor::maker_note;
 use super::{DngColor, DngCrop, Tags};
@@ -43,6 +44,8 @@ pub(super) struct OrfMeta {
     pub black: Option<[f64; 4]>,
     pub white: Option<f64>,
     pub crop: Option<DngCrop>,
+    /// The compressed stream's coding, when ImageProcessing records any of it.
+    pub params: Option<Params>,
     as_shot: Option<[f64; 3]>,
     /// The daylight neutral and the EXIF code of its illuminant.
     daylight: Option<([f64; 3], u16)>,
@@ -73,14 +76,14 @@ impl<'a> MakerNote<'a> {
         } else {
             return Ok(None);
         };
-        let main = tiff.ifd(at)?;
+        let main = tiff.ifd_skipping_strays(at)?;
         // A directory is named by an offset or stored as the entry's value.
         let directory = |entry: &Entry| -> Result<Ifd, PsdError> {
             let at = match tiff.raw(entry).len() {
                 4 => tiff.uint(entry)?,
                 _ => entry.at as u64,
             };
-            tiff.ifd(at)
+            tiff.ifd_skipping_strays(at)
         };
         let processing = main.get(IMAGE_PROCESSING).map(directory).transpose()?;
         let raw_info = main.get(RAW_INFO).map(directory).transpose()?;
@@ -157,6 +160,22 @@ impl<'a> MakerNote<'a> {
         Ok(None)
     }
 
+    /// The coding parameters, LibRaw's 0 for each tag that is absent.
+    fn params(&self) -> Result<Option<Params>, PsdError> {
+        let Some(ifd) = &self.processing else {
+            return Ok(None);
+        };
+        let mut params = [0; 14];
+        let mut any = false;
+        for (p, &tag) in params.iter_mut().zip(&PARAM_TAGS) {
+            if let Some([v]) = self.values::<1>(ifd, tag)? {
+                *p = v as u32;
+                any = true;
+            }
+        }
+        Ok(any.then_some(params))
+    }
+
     fn crop(&self) -> Result<Option<DngCrop>, PsdError> {
         for ifd in self.directories() {
             let value = |i: usize| self.values::<1>(ifd, CROP[i]);
@@ -211,6 +230,7 @@ impl OrfMeta {
             black: note.find(BLACK, OLD_BLACK)?,
             white,
             crop: note.crop()?,
+            params: note.params()?,
             as_shot: note.as_shot()?,
             daylight: note.daylight()?,
             matrix: note.find(MATRIX, OLD_MATRIX)?.and_then(matrix),

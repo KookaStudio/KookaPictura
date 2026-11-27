@@ -15,6 +15,7 @@ mod raw_cr3_colour;
 mod raw_develop;
 mod raw_nef;
 mod raw_orf;
+mod raw_orf_compressed;
 mod raw_raf;
 mod raw_raf_colour;
 mod raw_raf_compressed;
