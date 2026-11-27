@@ -360,6 +360,7 @@ pub(super) fn read_rw2(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         height: area.height,
         samples,
         cfa,
+        fuji_width: None,
         default_crop,
         orientation: tags.uint(ORIENTATION)?.unwrap_or(1).min(8) as u16,
         make,

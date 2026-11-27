@@ -47,7 +47,10 @@ the file (or, with Convert to Linear Image, its demosaiced camera RGB), the
 file's colour, crop, orientation, make and model, the dialog's settings as an
 XMP packet over the seed record with the white-balance label of
 `document/raw-settings-storage`, previews developed with those settings, and,
-with Embed Original Raw File, the raw file's bytes. The file SHALL be written
+with Embed Original Raw File, the raw file's bytes. A raw file whose plane
+is a SuperCCD grid SHALL be saved as its demosaiced, upright camera RGB
+whether or not Convert to Linear Image is checked, since a mosaic DNG cannot
+carry the turned lattice. The file SHALL be written
 under a temporary name in the target folder and renamed into place.
 
 #### Scenario: Save from the dialog [raw_save_writes_dng]
@@ -64,6 +67,11 @@ under a temporary name in the target folder and renamed into place.
 
 - **WHEN** the same pending raw is saved with Convert to Linear Image and no preview
 - **THEN** `read_linear_dng` of the output equals the source's demosaiced camera RGB and there is no preview IFD
+
+#### Scenario: A SuperCCD raw saves linear [raw_save_superccd_linear]
+
+- **WHEN** a pending raw from a synthetic SuperCCD RAF is saved without Convert to Linear Image
+- **THEN** `read_linear_dng` of the output equals the source's demosaiced, upright camera RGB
 
 ### Requirement: A save never overwrites the source or a file without asking
 

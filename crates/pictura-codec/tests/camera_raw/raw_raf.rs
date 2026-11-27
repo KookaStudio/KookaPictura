@@ -18,7 +18,7 @@ mod ljpeg_encode;
 mod raf_builder;
 
 use builder::noise_plane;
-use raf_builder::{raf, Coding, Exif, Raf, EXR, X100S_CFA};
+use raf_builder::{raf, Coding, Exif, Raf, BAYER, EXR, X100S_CFA};
 
 const WIDTH: usize = 40;
 const HEIGHT: usize = 24;
@@ -61,6 +61,22 @@ fn normalized(r: &Raf) -> Vec<u16> {
         .collect()
 }
 
+/// A SuperCCD word section: a 16 × 24 plane whose `0x0121` names the
+/// upright size, with the layout's top bit set or clear.
+fn superccd(shift: bool) -> Raf {
+    let (width, height) = (16, 24);
+    let mut r = Raf::words(width, height, noise_plane(width, height, 15872, 5).samples);
+    r.crop = None;
+    r.layout = if shift {
+        [0x80, 0x81, 0x82, 0x83]
+    } else {
+        [0x00, 0x01, 0x02, 0x01]
+    };
+    let (h, w) = if shift { (12, 32) } else { (24, 16) };
+    r.record(0x0121, &[h, w]);
+    r
+}
+
 fn unsupported(r: &Raf) -> String {
     match read(&raf(r)) {
         Err(PsdError::Unsupported(why)) => why,
@@ -94,10 +110,10 @@ fn raf_words_decode_exactly() {
 
 #[test]
 fn packed_rafs_decode_exactly() {
-    for coding in [Coding::Lsb12, Coding::Msb14] {
+    for coding in [Coding::Lsb12, Coding::Msb12, Coding::Msb14] {
         for width in [WIDTH, WIDTH + 1] {
             for row_pad in [0, 2] {
-                let max = if matches!(coding, Coding::Lsb12) {
+                let max = if matches!(coding, Coding::Lsb12 | Coding::Msb12) {
                     4095
                 } else {
                     16383
@@ -125,17 +141,13 @@ fn headerless_short_rafs_are_refused() {
 
 #[test]
 fn raf_variants_are_refused() {
-    let mut second = file(Coding::Words);
-    second.second_frame = true;
-    assert!(unsupported(&second).contains("EXR"));
+    let mut no_blue = file(Coding::Words).bayer();
+    no_blue.layout = [0x09, 0x09, 0x08, 0x08];
+    assert!(unsupported(&no_blue).contains("colour"));
 
-    let mut supercdd = file(Coding::Words);
-    supercdd.sensor_tiff = false;
-    assert!(unsupported(&supercdd).contains("SuperCCD"));
-
-    let mut exr = file(Coding::Words).bayer();
-    exr.layout = EXR;
-    unsupported(&exr);
+    let mut beside = file(Coding::Words);
+    beside.layout = BAYER;
+    assert!(unsupported(&beside).contains("X-Trans"));
 
     // 10-bit samples in rows of 13 words.
     let mut ten = file(Coding::Bytes(vec![0; 52 * HEIGHT], Some(13)));
@@ -146,6 +158,107 @@ fn raf_variants_are_refused() {
     let mut short = file(Coding::Bytes(vec![0; 60 * HEIGHT + 4], Some(15)));
     short.bits = 12;
     unsupported(&short);
+}
+
+/// `samples` normalized by a black per 2 × 2 position.
+fn by_position(samples: &[u16], width: usize, black: [f64; 4], white: f64) -> Vec<u16> {
+    samples
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            let (x, y) = (i % width, i / width);
+            let black = black[(y % 2) * 2 + x % 2];
+            ((v as f64 - black) * 65535.0 / (white - black))
+                .round()
+                .clamp(0.0, 65535.0) as u16
+        })
+        .collect()
+}
+
+#[test]
+fn word_section_rafs_decode_exactly() {
+    let little = Raf::words(WIDTH, HEIGHT, samples(WIDTH, 15872));
+    let image = read(&raf(&little)).expect("little-endian words");
+    assert_eq!((image.width, image.height), (WIDTH, HEIGHT));
+    assert_eq!(image.cfa.colors, [0, 1, 1, 2]);
+    let want = by_position(&little.samples, WIDTH, [0.0; 4], 15872.0);
+    assert_eq!(image.samples, want);
+
+    let mut big = Raf::words(WIDTH, HEIGHT, samples(WIDTH, 4095));
+    big.big_endian = true;
+    let image = read(&raf(&big)).expect("big-endian words");
+    let want = by_position(&big.samples, WIDTH, [0.0; 4], 4095.0);
+    assert_eq!(image.samples, want);
+
+    // Both frames side by side, the layout's top bit set: a SuperCCD SR body.
+    let mut paired = Raf::words(WIDTH, HEIGHT, samples(WIDTH, 15872));
+    paired.second_samples = Some(noise_plane(WIDTH, HEIGHT, 15872, 71).samples);
+    paired.second_frame = true;
+    paired.layout = [0x80, 0x0B, 0x09, 0x0A];
+    let bytes = raf(&paired);
+    let image = read(&bytes).expect("two frames");
+    assert_eq!(image.cfa.colors, [2, 1, 1, 0]);
+    let want = by_position(&paired.samples, WIDTH, [0.0; 4], 15872.0);
+    assert_eq!(image.samples, want);
+
+    for r in [&little, &big, &paired] {
+        let bytes = raf(r);
+        assert!(read(&bytes[..bytes.len() - 2]).is_err(), "cut word section");
+    }
+}
+
+#[test]
+fn second_directory_reads_the_primary_frame() {
+    for r in [file(Coding::Words), file(Coding::Lsb12).bayer()] {
+        let alone = read(&raf(&r)).expect("one directory");
+        let mut second = r.clone();
+        second.second_frame = true;
+        let both = read(&raf(&second)).expect("second directory");
+        assert_eq!(both.samples, alone.samples);
+        assert_eq!(both.cfa.colors, alone.cfa.colors);
+        assert_eq!((both.width, both.height), (alone.width, alone.height));
+    }
+}
+
+#[test]
+fn upright_layouts_read_last_first() {
+    for (layout, colors) in [
+        (BAYER, [0, 1, 1, 2]),
+        (EXR, [2, 1, 1, 0]),
+        ([0x09, 0x0A, 0x08, 0x0B], [1, 0, 2, 1]),
+    ] {
+        let mut r = file(Coding::Lsb12).bayer();
+        r.layout = layout;
+        let image = read(&raf(&r)).unwrap_or_else(|e| panic!("{layout:02X?}: {e}"));
+        assert_eq!(image.cfa.colors, colors, "{layout:02X?}");
+        assert_eq!(image.samples, normalized(&r));
+        demosaic(&image, DemosaicMethod::Ahd, &ImageBudget::default()).expect("demosaic");
+    }
+}
+
+#[test]
+fn word_section_levels_come_from_the_directory() {
+    let mut r = Raf::words(WIDTH, HEIGHT, samples(WIDTH, 15872));
+    r.record(0x4000, &[513, 515, 511, 517]);
+    r.record(0x2FF0, &[80, 167, 80, 119]);
+    let image = read(&raf(&r)).expect("levels");
+    // RGGB: red, green on red's row; green on blue's row, blue.
+    let want = by_position(&r.samples, WIDTH, [515.0, 513.0, 511.0, 517.0], 15872.0);
+    assert_eq!(image.samples, want);
+    let neutral = image.color.as_shot_neutral.expect("neutral");
+    let expected = [80.0 / 167.0, 1.0, 80.0 / 119.0];
+    assert!(neutral
+        .iter()
+        .zip(expected)
+        .all(|(a, b)| (a - b).abs() < 1e-12));
+
+    let mut sets = Raf::words(WIDTH, HEIGHT, samples(WIDTH, 15872));
+    sets.record(0x4000, &[512, 514, 516, 518, 514, 516, 518, 520]);
+    let image = read(&raf(&sets)).expect("two sets");
+    // Each value the mean of its two sets: G 513, R 515, G 517, B 519.
+    let want = by_position(&sets.samples, WIDTH, [515.0, 513.0, 517.0, 519.0], 15872.0);
+    assert_eq!(image.samples, want);
+    assert_eq!(image.color.as_shot_neutral, None);
 }
 
 #[test]
@@ -209,11 +322,17 @@ fn raf_reports_camera_tags() {
 
 #[test]
 fn hostile_rafs_fail_cleanly() {
+    let mut levels = Raf::words(WIDTH, HEIGHT, samples(WIDTH, 15872));
+    levels.record(0x4000, &[513, 515, 513, 517]);
+    levels.record(0x2FF0, &[80, 167, 80, 119]);
     let files = [
         file(Coding::Words),
         file(Coding::Lsb12).bayer(),
         file(Coding::Msb14),
         file(Coding::Bytes(vec![0x5A; WIDTH * HEIGHT], None)),
+        levels,
+        superccd(false),
+        superccd(true),
     ];
     for r in &files {
         let bytes = raf(r);
@@ -221,7 +340,7 @@ fn hostile_rafs_fail_cleanly() {
             assert!(read(&bytes[..len]).is_err(), "{:?} cut at {len}", r.coding);
         }
         // The header, the directory and the raw directory, which precede the data.
-        let data_at = bytes.len() - (bytes.len() - 0x94).min(2 * WIDTH * HEIGHT);
+        let data_at = bytes.len() - (bytes.len() - 0x94).min(2 * r.width * r.height);
         for at in (0x10..data_at).step_by(3) {
             for flip in [0x01, 0x80, 0xFF] {
                 let mut broken = bytes.clone();
@@ -319,7 +438,7 @@ fn raf_corpus_reads_when_present() {
         return;
     };
     let budget = ImageBudget::default();
-    let (mut read_ok, mut refused) = (0, 0);
+    let mut read_ok = 0;
     let mut failures = Vec::new();
     for path in files_with(&dir, "raf") {
         let name = path.display();
@@ -327,13 +446,6 @@ fn raf_corpus_reads_when_present() {
         assert_eq!(sniff_raw(&bytes), Some(RawFormat::Raf), "{name}");
         let image = match read(&bytes) {
             Ok(image) => image,
-            Err(PsdError::Unsupported(why))
-                if ["SuperCCD", "EXR"].iter().any(|k| why.contains(k)) =>
-            {
-                eprintln!("{name}: refused, {why}");
-                refused += 1;
-                continue;
-            }
             Err(error) => {
                 failures.push(format!("{name}: {error}"));
                 continue;
@@ -344,6 +456,12 @@ fn raf_corpus_reads_when_present() {
             failures.push(format!("{name}: flat"));
         }
         match demosaic(&image, DemosaicMethod::Ahd, &budget) {
+            Ok(rgb) if image.fuji_width.is_some() => {
+                let crop = image.default_crop;
+                if (rgb.width as f64, rgb.height as f64) != (crop.width, crop.height) {
+                    failures.push(format!("{name}: not the rotated size"));
+                }
+            }
             Ok(rgb) => {
                 let (w, cfa) = (image.width, &image.cfa);
                 let kept = image.samples.iter().enumerate().all(|(i, &v)| {
@@ -357,20 +475,18 @@ fn raf_corpus_reads_when_present() {
             Err(error) => failures.push(format!("{name}: demosaic {error}")),
         }
         eprintln!(
-            "{name}: {} x {} {:?} {}x{} CFA crop {:?}",
+            "{name}: {} x {} {:?} {}x{} CFA fuji_width {:?} crop {:?}",
             image.width,
             image.height,
             image.model,
             image.cfa.width,
             image.cfa.height,
+            image.fuji_width,
             image.default_crop,
         );
         read_ok += 1;
     }
-    eprintln!("{read_ok} read, {refused} refused");
+    eprintln!("{read_ok} read");
     assert!(failures.is_empty(), "{failures:#?}");
-    assert!(
-        read_ok + refused > 0,
-        "PICTURA_RAW_CORPUS holds no .RAF file"
-    );
+    assert!(read_ok > 0, "PICTURA_RAW_CORPUS holds no .RAF file");
 }

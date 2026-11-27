@@ -1,7 +1,8 @@
 //! The demosaic stage (#397): a DNG's CFA plane to linear camera-native RGB.
 //!
 //! Bilinear and AHD (Hirakawa & Parks, 2005) are published algorithms; the
-//! X-Trans method (`xtrans.rs`, #1473) is Pictura's own. Parity with Adobe
+//! X-Trans method (`xtrans.rs`, #1473) is Pictura's own; a SuperCCD grid is
+//! then turned upright as LibRaw does (`superccd.rs`, #1621). Parity with Adobe
 //! Camera Raw is approximate. White balance and the colour
 //! matrix are the colour stage's job (#398); default crop and orientation are
 //! applied after this stage.
@@ -13,7 +14,10 @@ use super::{CfaPattern, DngImage};
 
 mod ahd;
 mod bilinear;
+mod superccd;
 mod xtrans;
+
+pub(super) use superccd::rotated_size;
 
 /// The interpolation used to fill each pixel's missing channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,7 +29,8 @@ pub enum DemosaicMethod {
     Ahd,
 }
 
-/// Linear camera-native RGB, 0–65535, the size of the DNG's active area.
+/// Linear camera-native RGB, 0–65535, the size of the DNG's active area (or,
+/// for a SuperCCD grid, of the upright image).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CameraRgb {
     pub width: usize,
@@ -69,12 +74,26 @@ pub fn demosaic(
     if image.samples.len() != width * height {
         return Err(invalid("sample count"));
     }
-    let out = (width as u64)
-        .checked_mul(height as u64)
-        .and_then(|n| n.checked_mul(6))
-        .ok_or_else(|| invalid("output size"))?;
+    let rgb_bytes = |w: usize, h: usize| {
+        (w as u64)
+            .checked_mul(h as u64)
+            .and_then(|n| n.checked_mul(6))
+            .ok_or_else(|| invalid("output size"))
+    };
+    let out = rgb_bytes(width, height)?;
+    let upright = match image.fuji_width {
+        None => None,
+        Some(fw) => Some(
+            superccd::rotated_size(fw, height)
+                .filter(|_| fw <= width)
+                .ok_or_else(|| invalid("SuperCCD grid size"))?,
+        ),
+    };
+    let rotated = upright.map_or(Ok(0), |(w, h)| rgb_bytes(w, h))?;
     let input = (image.samples.len() * 2) as u64;
-    if out > budget.max_alloc_bytes || out + input > budget.max_document_bytes {
+    if out.max(rotated) > budget.max_alloc_bytes
+        || out + rotated + input > budget.max_document_bytes
+    {
         return Err(invalid("output exceeds the allocation budget"));
     }
     let mosaic = Mosaic {
@@ -88,5 +107,12 @@ pub fn demosaic(
         DemosaicMethod::Ahd if xtrans::applies(&mosaic) => xtrans::demosaic(&mosaic),
         _ => bilinear::demosaic(&mosaic),
     };
-    Ok(CameraRgb { width, height, rgb })
+    match (image.fuji_width, upright) {
+        (Some(fw), Some((wide, high))) => Ok(CameraRgb {
+            width: wide,
+            height: high,
+            rgb: superccd::rotate(&rgb, (width, height), fw, (wide, high)),
+        }),
+        _ => Ok(CameraRgb { width, height, rgb }),
+    }
 }

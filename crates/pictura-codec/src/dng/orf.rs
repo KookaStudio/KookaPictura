@@ -330,6 +330,7 @@ pub(super) fn read_orf(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         height,
         samples,
         cfa,
+        fuji_width: None,
         default_crop: crop,
         orientation: tags.uint(ORIENTATION)?.unwrap_or(1).min(8) as u16,
         make: tags.ascii(MAKE),

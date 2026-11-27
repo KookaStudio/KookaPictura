@@ -37,6 +37,7 @@ mod orf;
 mod orf_meta;
 mod raf;
 mod raf_compressed;
+mod raf_superccd;
 mod rw2;
 mod rw2_decode;
 mod tiff;
@@ -141,6 +142,9 @@ pub struct DngImage {
     /// white 65535.
     pub samples: Vec<u16>,
     pub cfa: CfaPattern,
+    /// A SuperCCD plane (#1621): the 45°-turned lattice repacked onto
+    /// LibRaw's grid, which `demosaic` rotates upright; LibRaw's `fuji_width`.
+    pub fuji_width: Option<usize>,
     pub default_crop: DngCrop,
     pub orientation: u16,
     pub make: Option<String>,
@@ -592,6 +596,7 @@ pub fn read_dng(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError
         height: area.height,
         samples,
         cfa,
+        fuji_width: None,
         default_crop,
         orientation: ifd0.uint(ORIENTATION)?.unwrap_or(1).min(8) as u16,
         make: ifd0.ascii(MAKE),
