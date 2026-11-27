@@ -88,7 +88,7 @@ struct Snapshot {
 fn dimensions(rect: PsdRect) -> Option<(u32, u32)> {
     let w = u32::try_from(rect.right.checked_sub(rect.left)?).ok()?;
     let h = u32::try_from(rect.bottom.checked_sub(rect.top)?).ok()?;
-    (w > 0 && h > 0 && u64::from(w) * u64::from(h) <= MAX_PIXELS as u64).then_some((w, h))
+    (w > 0 && h > 0 && u64::from(w) * u64::from(h) <= MAX_PIXELS).then_some((w, h))
 }
 
 fn target(rust: &PictureViewRust) -> Option<(Binding, &Layer)> {

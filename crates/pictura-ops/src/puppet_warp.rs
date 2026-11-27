@@ -371,8 +371,10 @@ impl Mesh {
                     };
                     let samples = sample(src, source, mask_default);
                     let index = y as usize * width as usize + x as usize;
-                    for channel in 0..src.channels as usize {
-                        out.data[channel * plane + index] = samples[channel];
+                    for (channel, value) in
+                        samples.into_iter().take(src.channels as usize).enumerate()
+                    {
+                        out.data[channel * plane + index] = value;
                     }
                 }
             }
