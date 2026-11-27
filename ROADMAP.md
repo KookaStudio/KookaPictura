@@ -206,7 +206,10 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] Rectangle, rounded rectangle, ellipse, polygon, line and custom shape
 - [x] Hand, rotate view and zoom
 - [x] Single Row and Single Column marquee tools (#525)
-- [ ] Puppet Warp (#527) and Content-Aware Scale (#528)
+- [x] Puppet Warp for bounded 8-bit RGB and Grayscale raster layers and user
+  masks, with a live mesh and undo (#527)
+- [ ] Puppet Warp on native-depth, vector-mask and Smart Object targets (#527)
+- [ ] Content-Aware Scale (#528)
 - [x] Transform ▸ Scale, Rotate and Again, the exact rotations, and flips (#529).
   `crates/pictura-script/src/command_catalogue/entries.rs`
 - [ ] The Transform Path and Transform Points submenus (#530)
