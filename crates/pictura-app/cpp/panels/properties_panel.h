@@ -115,6 +115,7 @@ private:
     void showNothing();
     void showLayer(const pictura::layers_api::LayerRow& row);
     void showAdjustment(const QStringList& page);
+    void refreshCurvesContext();
     // Apply a preset block as one "Modify … Layer" state.
     void applyPresetBlock(const QByteArray& block);
     QPushButton* makeAutoButton(QWidget* parent);

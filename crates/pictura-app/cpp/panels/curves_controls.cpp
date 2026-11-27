@@ -401,7 +401,10 @@ void CurvesControls::refreshGraph()
 void CurvesControls::reload()
 {
     if (source_ && channel_->currentIndex() >= 0) {
-        graph_->setPointsText(source_(channel()));
+        const QString points = source_(channel());
+        if (graph_->pointsText() != points) {
+            graph_->setPointsText(points);
+        }
         const QSignalBlocker block(pencil_);
         pencil_->setChecked(graph_->hasDenseCurve());
     }

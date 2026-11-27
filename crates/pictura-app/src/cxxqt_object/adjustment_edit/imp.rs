@@ -208,61 +208,6 @@ pub(super) fn adjustment_block(view: &PictureView, path: &QString) -> Vec<u8> {
         .unwrap_or_default()
 }
 
-pub(super) fn adjustment_input_argb(view: &PictureView, path: &QString, x: i32, y: i32) -> u32 {
-    let Some(doc) = view.rust().session.doc.as_ref() else {
-        return 0;
-    };
-    if x < 0 || y < 0 || x as u32 >= doc.width || y as u32 >= doc.height {
-        return 0;
-    }
-    let path = path.to_string();
-    if !pictura_render::resolve_path(doc, &path).is_some_and(|layer| layer.has_adjustment_content())
-    {
-        return 0;
-    }
-    let Some(indices) = path
-        .split('/')
-        .map(|part| part.parse::<usize>().ok())
-        .collect::<Option<Vec<_>>>()
-    else {
-        return 0;
-    };
-    let mut prefix = doc.clone();
-    let mut root = 0;
-    let mut layers = doc.layers.as_slice();
-    for (depth, &index) in indices.iter().enumerate().take(indices.len() - 1) {
-        let layer = &layers[index];
-        if layer.blend != pictura_core::BlendMode::PassThrough
-            || layer.opacity != 255
-            || layer.mask.is_some()
-            || layer.vector_mask.is_some()
-        {
-            prefix.layers = pictura_core::LayerStack::from_layers(layer.children().to_vec());
-            root = depth + 1;
-        }
-        layers = layer.children().as_slice();
-    }
-    let indices = &indices[root..];
-    for (depth, &index) in indices.iter().enumerate() {
-        let keep = if depth + 1 == indices.len() {
-            index
-        } else {
-            index + 1
-        };
-        prefix.layers.truncate(&indices[..depth], keep);
-    }
-    let rect = pictura_core::PsdRect {
-        left: x,
-        top: y,
-        right: x + 1,
-        bottom: y + 1,
-    };
-    let (pixel, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
-        &prefix, rect, false,
-    ));
-    super::super::helpers_composite::sample_planar_argb(&pixel, 0, 0)
-}
-
 /// Whether `next` may replace `current`: both must resolve to the same
 /// catalogue kind. Replace Color and Match Color resolve to no kind. Auto has a
 /// catalogue kind but no layer default and is not saveable.

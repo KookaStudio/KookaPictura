@@ -916,27 +916,7 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
             return histograms.at(std::clamp(channel, 0, 3));
         });
     }
-    if (view_ && kind_ == QLatin1String("curves")) {
-        const QString mode = image_mode(*view_);
-        if (curveContextPath_ != path_ || curveContextMode_ != mode) {
-            curveContextPath_ = path_;
-            curveContextMode_ = mode;
-            controls_->setCurvesContext(mode, curvesHistograms(view_, mode), tools_,
-                [this](const QPoint& pos) -> QColor {
-                    if (!view_ || pos.x() < 0 || pos.y() < 0 || pos.x() >= view_->document_width()
-                        || pos.y() >= view_->document_height()) {
-                        return {};
-                    }
-                    const QRgb pixel = adjustment_input_argb(*view_, path_, pos.x(), pos.y());
-                    return qAlpha(pixel) ? QColor::fromRgb(pixel) : QColor();
-                });
-        }
-    } else {
-        if (auto* curves = controls_->curves()) {
-            curves->disarm();
-        }
-        curveContextPath_.clear();
-    }
+    refreshCurvesContext();
     controls_->setPage(page, dirty_ || curveGestureActive_);
     if (view_ && !dirty_) {
         controls_->refreshThresholdHistogram(*view_, path_);

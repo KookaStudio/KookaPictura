@@ -582,6 +582,23 @@ fn curves_mode_transform_and_identity() {
         apply_in_mode(&Adjustment::Curves(identity.clone()), &mut edited, mode).unwrap();
         assert_eq!(edited.data, original.data);
     }
+    let mut gray = PixelBuffer {
+        width: 1,
+        height: 1,
+        channels: 4,
+        data: vec![120, 120, 120, 255].into(),
+    };
+    apply_in_mode(
+        &Adjustment::Curves(CurvesParams {
+            points: vec![(0, 48), (255, 48)],
+            ..identity.clone()
+        }),
+        &mut gray,
+        ColorBalanceMode::Grayscale,
+    )
+    .unwrap();
+    assert_eq!(gray.data.as_slice(), &[48, 48, 48, 255]);
+
     let mut cmyk = original.clone();
     apply_in_mode(
         &Adjustment::Curves(CurvesParams {

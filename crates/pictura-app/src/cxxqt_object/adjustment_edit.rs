@@ -49,6 +49,7 @@ pub mod ffi {
             width: i32,
             height: i32,
         ) -> QImage;
+        /// The one-pixel composite below the adjustment, or transparent if unavailable.
         fn adjustment_input_argb(view: &PictureView, path: &QString, x: i32, y: i32) -> u32;
         fn adjustment_input_histogram(source: &AutoCorrectionSource, channel: i32) -> Vec<u32>;
         fn adjustment_auto_block(
@@ -67,9 +68,6 @@ pub mod ffi {
 
         /// The adjustment layer at `path`'s block (the 4-byte key then the payload), or empty for anything else.
         fn adjustment_block(view: &PictureView, path: &QString) -> Vec<u8>;
-
-        /// The one-pixel composite below the adjustment, or transparent if unavailable.
-        fn adjustment_input_argb(view: &PictureView, path: &QString, x: i32, y: i32) -> u32;
 
         /// Replace the adjustment layer at `path` with `block` and recomposite, without a history state. False when the block does not decode to the same kind.
         fn adjustment_set_block(view: Pin<&mut PictureView>, path: &QString, block: &[u8]) -> bool;

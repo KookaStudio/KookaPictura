@@ -110,7 +110,7 @@ pub(crate) fn curve_map(
     Ok(Some(move |rgb: Rgb| {
         let component = |curve: &Option<Curve>, x| eval(&composite, eval(curve, x));
         match mode {
-            ColorBalanceMode::Rgb => [
+            ColorBalanceMode::Rgb | ColorBalanceMode::Grayscale => [
                 component(&red, rgb[0]),
                 component(&green, rgb[1]),
                 component(&blue, rgb[2]),
