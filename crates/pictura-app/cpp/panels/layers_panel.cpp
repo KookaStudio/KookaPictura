@@ -119,11 +119,7 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     : QWidget(parent)
     , colors_(colors)
 {
-    opacityShortcutTimer_ = new QTimer(this);
-    opacityShortcutTimer_->setSingleShot(true);
-    opacityShortcutTimer_->setTimerType(Qt::PreciseTimer);
-    connect(opacityShortcutTimer_, &QTimer::timeout, this,
-            [this] { finishOpacityShortcut(); });
+    setupOpacityShortcut();
 
     QWidget* body = this;
     auto* layout = new QVBoxLayout(body);

@@ -98,6 +98,15 @@ int opacityDigit(const QKeyEvent* event, bool shifted)
 
 } // namespace
 
+void LayersPanel::setupOpacityShortcut()
+{
+    opacityShortcutTimer_ = new QTimer(this);
+    opacityShortcutTimer_->setSingleShot(true);
+    opacityShortcutTimer_->setTimerType(Qt::PreciseTimer);
+    connect(opacityShortcutTimer_, &QTimer::timeout, this,
+            [this] { finishOpacityShortcut(); });
+}
+
 bool LayersPanel::canUseOpacityShortcut(const QWidget* source, bool fill) const
 {
     return view_ && source->hasFocus() && !QApplication::activePopupWidget()

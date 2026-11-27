@@ -578,6 +578,7 @@ private:
     // Synthesize a left-click with `mods` on `path`'s mask thumbnail.
     bool clickMaskThumbWithModifiersForTest(const QString& path, Qt::KeyboardModifiers mods);
 
+    void setupOpacityShortcut();
     bool canUseOpacityShortcut(const QWidget* source, bool fill) const;
     void finishOpacityShortcut(int nextDigit = -1);
 
