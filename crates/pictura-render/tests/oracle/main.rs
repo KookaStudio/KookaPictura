@@ -23,10 +23,9 @@ mod svg_oracle;
 use std::path::PathBuf;
 
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerBlock, LockFlags,
-    PixelBuffer, PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
+    PsdRect,
 };
-use pictura_render::composite_rgba;
 use pictura_testkit::{compare, oracle};
 
 const SIZE: u32 = 8;
