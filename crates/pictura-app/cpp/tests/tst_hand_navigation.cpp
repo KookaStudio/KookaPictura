@@ -300,6 +300,11 @@ void HandNavigationTest::birdShortcuts()
     auto before = loadPreferences();
     auto after = before;
     after.shortcuts.insert(QLatin1String(command_ids::ViewFitOnScreen), {QStringLiteral("H")});
+    for (const ToolId id : allToolIds()) {
+        if (toolShortcut(id) == QLatin1Char('K')) {
+            after.toolShortcuts.insert(toolIdName(id), QString());
+        }
+    }
     after.toolShortcuts.insert(QStringLiteral("hand"), QStringLiteral("K"));
     QVERIFY(savePreferences(before, after));
     auto frame = visibleFrame();
