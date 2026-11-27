@@ -4,6 +4,19 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **SuperCCD SR merge, #1648** (OpenSpec change `raf-superccd-sr-merge`;
+  `codec/vendor-raw-containers`, `codec/raw-demosaic` modified,
+  `document/raw-open` added). SR bodies (SuperCCD word sections with a
+  second directory) read the R frame at header `0x80` (S3/S5 Pro: own
+  section; F700: each row's second half) and `raf_sr.rs` merges it: S/R
+  fitted per grid colour (median over S 0.25–0.75; fallback `0x9200` ratio,
+  16), blend S→k·R over 0.80–0.95, a clipped S a lower bound, headroom
+  `h = max m` folded into `BaselineExposure`. `0x78` counts only when the
+  JPEG starts after it (S2 Pro). The raw Exposure now joins
+  `BaselineExposure` before the develop's clip (`develop_pixels`). Corpus:
+  F700 2.77, S3 Pro 1.01, S5 Pro 2.73 stops; LibRaw oracles read SR files
+  with `0x80` cleared (`primary_only`). EXR bodies with second frames
+  (S200EXR, HS20/50EXR, X10, XF1, X-S1) still read the primary only.
 - **Fujifilm SuperCCD and EXR RAF, #1621** (OpenSpec change
   `vendor-raw-raf-superccd-exr`; `codec/vendor-raw-containers`,
   `codec/raw-demosaic`, `codec/camera-matrices`, `document/raw-save-image`
