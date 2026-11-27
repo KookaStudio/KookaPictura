@@ -129,7 +129,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-4 | `move-and-transform.md` | Content-Aware Scale | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #528 |
 | TOOL-5 | `move-and-transform.md` | Transform Scale/Rotate/Again + exact rotations + flip | SHIPPED | `crates/pictura-script/src/command_catalogue/entries.rs:65-76` | #529 |
 | TOOL-6 | `move-and-transform.md` | Transform Path / Transform Points submenus | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #530 |
-| TOOL-7 | `pen-and-path-tools.md` | Magnetic Pen | MISSING | `options_bar_pen.cpp:19` | #531 |
+| TOOL-7 | `pen-and-path-tools.md` | Magnetic Pen | SHIPPED | `options_bar_pen.cpp`; `tool_pen.cpp`; `tst_pen_tools`. Edge tracing is an approximation | #531 |
 | TOOL-8 | `merge-and-flatten.md` | Merge Shape Components (path boolean ops) | MISSING | no path-boolean in `pictura-core/src/path*` | #532 |
 | TOOL-9 | `hand-and-zoom.md` | Hand/Zoom options bar: Scrubby and Animated Zoom; the multi-window options (Scroll All, Zoom All, Resize Windows To Fit) landed in #500 | PARTIAL | `options_bar_navigate.cpp` | #533 |
 | TOOL-10 | `hand-and-zoom.md` | Bird's Eye View + Flick Panning | MISSING | none found | #534 |
