@@ -180,6 +180,7 @@ set(PICTURA_QT_TEST_DRIVER_transform
     tst_transform_lock
     tst_transform_overlay
     tst_transform_warp
+    tst_puppet_warp
     tst_transform_commands
     tst_transform_selection
 )

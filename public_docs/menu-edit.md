@@ -24,6 +24,7 @@ colour and preference dialogs.
 | Find And Replace Text… | `—` | Finds and replaces text in type layers. | [Guide](text-and-typography.md) |
 | Fill… | `Shift+F5` | Fills the selection or layer with a colour, pattern or history state. |  |
 | Stroke… | `—` | Draws a line around the selection or layer. |  |
+| Puppet Warp | `—` | Moves and anchors parts of a raster layer or mask with pins. |  |
 | Free Transform | `Ctrl+T` | Starts the full transform box on the selection or layer. |  |
 | Auto-Align Layers… | `—` | Lines up several layers that show the same scene. |  |
 | Auto-Blend Layers… | `—` | Blends several aligned layers, keeping the sharp parts of each. |  |
@@ -43,6 +44,15 @@ selection.
 | Paste in Place | `—` | Pastes at the same position the copy came from. |  |
 | Paste Into | `Shift+Ctrl+V` | Pastes into the current selection as a mask. |  |
 | Paste Outside | `—` | Pastes outside the current selection. |  |
+
+## Puppet Warp
+
+Select an editable 8-bit RGB or Grayscale raster layer or its user-mask
+thumbnail, then choose **Edit ▸ Puppet Warp**. Click the preview to place
+pins. Leave one pin in place to anchor the mesh and drag another to move
+that part of the image. Use **Show Mesh** to hide the triangles, or hold
+`H` to hide the pins temporarily. Use **Apply** to commit the deformation
+as one undo step, or `Esc` to discard it.
 
 ## Transform
 
@@ -107,7 +117,6 @@ These commands appear in the menu but are greyed out for now. They are listed he
 
 - **Edit ▸ Check Spelling…**
 - **Edit ▸ Seam-Aware Scale**
-- **Edit ▸ Puppet Warp**
 - **Edit ▸ Transform Path ▸ Again**
 - **Edit ▸ Transform Path ▸ Scale**
 - **Edit ▸ Transform Path ▸ Rotate**

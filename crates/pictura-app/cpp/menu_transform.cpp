@@ -14,6 +14,7 @@
 #include "tools.h"
 
 #include "transform_commit.h"
+#include "puppet_warp_dialog.h"
 
 #include "api/paint_bridge.h"
 #include "api/transform_bridge.h"
@@ -34,6 +35,18 @@ void MenuRegistrar::wireTransformMenu()
     const auto modalSession = [this]() {
         return tools_ && tools_->transformPending();
     };
+
+    const auto puppetTargetable = [this, modalSession]() {
+        PictureView* view = activeView();
+        return view && !modalSession() && puppet_warp_available(*view);
+    };
+    commands_->setEnabledProvider(command_ids::EditPuppetWarp, puppetTargetable);
+    commands_->setHandler(command_ids::EditPuppetWarp, [this, puppetTargetable]() {
+        PictureView* view = activeView();
+        if (view && puppetTargetable() && runPuppetWarpDialog(dialogParent(), *view)) {
+            refresh();
+        }
+    });
 
     commands_->setHandler(command_ids::EditFreeTransform, [this, transformTarget]() {
         // A pending border transform is not silently replaced: Apply / Don't

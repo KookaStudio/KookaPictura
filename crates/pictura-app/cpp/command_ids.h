@@ -48,6 +48,7 @@ inline constexpr char EditPurgeClipboard[] = "edit.purge.clipboard";
 inline constexpr char EditPurgeUndo[] = "edit.purge.undo";
 inline constexpr char EditPurgeHistories[] = "edit.purge.histories";
 inline constexpr char EditPurgeAll[] = "edit.purge.all";
+inline constexpr char EditPuppetWarp[] = "edit.puppet.warp";
 inline constexpr char EditFreeTransform[] = "edit.freeTransform";
 inline constexpr char EditTransformAgain[] = "edit.transform.again";
 inline constexpr char EditTransformScale[] = "edit.transform.scale";

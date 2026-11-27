@@ -48,6 +48,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("EditPurgeUndo", "edit.purge.undo"),
     ("EditPurgeHistories", "edit.purge.histories"),
     ("EditPurgeAll", "edit.purge.all"),
+    ("EditPuppetWarp", "edit.puppet.warp"),
     ("EditFreeTransform", "edit.freeTransform"),
     ("EditTransformAgain", "edit.transform.again"),
     ("EditTransformScale", "edit.transform.scale"),

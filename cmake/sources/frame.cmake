@@ -73,6 +73,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_selection_dialogs.cpp
     crates/pictura-app/cpp/menu_smart_object.cpp
     crates/pictura-app/cpp/menu_transform.cpp
+    crates/pictura-app/cpp/puppet_warp_dialog.cpp
     crates/pictura-app/cpp/menu_type.cpp
     crates/pictura-app/cpp/menu_window_arrange.cpp
     crates/pictura-app/cpp/menu_workspace_commands.cpp

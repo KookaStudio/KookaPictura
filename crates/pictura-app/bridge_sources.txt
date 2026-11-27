@@ -51,6 +51,7 @@ src/cxxqt_object/impl_paint/tool_recording.rs
 src/cxxqt_object/impl_selection/bridge.rs
 src/cxxqt_object/impl_selection/refine.rs
 src/cxxqt_object/impl_transform/bridge.rs
+src/cxxqt_object/impl_transform/puppet_warp.rs
 src/cxxqt_object/impl_transform/warp.rs
 src/cxxqt_object/layer_arrange.rs
 src/cxxqt_object/layer_comps.rs

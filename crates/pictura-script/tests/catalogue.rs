@@ -34,6 +34,7 @@ fn view_state_commands_match_their_ui_roles() {
         CommandClass::AppNative
     );
     assert!(modal_ids().contains(&"view.show.extraOptions"));
+    assert!(modal_ids().contains(&"edit.puppet.warp"));
     assert!(find("view.align").is_none());
     assert!(find("view.align.to").is_none());
 }

@@ -60,7 +60,7 @@ edit.find.and.replace.text	Edit/Find And Replace Text…	Find And Replace Text�
 edit.fill	Edit/Fill…	Fill…	Shift+F5	1	0
 edit.stroke	Edit/Stroke…	Stroke…		1	0
 edit.seam.aware.scale	Edit/Seam-Aware Scale	Seam-Aware Scale	Alt+Shift+Ctrl+C	0	0
-edit.puppet.warp	Edit/Puppet Warp	Puppet Warp		0	0
+edit.puppet.warp	Edit/Puppet Warp	Puppet Warp		1	0
 edit.freeTransform	Edit/Free Transform	Free Transform	Ctrl+T	1	0
 edit.transform.again	Edit/Transform/Again	Again	Shift+Ctrl+T	1	0
 edit.transform.scale	Edit/Transform/Scale	Scale		1	0
