@@ -11,7 +11,7 @@
 //! index in the field's option list; a flag is `0` or `1`.
 //!
 //! `blending.*` keys are the Blending Options page and write the layer record
-//! itself (mode, opacity, fill, knockout, the two group flags).
+//! itself (mode, opacity, fill, knockout, and advanced blending flags).
 //!
 //! ponytail: a layer carrying only a legacy `lrFX` block starts a fresh `lfx2`
 //! on its first edit, which then wins over the legacy set; the stroke is always
@@ -527,6 +527,9 @@ fn blending_value(layer: &Layer, name: &str) -> Option<f64> {
         "knockout" => f64::from(layer.knockout.to_byte()),
         "blendInterior" => flag(layer.blend_interior),
         "blendClipped" => flag(layer.blend_clipping),
+        "transparencyShapes" => flag(layer.transparency_shapes),
+        "layerMaskHidesEffects" => flag(layer.layer_mask_hides_effects),
+        "vectorMaskHidesEffects" => flag(layer.vector_mask_hides_effects),
         "include0" => flag(!layer.restricted_channels.contains(&0)),
         "include1" => flag(!layer.restricted_channels.contains(&1)),
         "include2" => flag(!layer.restricted_channels.contains(&2)),
@@ -554,6 +557,9 @@ fn set_blending_value(layer: &mut Layer, name: &str, value: f64) -> bool {
         ),
         "blendInterior" => update(&mut layer.blend_interior, value >= 0.5),
         "blendClipped" => update(&mut layer.blend_clipping, value >= 0.5),
+        "transparencyShapes" => update(&mut layer.transparency_shapes, value >= 0.5),
+        "layerMaskHidesEffects" => update(&mut layer.layer_mask_hides_effects, value >= 0.5),
+        "vectorMaskHidesEffects" => update(&mut layer.vector_mask_hides_effects, value >= 0.5),
         "include0" | "include1" | "include2" => {
             let index = name
                 .trim_start_matches("include")
@@ -989,3 +995,7 @@ fn edit_styles(
 #[cfg(test)]
 #[path = "layer_style_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "layer_style_flag_tests.rs"]
+mod flag_tests;

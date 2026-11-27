@@ -1,11 +1,11 @@
 # Feature parity tracker
 
 Assessed: 2026-11-28
-Pictura commit: ec3346bcd
+Pictura commit: 942f58356
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
-Coverage includes the #558 HDR merge workflow, #577 Selective Color channel gating, and #523 numeric opacity and fill shortcuts.
+Coverage includes the #558 HDR merge workflow, #577 Selective Color channel gating, #523 numeric opacity and fill shortcuts, and #695 Advanced Blending toggles.
 
 This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
@@ -13,12 +13,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 218 | 79 | 49 | 4 | 350 | 62.3% | 8 |
-| CS6 Standard, in scope | 218 | 79 | 43 | 2 | 342 | 63.7% | 8 |
-| CS6 Extended | 219 | 79 | 65 | 4 | 367 | 59.7% | 23 |
-| CS6 Extended, in scope | 219 | 79 | 44 | 2 | 344 | 63.7% | 23 |
-| CC 28.0 | 220 | 81 | 70 | 4 | 375 | 58.7% | 20 |
-| CC 28.0, in scope | 220 | 81 | 52 | 2 | 355 | 62.0% | 20 |
+| CS6 Standard | 219 | 79 | 48 | 4 | 350 | 62.6% | 8 |
+| CS6 Standard, in scope | 219 | 79 | 42 | 2 | 342 | 64.0% | 8 |
+| CS6 Extended | 220 | 79 | 64 | 4 | 367 | 59.9% | 23 |
+| CS6 Extended, in scope | 220 | 79 | 43 | 2 | 344 | 64.0% | 23 |
+| CC 28.0 | 221 | 81 | 69 | 4 | 375 | 58.9% | 20 |
+| CC 28.0, in scope | 221 | 81 | 51 | 2 | 355 | 62.3% | 20 |
 
 ## Baselines
 
@@ -41,7 +41,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Category | CS6 Standard | CS6 Extended | CC 28.0 |
 |---|---|---|---|
 | Files & interchange | 28/40 (70.0%) | 28/42 (66.7%) | 29/46 (63.0%) |
-| Layers & compositing | 31/38 (81.6%) | 31/39 (79.5%) | 31/39 (79.5%) |
+| Layers & compositing | 32/38 (84.2%) | 32/39 (82.1%) | 32/39 (82.1%) |
 | Tools & painting | 43/70 (61.4%) | 44/81 (54.3%) | 44/71 (62.0%) |
 | Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
 | Adjustments & filters | 32/55 (58.2%) | 32/55 (58.2%) | 32/64 (50.0%) |
@@ -121,7 +121,7 @@ Source list: named Layer-menu and Layers-panel capabilities.
 | P-LAY-07 | Blend modes and Pass Through | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | members:27/27 | — |
 | P-LAY-08 | Layer styles | Y | Y | Y | Partial | in-scope | crates/pictura-render/src | none | members:10/10; Bevel Contour and gradient editor ship, Bevel Texture remains | #606 |
 | P-LAY-09 | Advanced Blending engine | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
-| P-LAY-10 | Advanced Blending dialog controls | Y | Y | Y | Missing | in-scope | — | none | Engine ships; dialog controls are absent | #695 |
+| P-LAY-10 | Advanced Blending dialog controls | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/layer_style_pages.cpp | automated:tst_layer_style::advancedBlendingFlags | Blend If tracked separately | #695 |
 | P-LAY-11 | Adjustment layers | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-LAY-12 | Fill layers | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-LAY-13 | Shape layers | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
@@ -529,6 +529,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-28 | 942f58356 | 219/350 (62.6%) | 220/367 (59.9%) | 28.0 | 221/375 (58.9%) |
 | 2026-11-28 | ec3346bcd | 218/350 (62.3%) | 219/367 (59.7%) | 28.0 | 220/375 (58.7%) |
 | 2026-11-27 | 73f469e1 | 216/350 (61.7%) | 217/367 (59.1%) | 28.0 | 218/375 (58.1%) |
 | 2026-11-27 | a876cd9fd | 215/350 (61.4%) | 216/367 (58.9%) | 28.0 | 217/375 (57.9%) |

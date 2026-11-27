@@ -158,6 +158,18 @@ QWidget* LayerStyleDialog::buildBlendingOptionsPage()
         check(QStringLiteral("blending.blendClipped"), tr("Blend Clipped Layers as Group"));
     bindCheck(clipped, QStringLiteral("blending.blendClipped"));
     advanced->addRow(QString(), clipped);
+    auto* transparency = check(QStringLiteral("blending.transparencyShapes"),
+                               tr("Transparency Shapes Layer"));
+    bindCheck(transparency, QStringLiteral("blending.transparencyShapes"));
+    advanced->addRow(QString(), transparency);
+    auto* layerMask = check(QStringLiteral("blending.layerMaskHidesEffects"),
+                            tr("Layer Mask Hides Effects"));
+    bindCheck(layerMask, QStringLiteral("blending.layerMaskHidesEffects"));
+    advanced->addRow(QString(), layerMask);
+    auto* vectorMask = check(QStringLiteral("blending.vectorMaskHidesEffects"),
+                             tr("Vector Mask Hides Effects"));
+    bindCheck(vectorMask, QStringLiteral("blending.vectorMaskHidesEffects"));
+    advanced->addRow(QString(), vectorMask);
     return page.done();
 }
 
