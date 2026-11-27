@@ -211,7 +211,7 @@ pub(super) fn path_selection_target_key(view: &PictureView) -> QString {
         "{}:{:?}:{:?}",
         rust.session.document_generation,
         rust.active_path,
-        layer_target(&rust)
+        layer_target(rust)
     ))
 }
 

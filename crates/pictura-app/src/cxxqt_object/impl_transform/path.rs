@@ -27,7 +27,7 @@ fn selection(
     {
         return None;
     }
-    let layer = paths::layer_target(&rust);
+    let layer = paths::layer_target(rust);
     if let Some(target) = &layer {
         let layer = pictura_render::resolve_path(doc, target)?;
         if !layer.visible || layer.lock.contains(LockFlags::POSITION) {
@@ -35,16 +35,17 @@ fn selection(
         }
     }
     let original = paths::path(view)?;
-    if anchors.len() % 2 != 0 {
+    let (anchor_pairs, remainder) = anchors.as_chunks::<2>();
+    if !remainder.is_empty() {
         return None;
     }
     let components: Vec<usize> = components
         .iter()
         .map(|&i| usize::try_from(i).ok())
         .collect::<Option<_>>()?;
-    let anchors: Vec<(usize, usize)> = anchors
-        .chunks_exact(2)
-        .map(|v| Some((usize::try_from(v[0]).ok()?, usize::try_from(v[1]).ok()?)))
+    let anchors: Vec<(usize, usize)> = anchor_pairs
+        .iter()
+        .map(|&[sp, pt]| Some((usize::try_from(sp).ok()?, usize::try_from(pt).ok()?)))
         .collect::<Option<_>>()?;
     if components.is_empty() && anchors.len() < 2 {
         return None;
@@ -223,7 +224,7 @@ pub(super) fn commit(mut view: Pin<&mut PictureView>) -> bool {
             && editable
             && rust.session.document_generation == target.generation
             && rust.active_path == target.active
-            && paths::layer_target(&rust) == target.layer
+            && paths::layer_target(rust) == target.layer
     };
     if !valid
         || paths::path(&view).as_ref() != Some(&target.original)
