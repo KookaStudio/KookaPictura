@@ -12,6 +12,7 @@
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QSpinBox>
 
+#include "api/history_api.h"
 #include "api/paint_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/transform_bridge.h"
@@ -99,6 +100,7 @@ void PuppetWarpTest::init()
                                    QStringLiteral("normal"), 100, false));
     }
     view->deselect();
+    QVERIFY(pictura::history_api::purgeUndo(*view));
 }
 
 void PuppetWarpTest::cleanup()
