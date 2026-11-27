@@ -24,6 +24,7 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QStatusBar>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QToolButton>
 
@@ -59,6 +60,12 @@ QStringList documentPaths(const PicturaMainWindow& window)
     return paths;
 }
 
+bool writeBytes(const QString& path, const QByteArray& bytes)
+{
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+}
+
 bool writeBrokenPsd(const QString& path)
 {
     QFile file(path);
@@ -76,6 +83,7 @@ private slots:
     void multipleSelectionFollowsTheTabsPreference();
     void singleSelectionOpensOneDocument();
     void failedFileDoesNotStopTheRest();
+    void emptyAndStubImagesAreRefused();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -191,6 +199,30 @@ void MultiFileOpenTest::failedFileDoesNotStopTheRest()
     QTRY_VERIFY(!window->isLoadingDocument(0) && !window->isLoadingDocument(1));
     const QStringList expected = {first, last};
     QCOMPARE(documentPaths(*window), expected);
+}
+
+// A 0-byte .jpg crashed the app inside a system image plugin's probe (#1650).
+void MultiFileOpenTest::emptyAndStubImagesAreRefused()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString empty = dir.filePath(QStringLiteral("empty.jpg"));
+    const QString stub = dir.filePath(QStringLiteral("stub.jpg"));
+    QVERIFY(writeBytes(empty, QByteArray()));
+    QVERIFY(writeBytes(stub, QByteArray("\xff\xd8\xff", 3)));
+
+    auto window = makeShownWindow();
+    QVERIFY(window != nullptr);
+    for (const QString& path : {empty, stub}) {
+        window->statusBar()->clearMessage();
+        OpenDialogProbe probe;
+        queueOpenDialogInteraction(window.get(), {path}, &probe);
+        window->showOpenDialog();
+        QVERIFY2(probe.error.isEmpty(), qPrintable(probe.error));
+        QTRY_VERIFY2(window->statusBar()->currentMessage().contains(QStringLiteral("Could not open")),
+                     qPrintable(path));
+        QTRY_COMPARE(window->documentCount(), 0);
+    }
 }
 
 PICTURA_QT_TEST_MAIN(MultiFileOpenTest)

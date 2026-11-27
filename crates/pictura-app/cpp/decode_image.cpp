@@ -20,13 +20,43 @@ bool withinBudget(qint64 width, qint64 height)
            && width * height * 4 <= kMaxAllocBytes;
 }
 
+// No image of any format Qt or its plugins decode fits in fewer bytes; shorter
+// input never reaches a plugin, some of which read their magic bytes past the
+// end of the device (kimg_exr on an empty file, #1650).
+constexpr qsizetype kMinImageBytes = 16;
+
 } // namespace
+
+QByteArray pictura::qtFormatForSignature(const QByteArray& head)
+{
+    // The same signatures as pictura_codec::probe's sniffer.
+    if (head.startsWith("\x89PNG\r\n\x1a\n")) {
+        return QByteArrayLiteral("png");
+    }
+    if (head.startsWith("\xff\xd8")) {
+        return QByteArrayLiteral("jpeg");
+    }
+    if (head.startsWith("GIF87a") || head.startsWith("GIF89a")) {
+        return QByteArrayLiteral("gif");
+    }
+    if (head.startsWith("BM")) {
+        return QByteArrayLiteral("bmp");
+    }
+    if (head.startsWith(QByteArrayView("II\x2a\x00", 4))
+        || head.startsWith(QByteArrayView("MM\x00\x2a", 4))) {
+        return QByteArrayLiteral("tiff");
+    }
+    return {};
+}
 
 ::rust::Vec<uint8_t> decode_image_rgba(::rust::Slice<const uint8_t> data, int32_t& width,
                                        int32_t& height)
 {
     width = 0;
     height = 0;
+    if (data.size() < size_t(kMinImageBytes)) {
+        return {};
+    }
     // Qt's QImageReader refuses any allocation over its 256 MB default, which
     // would reject a 16000²-class raster (a 16507×16196 RGBA decode is ~1020 MB)
     // before the app's own budget sees it, so its limit is the import budget's
@@ -40,6 +70,13 @@ bool withinBudget(qint64 width, qint64 height)
         return {};
     }
     QImageReader reader(&buffer);
+    // A known signature consults only its own handler, never the content scan
+    // over every installed plugin.
+    const QByteArray pinned = pictura::qtFormatForSignature(bytes);
+    if (!pinned.isEmpty()) {
+        reader.setFormat(pinned);
+        reader.setAutoDetectImageFormat(false);
+    }
     // Refuse a declared size over budget before any plugin decodes pixels; a
     // container the engine's probe does not know reaches here unchecked.
     const QSize declared = reader.size();
