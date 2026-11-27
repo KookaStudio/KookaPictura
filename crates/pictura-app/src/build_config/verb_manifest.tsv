@@ -803,6 +803,7 @@ free	path_hit_segment	path_hit_segment	api/layers_bridge.h	pictura_app/src/cxxqt
 free	path_hit_subpath	path_hit_subpath	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_insert_anchor	path_insert_anchor	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_layer_target	path_layer_target	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
+free	path_merge_shape_components	path_merge_shape_components	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_move_anchor	path_move_anchor	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_move_handle	path_move_handle	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_move_subpath	path_move_subpath	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h

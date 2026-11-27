@@ -1,5 +1,8 @@
 use super::*;
 
+mod merge_components;
+pub(super) use merge_components::path_merge_shape_components;
+
 use super::super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
