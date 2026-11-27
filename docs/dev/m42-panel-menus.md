@@ -195,9 +195,9 @@ panel has undo/redo; the documented step commands map to the existing
 | Step Backward | `[impl]` (existing command) |
 | New Snapshot… | `[disabled]` |
 | Delete | `[disabled]` |
-| Clear History | `[disabled]` |
-| New Document | `[disabled]` |
-| History Options… | `[disabled]` |
+| Clear History | `[impl]` | `HistoryPanel::clearHistory` (Alt purges snapshots) |
+| New Document | `[impl]` | `HistoryPanel::selectedTarget` + `history_new_document` |
+| History Options… | `[impl]` | `HistoryPanel::openHistoryOptions` |
 
 ## Actions
 

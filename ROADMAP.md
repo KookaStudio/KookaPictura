@@ -623,7 +623,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] The Tool Presets panel and `.tpl` libraries (#511)
 - [ ] The Styles panel and `.asl` presets (#512)
 - [ ] Channel panel spot channels, Split and Merge, and Panel Options (#513)
-- [ ] History Options, Clear History and purge, and New Document from state
+- [x] History Options, Clear History and purge, and New Document from state
       (#514)
 - [ ] Histogram view modes, statistics, the source menu, cache and refresh, and
       the 16/32-bit bins (#515)
