@@ -6,6 +6,16 @@
     "style": "viewBox 0 0 24 24, fill=none, stroke=currentColor, stroke-width=2, round caps/joins; tinted at render time. Custom icons keep their named Lucide base at its original size and position; small added symbols use stroke-width=1."
   },
   "entries": {
+    "tool.singlerowmarquee": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "dashed single row selection"
+    },
+    "tool.singlecolumnmarquee": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "dashed single column selection"
+    },
     "actions.delete": {
       "kind": "lucide",
       "slug": "trash",

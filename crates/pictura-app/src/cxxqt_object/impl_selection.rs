@@ -725,6 +725,30 @@ impl qobject::PictureView {
         !matches!(outcome, Edit::None)
     }
 
+    fn rect_selection_shape(
+        &self,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        feather: f64,
+    ) -> Option<(Selection, Option<ShapeBox>)> {
+        let doc = self.rust().session.doc.as_ref()?;
+        let rect = Selection::rect(doc.width, doc.height, x, y, w, h);
+        let bounds = (w > 0 && h > 0)
+            .then(|| {
+                PsdRect {
+                    top: y,
+                    left: x,
+                    bottom: y.saturating_add(h),
+                    right: x.saturating_add(w),
+                }
+                .clip_to(doc.width, doc.height)
+            })
+            .flatten();
+        Some(feathered_within(rect, bounds, feather))
+    }
+
     pub fn select_rect(
         mut self: Pin<&mut Self>,
         x: i32,
@@ -734,31 +758,13 @@ impl qobject::PictureView {
         mode: &QString,
         feather: f64,
     ) -> bool {
-        let shape = {
-            let rust = self.rust();
-            let Some(doc) = rust.session.doc.as_ref() else {
-                return false;
-            };
-            let rect = Selection::rect(doc.width, doc.height, x, y, w, h);
-            let bounds = (w > 0 && h > 0)
-                .then(|| {
-                    PsdRect {
-                        top: y,
-                        left: x,
-                        bottom: y.saturating_add(h),
-                        right: x.saturating_add(w),
-                    }
-                    .clip_to(doc.width, doc.height)
-                })
-                .flatten();
-            // The marquee's box bounds its feather and combine; its bounds
-            // are still read once per selection (`mq_bounds_once`).
-            let (shape, boxed) = feathered_within(rect, bounds, feather);
-            let boxed = boxed.map(|b| ShapeBox { tight: false, ..b });
-            (shape, boxed)
+        let Some((shape, boxed)) = self.rect_selection_shape(x, y, w, h, feather) else {
+            return false;
         };
+        // Keep the existing commit's selection-bounds cache behavior.
+        let boxed = boxed.map(|b| ShapeBox { tight: false, ..b });
         let mode = combine_mode_from(&mode.to_string());
-        self.as_mut().apply_selection_boxed(shape, mode)
+        self.as_mut().apply_selection_boxed((shape, boxed), mode)
     }
 
     pub fn select_ellipse(

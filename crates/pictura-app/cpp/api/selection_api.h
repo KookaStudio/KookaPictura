@@ -9,6 +9,7 @@
 #include <QtCore/QString>
 #include <QtCore/QtGlobal>
 #include <QtCore/QVector>
+#include <QtGui/QPainterPath>
 #include <QtGui/QPolygon>
 #include <QtGui/QPolygonF>
 
@@ -46,6 +47,11 @@ struct SelectionContour {
 /// point-count-prefixed integer corners; both empty without a selection.
 SelectionBounds bounds(const PictureView& view);
 SelectionContour contour(const PictureView& view);
+QPainterPath committedContourPath(const PictureView& view);
+QList<QPolygonF> rectPreviewContour(const PictureView& view, const QRect& rect,
+                                   const QString& mode, double feather,
+                                   const QPainterPath& committed);
+QRect singleLineBand(const QSize& size, const QPointF& pos, bool row);
 
 QRect marqueeDragRect(const QPointF& a, const QPointF& b, Qt::KeyboardModifiers mods,
                       bool mirror, MarqueeStyle style, double fixedRatioW, double fixedRatioH,

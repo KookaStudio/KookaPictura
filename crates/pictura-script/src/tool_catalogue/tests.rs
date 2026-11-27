@@ -29,7 +29,7 @@ fn extended_only_tools_are_count_and_the_3d_rig() {
 #[test]
 fn tool_catalogue_rows_unique_and_grouped() {
     let rows = tool_catalogue();
-    assert_eq!(rows.len(), 71);
+    assert_eq!(rows.len(), 73);
     for (i, row) in rows.iter().enumerate() {
         assert!(
             rows[i + 1..].iter().all(|other| other.name != row.name),
@@ -63,7 +63,9 @@ fn tool_catalogue_rows_unique_and_grouped() {
             "smudge",
             "addanchorpoint",
             "deleteanchorpoint",
-            "convertpoint"
+            "convertpoint",
+            "singlerowmarquee",
+            "singlecolumnmarquee"
         ]
     );
     let free_transform = &tool_spec("move").unwrap().modifier_hints[2];
@@ -77,9 +79,9 @@ fn tool_catalogue_implemented_set() {
         .filter(|row| row.implemented)
         .map(|row| row.name)
         .collect();
-    assert_eq!(implemented.len(), 61);
+    assert_eq!(implemented.len(), 63);
     assert_eq!(implemented.first(), Some(&"move"));
-    assert_eq!(implemented.last(), Some(&"zoom"));
+    assert_eq!(implemented.last(), Some(&"singlecolumnmarquee"));
     for name in ["objectrotate", "camerazoom"] {
         assert!(!tool_spec(name).unwrap().implemented, "{name} is a 3D tool");
     }

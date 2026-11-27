@@ -98,6 +98,8 @@ inline constexpr ToolGolden kToolGolden[] = {
     {pictura::ToolId::Hand, "hand", "Hand", 'H', Qt::OpenHandCursor, "Hand: drag to pan the canvas", 21, true, 9, 2, ""},
     {pictura::ToolId::RotateView, "rotateview", "Rotate View", 'R', Qt::CrossCursor, "Rotate View: drag to turn the canvas; Esc resets the view", 22, true, 12, 12, "Shift|Snap to 15°|;Esc|Reset View|"},
     {pictura::ToolId::Zoom, "zoom", "Zoom", 'Z', Qt::CrossCursor, "Zoom: click to zoom in, Ctrl/Alt-click to zoom out", 23, true, 9, 2, ""},
+    {pictura::ToolId::SingleRowMarquee, "singlerowmarquee", "Single Row Marquee", 0, Qt::CrossCursor, "Single Row Marquee: click to select a row", 2, true, 12, 12, "Shift|Add to selection|;Alt|Subtract from selection|"},
+    {pictura::ToolId::SingleColumnMarquee, "singlecolumnmarquee", "Single Column Marquee", 0, Qt::CrossCursor, "Single Column Marquee: click to select a column", 2, true, 12, 12, "Shift|Add to selection|;Alt|Subtract from selection|"},
 };
 // clang-format on
 

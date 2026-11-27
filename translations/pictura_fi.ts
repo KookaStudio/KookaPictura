@@ -3816,6 +3816,22 @@ Näytönohjaimen ajuri: %5</translation>
         <translation>Terävöitä: Terävöitä vetämällä; toistuva veto terävöittää lisää</translation>
     </message>
     <message>
+        <source>Single Column Marquee</source>
+        <translation>Yhden sarakkeen valinta</translation>
+    </message>
+    <message>
+        <source>Single Column Marquee: click to select a column</source>
+        <translation>Yhden sarakkeen valinta: Valitse sarake napsauttamalla</translation>
+    </message>
+    <message>
+        <source>Single Row Marquee</source>
+        <translation>Yhden rivin valinta</translation>
+    </message>
+    <message>
+        <source>Single Row Marquee: click to select a row</source>
+        <translation>Yhden rivin valinta: Valitse rivi napsauttamalla</translation>
+    </message>
+    <message>
         <source>Slice</source>
         <translation>Viipale</translation>
     </message>

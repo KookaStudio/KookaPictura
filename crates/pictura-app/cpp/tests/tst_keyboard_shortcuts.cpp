@@ -546,7 +546,7 @@ void KeyboardShortcutsTest::toolIdOrderMatchesCatalogue()
     const ::rust::Vec<pictura::ToolSpecRow> rows = pictura::tool_catalogue_rows();
     const int count = int(std::size(pictura::test::kToolGolden));
     QCOMPARE(int(rows.size()), count);
-    QCOMPARE(count, int(pictura::ToolId::Zoom) + 1);
+    QCOMPARE(count, int(pictura::ToolId::SingleColumnMarquee) + 1);
     for (int i = 0; i < count; ++i) {
         const pictura::test::ToolGolden& golden = pictura::test::kToolGolden[i];
         QCOMPARE(int(golden.id), i);

@@ -210,6 +210,8 @@ QWidget* OptionsBar::buildPageBody(ToolId id)
     case ToolId::MagneticLasso:
     case ToolId::Marquee:
     case ToolId::EllipticalMarquee:
+    case ToolId::SingleRowMarquee:
+    case ToolId::SingleColumnMarquee:
         return buildSelectionPage(id);
     case ToolId::MagicWand:
         return buildWandPage(id);
@@ -559,7 +561,8 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
         addMagneticFields(layout, page, group);
     }
 
-    if (id != ToolId::Marquee) {
+    if (id != ToolId::Marquee && id != ToolId::SingleRowMarquee
+        && id != ToolId::SingleColumnMarquee) {
         auto* antiAlias = new QCheckBox(QCoreApplication::translate("PicturaUi", "Anti-alias"), page);
         antiAlias->setObjectName(QStringLiteral("optionsSelectionAntiAlias"));
         antiAlias->setChecked(group ? group->antiAlias() : true);
@@ -1131,6 +1134,19 @@ void OptionsBar::showTool(ToolId id)
     }
     refreshDocumentFacts();
     stack_->setCurrentIndex(static_cast<int>(id));
+    auto* group = controller_ ? controller_->optionsFor<SelectionOptions>(id) : nullptr;
+    if (group) {
+        QWidget* page = stack_->currentWidget();
+        for (QToolButton* button : page->findChildren<QToolButton*>()) {
+            const QVariant mode = button->property("selectionMode");
+            if (mode.isValid()) {
+                button->setChecked(mode.toInt() == int(group->combineMode()));
+            }
+        }
+        if (auto* feather = page->findChild<NumericField*>(QStringLiteral("optionsFeather"))) {
+            feather->setValue(group->feather());
+        }
+    }
     updateStackPolicies();
     // Re-seed the Crop W/H fields for their mode (ratio values or pixels).
     if (id == ToolId::Crop) {

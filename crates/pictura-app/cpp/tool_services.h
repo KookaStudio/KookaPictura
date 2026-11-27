@@ -50,6 +50,7 @@ struct ToolServices {
 
     virtual bool dragging() const = 0;
     virtual void setDragging(bool dragging) = 0;
+    virtual void ignoreReleaseUntilPress() = 0;
     virtual bool dragCommitted() const = 0;
     virtual void setDragCommitted(bool committed) = 0;
     virtual SelectionMode dragMode() const = 0;

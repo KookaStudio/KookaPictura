@@ -482,6 +482,8 @@ void ImageView::setSelectionPreview(const QList<QPolygonF>& loops, bool closed, 
 {
     previewContours_ = loops;
     previewTransformsSelection_ = false;
+    previewReplacesSelection_ = false;
+    selectionBandGuide_.clear();
     selectionPreviewClosed_ = closed;
     selectionPreviewSolid_ = solid;
     updateAntsTimer();
@@ -492,6 +494,8 @@ void ImageView::setTransformedSelectionPreview(const QList<QPolygonF>& loops)
 {
     previewContours_ = loops;
     previewTransformsSelection_ = true;
+    previewReplacesSelection_ = false;
+    selectionBandGuide_.clear();
     selectionPreviewClosed_ = true;
     selectionPreviewSolid_ = false;
     updateAntsTimer();
@@ -511,6 +515,13 @@ void ImageView::setSelectionShapePreview(const QList<QPolygonF>& loops)
     setSelectionPreview(clipSelectionShapeToCanvas(loops, docSize_), true, false);
 }
 
+void ImageView::setSelectionResultPreview(const QList<QPolygonF>& loops, const QRect& band)
+{
+    setSelectionPreview(loops, true, false);
+    previewReplacesSelection_ = true;
+    selectionBandGuide_ = QPolygonF(QRectF(band));
+}
+
 void ImageView::setSelectionPreviewOrigin(const QPointF& imagePos)
 {
     previewOrigin_ = imagePos;
@@ -522,6 +533,8 @@ void ImageView::clearSelectionPreview()
 {
     previewContours_.clear();
     previewTransformsSelection_ = false;
+    previewReplacesSelection_ = false;
+    selectionBandGuide_.clear();
     previewOriginActive_ = false;
     selectionPreviewClosed_ = true;
     selectionPreviewSolid_ = false;

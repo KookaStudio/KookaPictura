@@ -30,6 +30,15 @@ pub mod ffi {
     }
 
     #[namespace = "pictura"]
+    struct SelectionRectPreview {
+        left: i32,
+        top: i32,
+        width: i32,
+        height: i32,
+        contour: Vec<i32>,
+    }
+
+    #[namespace = "pictura"]
     extern "Rust" {
         /// Capture the current selection as the origin of a move drag; false without one.
         fn begin_selection_move(view: Pin<&mut PictureView>) -> bool;
@@ -84,6 +93,17 @@ pub mod ffi {
 
         /// Restore the selection captured at the start of the Quick Selection stroke.
         fn quick_select_cancel(view: Pin<&mut PictureView>) -> bool;
+
+        /// Trace a rectangular selection preview without mutating the committed mask.
+        fn selection_rect_preview_contour(
+            view: &PictureView,
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+            mode: &QString,
+            feather: f64,
+        ) -> SelectionRectPreview;
 
         /// Commit an ellipse, anti-aliased when `anti_alias` is set.
         fn selection_select_ellipse_aa(
@@ -160,6 +180,9 @@ pub mod ffi {
 
         /// Every existing raster layer mask as `path|Layer Name Mask`.
         fn selection_mask_targets(view: &PictureView) -> QStringList;
+
+        /// A nonempty selection whose coverage never exceeds 50%.
+        fn selection_below_half(view: &PictureView) -> bool;
 
         /// The live selection coverage, row-major; empty without a selection.
         fn selection_coverage_bytes(view: &PictureView) -> Vec<u8>;

@@ -15,7 +15,7 @@ class ToolRegistry {
 public:
     // The ToolId catalogue size at the time of writing; the static_assert in
     // tool_registry.cpp turns an enum growth into a compile error.
-    static constexpr int kToolCount = 71;
+    static constexpr int kToolCount = 73;
 
     void registerTool(ToolId id, std::unique_ptr<ToolHandler> handler);
     ToolHandler* forTool(ToolId id) const;

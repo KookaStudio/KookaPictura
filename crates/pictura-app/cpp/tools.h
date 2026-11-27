@@ -34,7 +34,7 @@ namespace pictura {
 class ImageView;
 class PictureView;
 
-// The 71-tool CS6 catalogue in frozen table order; the enum order matches the
+// The CS6 catalogue in frozen table order; the enum order matches the
 // engine tool catalogue (`pictura_script::tool_catalogue`), which a Qt Test
 // checks.
 enum class ToolId {
@@ -108,7 +108,9 @@ enum class ToolId {
     CameraZoom,
     Hand,
     RotateView,
-    Zoom
+    Zoom,
+    SingleRowMarquee,
+    SingleColumnMarquee
 };
 
 struct ToolInfo {
@@ -331,6 +333,7 @@ public:
 
     void bindCanvas(ImageView* canvas);
     void unbindCanvas();
+    bool cancelSingleLineMarquee();
     // Forget a view that is about to be destroyed, so unbinding its canvas
     // never reads a freed pointer.
     void forgetView(PictureView* view);
@@ -358,6 +361,7 @@ public:
     void setDragging(bool dragging) override { dragging_ = dragging; }
     bool dragCommitted() const override { return dragCommitted_; }
     void setDragCommitted(bool committed) override { dragCommitted_ = committed; }
+    void ignoreReleaseUntilPress() override { ignoreRelease_ = true; }
     SelectionMode dragMode() const override { return dragMode_; }
     void setDragMode(SelectionMode mode) override { dragMode_ = mode; }
     SelectionMode resolveSelectionMode(Qt::KeyboardModifiers mods,
@@ -639,7 +643,8 @@ private:
     // marquee handler serves rectangular and elliptical).
     static bool isSelectionMenuTool(ToolId id);
     bool maybeBeginSelectionMove(PictureView* v, const QPointF& imagePos);
-    void cancelSelectionMove();
+    bool ignoreSingleLineRelease() const;
+    void cancelSelectionMove(PictureView* target = nullptr);
     void updateSelectionHover(const QPointF& imagePos);
     void dragSelectionMove(const QPointF& imagePos);
     void dragSelectionToDocument();
@@ -723,6 +728,8 @@ private:
     bool dragging_ = false;
     bool dragCommitted_ = false;
     bool movingSelection_ = false;
+    bool selectionMoveDragged_ = false;
+    bool ignoreRelease_ = false;
     bool contentMove_ = false;
     bool contentDuplicate_ = false;
     // True while a duplicate content move is showing the pre-cloned pixel

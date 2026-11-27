@@ -1,8 +1,8 @@
-// The 71 CS6 tools in `ToolId` order (`crates/pictura-app/cpp/tools.h`).
+// The CS6 tools in `ToolId` order (`crates/pictura-app/cpp/tools.h`).
 use super::*;
 
 #[rustfmt::skip]
-pub(super) static ROWS: [ToolSpec; 71] = [
+pub(super) static ROWS: [ToolSpec; 73] = [
     ToolSpec { name: "move", label: "Move", group: 1, shortcut: Some('V'), cursor: ToolCursor::SizeAll, hotspot: (2, 2), hint: "Move: drag to move the active layer", modifier_hints: MOVE_HINTS, implemented: true },
     ToolSpec { name: "marquee", label: "Rectangular Marquee", group: 2, shortcut: Some('M'), cursor: ToolCursor::Cross, hotspot: (12, 12), hint: "Marquee: drag to select a rectangle", modifier_hints: SELECTION_HINTS, implemented: true },
     ToolSpec { name: "ellipticalmarquee", label: "Elliptical Marquee", group: 2, shortcut: Some('M'), cursor: ToolCursor::Cross, hotspot: (12, 12), hint: "Elliptical Marquee: drag to select an ellipse", modifier_hints: SELECTION_HINTS, implemented: true },
@@ -74,4 +74,6 @@ pub(super) static ROWS: [ToolSpec; 71] = [
     ToolSpec { name: "hand", label: "Hand", group: 21, shortcut: Some('H'), cursor: ToolCursor::OpenHand, hotspot: (9, 2), hint: "Hand: drag to pan the canvas", modifier_hints: &[], implemented: true },
     ToolSpec { name: "rotateview", label: "Rotate View", group: 22, shortcut: Some('R'), cursor: ToolCursor::Cross, hotspot: (12, 12), hint: "Rotate View: drag to turn the canvas; Esc resets the view", modifier_hints: ROTATE_VIEW_HINTS, implemented: true },
     ToolSpec { name: "zoom", label: "Zoom", group: 23, shortcut: Some('Z'), cursor: ToolCursor::Cross, hotspot: (9, 2), hint: "Zoom: click to zoom in, Ctrl/Alt-click to zoom out", modifier_hints: &[], implemented: true },
+    ToolSpec { name: "singlerowmarquee", label: "Single Row Marquee", group: 2, shortcut: None, cursor: ToolCursor::Cross, hotspot: (12, 12), hint: "Single Row Marquee: click to select a row", modifier_hints: SELECTION_HINTS, implemented: true },
+    ToolSpec { name: "singlecolumnmarquee", label: "Single Column Marquee", group: 2, shortcut: None, cursor: ToolCursor::Cross, hotspot: (12, 12), hint: "Single Column Marquee: click to select a column", modifier_hints: SELECTION_HINTS, implemented: true },
 ];

@@ -144,6 +144,7 @@ set(PICTURA_QT_TEST_DRIVER_selection
     tst_selection_aa
     tst_selection_alt
     tst_selection_move
+    tst_single_line_marquee
     tst_selection_preview
     tst_selection_save_load
 )

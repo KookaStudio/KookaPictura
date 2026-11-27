@@ -138,8 +138,9 @@ QString toolIdName(ToolId id)
 
 QString toolCursorId(ToolId id, Qt::KeyboardModifiers mods)
 {
-    const QString base = QStringLiteral("tool.") + toolIdName(id);
-    if (id != ToolId::Marquee && id != ToolId::EllipticalMarquee) {
+    const bool line = id == ToolId::SingleRowMarquee || id == ToolId::SingleColumnMarquee;
+    const QString base = line ? QStringLiteral("tool.marquee") : QStringLiteral("tool.") + toolIdName(id);
+    if (!line && id != ToolId::Marquee && id != ToolId::EllipticalMarquee) {
         return base;
     }
     if (mods.testFlag(Qt::ShiftModifier)) {

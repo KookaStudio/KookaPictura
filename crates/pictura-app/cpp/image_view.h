@@ -288,6 +288,9 @@ public:
     void setTransformedSelectionPreview(const QList<QPolygonF>& loops);
     // Live selection shape: the rubber band, closed and clipped to the canvas.
     void setSelectionShapePreview(const QList<QPolygonF>& loops);
+    void setSelectionResultPreview(const QList<QPolygonF>& loops, const QRect& band);
+    const QPolygonF& selectionBandGuide() const { return selectionBandGuide_; }
+    bool nonLeftReleaseWhileLeftHeld() const { return nonLeftReleaseWhileLeftHeld_; }
     void clearSelectionPreview();
     // A click-driven lasso's origin: a small hollow square, fixed on screen,
     // marking the point the outline closes to. Cleared with the preview.
@@ -716,6 +719,7 @@ signals:
     // `delta`, with `mods` held; the frame fans it out for Scroll All Windows.
     void handPanned(const QPointF& delta, Qt::KeyboardModifiers mods);
     void mousePressed(const QPointF& imagePos, int button, int modifiers);
+    void pointerGestureFocusLost();
     void mouseMoved(const QPointF& imagePos);
     void mouseReleased(const QPointF& imagePos);
     // The pointer left the canvas; a hover-only affordance (the Refine Edge
@@ -738,6 +742,7 @@ signals:
     void transformCancelRequested();
 
 protected:
+    bool event(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -976,6 +981,9 @@ private:
     QRect lastPaintRect_;
     QList<QPolygonF> previewContours_;
     bool previewTransformsSelection_ = false;
+    bool previewReplacesSelection_ = false;
+    QPolygonF selectionBandGuide_;
+    bool nonLeftReleaseWhileLeftHeld_ = false;
     bool selectionPreviewClosed_ = true;
     bool selectionPreviewSolid_ = false;
     bool previewOriginActive_ = false;

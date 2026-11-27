@@ -93,6 +93,7 @@ std::unique_ptr<ToolHandler> makePerspectiveCropToolHandler(std::shared_ptr<Crop
 std::unique_ptr<ToolHandler> makeSliceToolHandler();
 std::unique_ptr<ToolHandler> makeSliceSelectToolHandler();
 std::unique_ptr<ToolHandler> makeMarqueeToolHandler(std::shared_ptr<SelectionOptions> selection);
+std::unique_ptr<ToolHandler> makeSingleLineMarqueeToolHandler(bool row, std::shared_ptr<SelectionOptions> selection);
 std::unique_ptr<ToolHandler> makeEllipticalMarqueeToolHandler(
     std::shared_ptr<SelectionOptions> selection);
 std::unique_ptr<ToolHandler> makeLassoToolHandler(std::shared_ptr<SelectionOptions> selection);
@@ -279,6 +280,8 @@ ToolController::ToolController(QObject* parent)
     registry_.registerTool(ToolId::SliceSelect, makeSliceSelectToolHandler());
     registry_.registerTool(ToolId::Marquee, makeMarqueeToolHandler(selection));
     registry_.registerTool(ToolId::EllipticalMarquee, makeEllipticalMarqueeToolHandler(ellipticalSelection));
+    registry_.registerTool(ToolId::SingleRowMarquee, makeSingleLineMarqueeToolHandler(true, selection));
+    registry_.registerTool(ToolId::SingleColumnMarquee, makeSingleLineMarqueeToolHandler(false, selection));
     registry_.registerTool(ToolId::Lasso, makeLassoToolHandler(selection));
     registry_.registerTool(ToolId::PolygonalLasso, makePolygonalLassoToolHandler(selection));
     registry_.registerTool(ToolId::MagneticLasso, makeMagneticLassoToolHandler(selection));
@@ -353,6 +356,7 @@ void ToolController::setActiveTool(ToolId id)
         emit activeToolChanged(active_);
         return;
     }
+    cancelSingleLineMarquee();
     // Drop the outgoing handler's per-tool state (in-progress polygon, warm
     // preview) before the switch, while the old tool is still active.
     if (ToolHandler* old = registry_.forTool(active_)) {
@@ -457,6 +461,7 @@ void ToolController::notifyToolSessionChanged()
 
 void ToolController::onSessionCancelled()
 {
+    cancelSingleLineMarquee();
     resetTransformUi();
     registry_.forEach([this](ToolHandler& handler) { handler.onSessionCancelled(*this); });
 }
@@ -649,6 +654,7 @@ void ToolController::bindCanvas(ImageView* canvas)
     connect(canvas_, &ImageView::mouseMoved, this, &ToolController::handleMoved);
     connect(canvas_, &ImageView::modifierKeyChanged, this, &ToolController::handleModifiers);
     connect(canvas_, &ImageView::mouseReleased, this, &ToolController::handleReleased);
+    connect(canvas_, &ImageView::pointerGestureFocusLost, this, &ToolController::cancelSingleLineMarquee);
     connect(canvas_, &ImageView::transformCommitRequested, this,
             &ToolController::commitFreeTransform);
     connect(canvas_, &ImageView::transformCancelRequested, this,
@@ -732,6 +738,7 @@ void ToolController::unbindCanvas()
     if (!canvas_) {
         return;
     }
+    cancelSingleLineMarquee();
     disconnect(canvas_, nullptr, this, nullptr);
     // A floating or tiled canvas stays visible once it is no longer active; it
     // must not keep the blank cursor a brush ring stood in for.
@@ -868,6 +875,7 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
     if (button != Qt::LeftButton) {
         return;
     }
+    ignoreRelease_ = false;
     if (canvasBrush_) {
         canvasBrushDragging_ = true;
         canvasBrush_(CanvasBrushPhase::Press, imagePos, Qt::KeyboardModifiers(modifiers));
@@ -1040,6 +1048,9 @@ void ToolController::handleModifiers(int modifiers)
 
 void ToolController::handleReleased(const QPointF& imagePos)
 {
+    if (ignoreRelease_ || ignoreSingleLineRelease()) {
+        return;
+    }
     if (canvasBrush_) {
         canvasBrushDragging_ = false;
         canvasBrush_(CanvasBrushPhase::Release, imagePos,
@@ -1126,14 +1137,6 @@ bool ToolController::handleCropKey(int key, bool shift)
             crop_->setSettings(settings);
         }
         return true;
-    }
-    return false;
-}
-
-bool ToolController::handleEscape()
-{
-    if (ToolHandler* h = registry_.forTool(active_)) {
-        return h->onEscape();
     }
     return false;
 }
