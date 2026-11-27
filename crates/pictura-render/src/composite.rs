@@ -484,9 +484,10 @@ pub(crate) fn blend_if_factor(view: Option<&BlendIf>, cs: [f32; 3], backdrop: [f
         if b0 > b1 || b1 > w0 || w0 > w1 {
             return 1.0;
         }
-        let x = value.clamp(0.0, 1.0) * 255.0;
+        let value = value.clamp(0.0, 1.0);
+        let x = value * 255.0;
         let lower = if b0 == b1 {
-            if x >= f32::from(b0) {
+            if value >= f32::from(b0) / 255.0 {
                 1.0
             } else {
                 0.0
@@ -495,7 +496,7 @@ pub(crate) fn blend_if_factor(view: Option<&BlendIf>, cs: [f32; 3], backdrop: [f
             ((x - f32::from(b0)) / f32::from(b1 - b0)).clamp(0.0, 1.0)
         };
         let upper = if w0 == w1 {
-            if x <= f32::from(w1) {
+            if value <= f32::from(w1) / 255.0 {
                 1.0
             } else {
                 0.0
@@ -505,7 +506,8 @@ pub(crate) fn blend_if_factor(view: Option<&BlendIf>, cs: [f32; 3], backdrop: [f
         };
         lower * upper
     };
-    let gray = |c: [f32; 3]| 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    // Anchor the luma at green so neutral samples stay exact at hard thresholds.
+    let gray = |[r, g, b]: [f32; 3]| g + 0.299 * (r - g) + 0.114 * (b - g);
     let mut factor =
         gate(view.composite_source, gray(cs)) * gate(view.composite_dest, gray(backdrop));
     for (i, (source, dest)) in view.channel_ranges.iter().enumerate().take(3) {
