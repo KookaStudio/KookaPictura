@@ -955,6 +955,9 @@ free	cache_levels	cache_levels	api/paint_bridge.h	pictura_app/src/cxxqt_object/p
 free	calibrated_ruler_length	calibrated_ruler_length	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	clear_markers	clear_markers	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	clear_ruler	clear_ruler	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
+free	clone_overlay_cancel	clone_overlay_cancel	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
+free	clone_overlay_source	clone_overlay_source	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
+free	clone_overlay_test_delay	clone_overlay_test_delay	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	color_replacement_available	color_replacement_available	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	color_replacement_mode_allowed	color_replacement_mode_allowed	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	color_replacement_mode_count	color_replacement_mode_count	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
@@ -998,6 +1001,7 @@ free	healing_active	healing_active	api/paint_bridge.h	pictura_app/src/cxxqt_obje
 free	healing_begin	healing_begin	api/paint_bridge.h	pictura_app/src/cxxqt_object/healing.cxxqt.h
 free	healing_cancel	healing_cancel	api/paint_bridge.h	pictura_app/src/cxxqt_object/healing.cxxqt.h
 free	healing_commit	healing_commit	api/paint_bridge.h	pictura_app/src/cxxqt_object/healing.cxxqt.h
+free	healing_commit_transformed	healing_commit_transformed	api/paint_bridge.h	pictura_app/src/cxxqt_object/healing.cxxqt.h
 free	healing_dab	healing_dab	api/paint_bridge.h	pictura_app/src/cxxqt_object/healing.cxxqt.h
 free	history_brush_source_snapshot	history_brush_source_snapshot	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	history_brush_source_state	history_brush_source_state	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
