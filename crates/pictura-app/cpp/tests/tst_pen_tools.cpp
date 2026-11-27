@@ -548,10 +548,8 @@ void PenToolsTest::magneticTrace()
     frame.setActiveTool(pictura::ToolId::FreeformPen);
     click(f, QPointF(10, 45));
     f.canvas->mouseMoved(QPointF(40, 45));
-    QTest::qWait(QApplication::doubleClickInterval() + 1);
     click(f, QPointF(40, 45));
     f.canvas->mouseMoved(QPointF(70, 45));
-    QTest::qWait(QApplication::doubleClickInterval() + 1);
     click(f, QPointF(70, 45));
     f.canvas->setFocus();
     QTest::keyClick(f.canvas, Qt::Key_Delete);
@@ -676,10 +674,8 @@ void PenToolsTest::magneticClose()
     for (int i = 0; i < 2; ++i) {
         click(f, QPointF(20, 20));
         f.canvas->mouseMoved(QPointF(80, 20));
-        QTest::qWait(QApplication::doubleClickInterval() + 1);
         click(f, QPointF(80, 20));
         f.canvas->mouseMoved(QPointF(80, 80));
-        QTest::qWait(QApplication::doubleClickInterval() + 1);
         click(f, QPointF(80, 80), i ? Qt::AltModifier : Qt::NoModifier);
         click(f, QPointF(80, 80), i ? Qt::AltModifier : Qt::NoModifier);
         QVERIFY(pictura::path_subpath_closed(*f.view, i));
@@ -704,11 +700,9 @@ void PenToolsTest::magneticAlt()
     QVERIFY(QTest::qWaitForWindowActive(&frame));
     frame.setActiveTool(pictura::ToolId::FreeformPen);
     click(f, QPointF(10, 10));
-    QTest::qWait(QApplication::doubleClickInterval() + 1);
     QTest::keyPress(f.canvas, Qt::Key_Alt, Qt::AltModifier);
     f.drag({QPointF(20, 10), QPointF(30, 30), QPointF(40, 10)}, Qt::AltModifier);
     QTest::keyRelease(f.canvas, Qt::Key_Alt, Qt::NoModifier);
-    QTest::qWait(QApplication::doubleClickInterval() + 1);
     click(f, QPointF(70, 20), Qt::AltModifier);
     f.canvas->setFocus();
     QTest::keyClick(f.canvas, Qt::Key_Return);
@@ -749,10 +743,8 @@ void PenToolsTest::magneticModes()
         const int layers = f.view->layer_count();
         click(f, QPointF(10, 10));
         f.canvas->mouseMoved(QPointF(70, 10));
-        QTest::qWait(QApplication::doubleClickInterval() + 1);
         click(f, QPointF(70, 10));
         f.canvas->mouseMoved(QPointF(70, 70));
-        QTest::qWait(QApplication::doubleClickInterval() + 1);
         click(f, QPointF(70, 70));
         click(f, QPointF(70, 70));
         QCOMPARE(f.view->history_index(), before + 1);
