@@ -167,6 +167,9 @@ private slots:
     void thresholdHistogramUsesRasterMask();
     void thresholdHistogramUsesQuickMask();
     void thresholdHistogramShowsEmptyInput();
+    void shadowsHighlightsAdvanced();
+    void shadowsHighlightsSelection();
+    void shadowsHighlightsDepth();
     void genericDialogRangesMatchLayout();
     void handLaidDialogRangesMatchLayout();
 
@@ -1349,6 +1352,8 @@ void ImageAdjustmentsTest::thresholdHistogramShowsEmptyInput()
     compareThresholdBins(*histogram, {});
     dialog->reject();
 }
+
+#include "tst_image_adjustments_shadows_highlights_cases.cpp"
 
 PICTURA_QT_TEST_MAIN(ImageAdjustmentsTest)
 #include "tst_image_adjustments.moc"

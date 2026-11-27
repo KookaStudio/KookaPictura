@@ -75,7 +75,7 @@ fn adjustment_candidates_preserve_raw_bytes() {
     for key in [
         *b"levl", *b"curv", *b"brit", *b"expA", *b"vibA", *b"hue2", *b"hue ", *b"blwh", *b"phfl",
         *b"blnc", *b"mixr", *b"grdm", *b"gdrm", *b"invr", *b"nvrt", *b"post", *b"thrs", *b"selc",
-        *b"clrL", *b"SoCo", *b"GdFl", *b"PtFl", *b"shdH",
+        *b"clrL", *b"SoCo", *b"GdFl", *b"PtFl", *b"shdH", *b"shd2",
     ] {
         let original = block(&key, vec![0, 0, 231, 19, 11, 0]);
         let doc = document(layer(Some(original.clone()), Vec::new()));
@@ -575,4 +575,63 @@ fn content_writer_preserves_serialized_baselines() {
             assert_eq!(a.channels(), b.channels());
         }
     }
+}
+
+#[test]
+fn shadow_highlight_blocks_round_trip() {
+    use pictura_codec::{encode_shadows_highlights, encode_shadows_highlights_local};
+    use pictura_core::{ShadowsHighlightsOptions, ShadowsHighlightsParams};
+
+    let legacy = encode_shadows_highlights(90, 25);
+    assert_eq!(
+        decode_adjustment(&legacy),
+        Some(Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
+            shadows_amount: 90.0,
+            highlights_amount: 25.0,
+            local: None,
+        })),
+    );
+
+    let params = ShadowsHighlightsParams {
+        shadows_amount: 61.0,
+        highlights_amount: 24.0,
+        local: Some(ShadowsHighlightsOptions {
+            shadows_width: 38.0,
+            shadows_radius: 155.0,
+            highlights_width: 52.0,
+            highlights_radius: 8.0,
+            brightness: -9.0,
+            color_correction: 21.0,
+            midtone_contrast: -32.0,
+            black_clip: 0.02,
+            white_clip: 10.0,
+        }),
+    };
+    let expanded = encode_shadows_highlights_local(params).unwrap();
+    let mut fractional = params;
+    fractional.shadows_amount = 12.5;
+    assert!(encode_shadows_highlights_local(fractional).is_none());
+    fractional = params;
+    fractional.local.as_mut().unwrap().shadows_radius = 1.5;
+    assert!(encode_shadows_highlights_local(fractional).is_none());
+    fractional = params;
+    fractional.local.as_mut().unwrap().black_clip = 0.015;
+    assert!(encode_shadows_highlights_local(fractional).is_none());
+    let expected = Some(Adjustment::ShadowsHighlights(params));
+    assert_eq!(decode_adjustment(&expanded), expected);
+    let doc = document(layer(Some(expanded.clone()), Vec::new()));
+    for bytes in [write_psd(&doc).unwrap(), write_psb(&doc).unwrap()] {
+        let loaded = read_psd(&bytes).unwrap();
+        assert_eq!(
+            decode_adjustment(loaded.layers[0].adjustment().unwrap()),
+            expected
+        );
+    }
+
+    let mut unsupported = expanded.data.to_vec();
+    unsupported[5] = 2;
+    assert!(decode_adjustment(&block(b"shd2", unsupported)).is_none());
+    let mut malformed = expanded.data.to_vec();
+    malformed.pop();
+    assert!(decode_adjustment(&block(b"shd2", malformed)).is_none());
 }

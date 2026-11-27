@@ -83,7 +83,10 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     controls_ = new AdjustmentControls(this);
     controls_->setCurveSource(
         [this](int channel) { return QString(image_adjustment_curve(slice(block_), channel)); });
-    controls_->setPage(image_adjustment_page(slice(block_), cmyk_));
+    if (block_.startsWith("shd2")) {
+        advancedControls_ = new AdjustmentControls(this);
+    }
+    reloadFromBlock();
     if (view_) {
         controls_->refreshThresholdHistogram(*view_);
     }
@@ -91,6 +94,17 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     setWindowTitle(title_);
     addPresetRow(left);
     left->addWidget(controls_);
+    if (advancedControls_) {
+        auto* disclosure = new QCheckBox(tr("Show More Options"), this);
+        disclosure->setObjectName(QStringLiteral("shadowHighlightMoreOptions"));
+        left->addWidget(disclosure);
+        left->addWidget(advancedControls_);
+        advancedControls_->hide();
+        connect(disclosure, &QCheckBox::toggled, this, [this](bool expanded) {
+            advancedControls_->setVisible(expanded);
+            adjustSize();
+        });
+    }
     left->addStretch(1);
     left->addWidget(previewCheck(), 0, Qt::AlignRight);
     outer->addLayout(left, 1);
@@ -99,10 +113,13 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     outer->addLayout(buttons);
     setMinimumWidth(420);
 
-    connect(controls_, &AdjustmentControls::valueChanged, this,
-            [this](const QString& key, double value) {
-                edited(bytes(image_adjustment_set(slice(block_), key, value, cmyk_)));
-            });
+    const auto editControl = [this](const QString& key, double value) {
+        edited(bytes(image_adjustment_set(slice(block_), key, value, cmyk_)));
+    };
+    connect(controls_, &AdjustmentControls::valueChanged, this, editControl);
+    if (advancedControls_) {
+        connect(advancedControls_, &AdjustmentControls::valueChanged, this, editControl);
+    }
     connect(controls_, &AdjustmentControls::curveChanged, this,
             [this](int channel, const QString& points) {
                 edited(bytes(image_adjustment_set_curve(slice(block_), channel, points)));
@@ -276,9 +293,28 @@ bool AdjustmentDialog::setBlock(const QByteArray& next)
 
 void AdjustmentDialog::reloadFromBlock()
 {
-    if (controls_) {
-        controls_->setPage(image_adjustment_page(slice(block_), cmyk_));
+    if (!controls_) {
+        return;
     }
+    const QStringList rows = page();
+    if (!advancedControls_) {
+        controls_->setPage(rows);
+        return;
+    }
+    const bool gray = view_ && image_mode(*view_) == QLatin1String("grayscale");
+    QStringList basic;
+    QStringList advanced;
+    for (const QString& row : rows) {
+        const QString key = row.section(QLatin1Char('\t'), 1, 1);
+        if (!row.startsWith(QLatin1String("slider\t")) || key == QLatin1String("shadowAmount")
+            || key == QLatin1String("highlightAmount")) {
+            basic.append(row);
+        } else if (key != (gray ? QLatin1String("colorCorrection") : QLatin1String("brightness"))) {
+            advanced.append(row);
+        }
+    }
+    controls_->setPage(basic);
+    advancedControls_->setPage(advanced);
 }
 
 PresetCombo* AdjustmentDialog::addPresetRow(QVBoxLayout* layout)
@@ -463,9 +499,7 @@ void AdjustmentDialog::edited(const QByteArray& next)
     // A refused edit (Levels' input black past its white) keeps the last
     // good block; reload the controls to match it.
     if (next.isEmpty()) {
-        if (controls_) {
-            controls_->setPage(image_adjustment_page(slice(block_), cmyk_));
-        }
+        reloadFromBlock();
         return;
     }
     block_ = next;
@@ -618,7 +652,12 @@ QWidget* AdjustmentDialog::controlForTest(const QString& key) const
     if (key == QLatin1String("preset") && preset_) {
         return preset_;
     }
-    return controls_ ? controls_->controlForTest(key) : nullptr;
+    if (controls_) {
+        if (QWidget* basic = controls_->controlForTest(key)) {
+            return basic;
+        }
+    }
+    return advancedControls_ ? advancedControls_->controlForTest(key) : nullptr;
 }
 
 std::unique_ptr<AdjustmentDialog> makeAdjustmentDialog(const QString& kind, PictureView* view,

@@ -127,8 +127,10 @@ pub(super) fn apply_op(
         ActiveOp::Adjustment(adjustment) => {
             let rect = layer.rect;
             let mode = pictura_render::document_color_mode(doc).into();
-            pictura_render::apply_adjustment_region_in_mode(
-                &mut layer, adjustment, mask, rect, None, mode,
+            let native = pictura_render::adjustment_native_target(doc, path, adjustment)
+                .map_err(commit_error)?;
+            pictura_render::apply_adjustment_region_with_native(
+                &mut layer, adjustment, mask, rect, None, mode, native,
             )
             .map_err(commit_error)?;
         }

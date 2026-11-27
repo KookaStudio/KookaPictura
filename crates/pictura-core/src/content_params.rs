@@ -149,14 +149,67 @@ pub struct VibranceParams {
     pub saturation: i16,
 }
 
-/// Shadows/Highlights (`shdH`): the two always-visible amount sliders in
-/// `0..=100`. A pointwise approximation of CS6's local operator (see
-/// `docs/04-image-ops/adjustments/shadow-highlight.md`); the surround blur and
-/// advanced options are not modelled.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// A legacy pointwise adjustment when `local` is absent, otherwise a
+/// neighborhood-based Shadows/Highlights operation.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct ShadowsHighlightsParams {
     pub shadows_amount: f64,
     pub highlights_amount: f64,
+    pub local: Option<ShadowsHighlightsOptions>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShadowsHighlightsOptions {
+    pub shadows_width: f64,
+    pub shadows_radius: f64,
+    pub highlights_width: f64,
+    pub highlights_radius: f64,
+    pub brightness: f64,
+    pub color_correction: f64,
+    pub midtone_contrast: f64,
+    pub black_clip: f64,
+    pub white_clip: f64,
+}
+
+impl ShadowsHighlightsOptions {
+    pub const FACTORY: Self = Self {
+        shadows_width: 50.0,
+        shadows_radius: 30.0,
+        highlights_width: 50.0,
+        highlights_radius: 30.0,
+        brightness: 0.0,
+        color_correction: 20.0,
+        midtone_contrast: 0.0,
+        black_clip: 0.01,
+        white_clip: 0.01,
+    };
+
+    pub fn is_valid(self) -> bool {
+        [self.shadows_width, self.highlights_width]
+            .into_iter()
+            .all(|v| (0.0..=100.0).contains(&v))
+            && [self.shadows_radius, self.highlights_radius]
+                .into_iter()
+                .all(|v| (0.0..=500.0).contains(&v))
+            && [
+                self.brightness,
+                self.color_correction,
+                self.midtone_contrast,
+            ]
+            .into_iter()
+            .all(|v| (-100.0..=100.0).contains(&v))
+            && [self.black_clip, self.white_clip]
+                .into_iter()
+                .all(|v| (0.0..=10.0).contains(&v))
+    }
+}
+
+impl ShadowsHighlightsParams {
+    pub fn is_valid(self) -> bool {
+        (0.0..=100.0).contains(&self.shadows_amount)
+            && (0.0..=100.0).contains(&self.highlights_amount)
+            && self.local.is_none_or(ShadowsHighlightsOptions::is_valid)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -175,6 +228,7 @@ pub struct ColorBalanceParams {
 pub enum ColorBalanceMode {
     #[default]
     Rgb,
+    Grayscale,
     Lab,
     Cmyk,
 }
@@ -182,6 +236,7 @@ pub enum ColorBalanceMode {
 impl From<crate::ColorMode> for ColorBalanceMode {
     fn from(mode: crate::ColorMode) -> Self {
         match mode {
+            crate::ColorMode::Grayscale => Self::Grayscale,
             crate::ColorMode::Lab => Self::Lab,
             crate::ColorMode::Cmyk => Self::Cmyk,
             _ => Self::Rgb,

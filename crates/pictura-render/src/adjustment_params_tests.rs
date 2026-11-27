@@ -263,7 +263,9 @@ fn exposure_specs_carry_the_dialog_precision() {
     let spec = |key: &str| {
         let param = editor.params.iter().find(|p| p.key == key).unwrap();
         match param.kind {
-            ParamKind::Slider { min, max, decimals } => (min, max, decimals),
+            ParamKind::Slider {
+                min, max, decimals, ..
+            } => (min, max, decimals),
             _ => panic!("{key} is a slider"),
         }
     };

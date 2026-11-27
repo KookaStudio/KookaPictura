@@ -134,6 +134,7 @@ fn every_kernel() -> Vec<(&'static str, Adjustment)> {
             Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
                 shadows_amount: 40.0,
                 highlights_amount: 30.0,
+                local: None,
             }),
         ),
         (

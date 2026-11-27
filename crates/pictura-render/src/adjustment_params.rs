@@ -28,6 +28,7 @@ pub enum ParamKind {
         min: f64,
         max: f64,
         decimals: u8,
+        unit: &'static str,
     },
     Check,
     /// A menu whose index is the value.
@@ -110,21 +111,23 @@ fn slider(key: &str, label: &str, field: Field, (min, max): (f64, f64), default:
         key: key.into(),
         label: label.into(),
         field,
-        kind: ParamKind::Slider { min, max, decimals },
+        kind: ParamKind::Slider {
+            min,
+            max,
+            decimals,
+            unit: "",
+        },
         group: None,
         default,
     }
 }
 
 /// `spec` shown with `decimals` places instead of its field's default.
-fn with_decimals(spec: Spec, decimals: u8) -> Spec {
-    match spec.kind {
-        ParamKind::Slider { min, max, .. } => Spec {
-            kind: ParamKind::Slider { min, max, decimals },
-            ..spec
-        },
-        _ => spec,
+fn with_decimals(mut spec: Spec, places: u8) -> Spec {
+    if let ParamKind::Slider { decimals, .. } = &mut spec.kind {
+        *decimals = places;
     }
+    spec
 }
 
 fn check(key: &str, label: &str, field: Field, default: bool) -> Spec {
@@ -235,10 +238,16 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment, cmyk: bool) -> Option<
                 ),
             ],
         ),
-        Adjustment::ShadowsHighlights(_) => plain(
-            "Shadows/Highlights",
-            vec![
-                slider("shadowAmount", "Shadows Amount", U16(0), (0.0, 100.0), 0.0),
+        Adjustment::ShadowsHighlights(params) => {
+            let expanded = params.local.is_some();
+            let mut specs = vec![
+                slider(
+                    "shadowAmount",
+                    "Shadows Amount",
+                    U16(0),
+                    (0.0, 100.0),
+                    if expanded { 35.0 } else { 0.0 },
+                ),
                 slider(
                     "highlightAmount",
                     "Highlights Amount",
@@ -246,8 +255,74 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment, cmyk: bool) -> Option<
                     (0.0, 100.0),
                     0.0,
                 ),
-            ],
-        ),
+            ];
+            if expanded {
+                specs.extend([
+                    slider(
+                        "shadowWidth",
+                        "Shadows Tonal Width",
+                        U16(6),
+                        (0.0, 100.0),
+                        50.0,
+                    ),
+                    slider("shadowRadius", "Shadows Radius", U16(8), (0.0, 500.0), 30.0),
+                    slider(
+                        "highlightWidth",
+                        "Highlights Tonal Width",
+                        U16(10),
+                        (0.0, 100.0),
+                        50.0,
+                    ),
+                    slider(
+                        "highlightRadius",
+                        "Highlights Radius",
+                        U16(12),
+                        (0.0, 500.0),
+                        30.0,
+                    ),
+                    slider("brightness", "Brightness", I16(14), (-100.0, 100.0), 0.0),
+                    slider(
+                        "colorCorrection",
+                        "Color Correction",
+                        I16(16),
+                        (-100.0, 100.0),
+                        20.0,
+                    ),
+                    slider(
+                        "midtoneContrast",
+                        "Midtone Contrast",
+                        I16(18),
+                        (-100.0, 100.0),
+                        0.0,
+                    ),
+                    slider(
+                        "blackClip",
+                        "Black Clip",
+                        U16Hundredths(20),
+                        (0.0, 10.0),
+                        0.01,
+                    ),
+                    slider(
+                        "whiteClip",
+                        "White Clip",
+                        U16Hundredths(22),
+                        (0.0, 10.0),
+                        0.01,
+                    ),
+                ]);
+            }
+            for spec in &mut specs {
+                if let ParamKind::Slider { unit, .. } = &mut spec.kind {
+                    *unit = match spec.key.as_str() {
+                        "shadowAmount" | "highlightAmount" | "shadowWidth" | "highlightWidth"
+                        | "blackClip" | "whiteClip" => "%",
+                        "shadowRadius" | "highlightRadius" => "px",
+                        _ => "",
+                    };
+                }
+            }
+            plain("Shadows/Highlights", specs)
+        }
         Adjustment::HueSaturation(_) => {
             // Master at 10..16, then range k's Hue/Saturation/Lightness at
             // 16 + 14k + 8. The Master keys stay unprefixed.

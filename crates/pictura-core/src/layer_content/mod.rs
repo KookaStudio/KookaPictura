@@ -270,6 +270,7 @@ impl Layer {
                 | b"phfl"
                 | b"vibA"
                 | b"shdH"
+                | b"shd2"
                 | b"blwh"
                 | b"gdrm"
                 | b"grdm"

@@ -177,6 +177,7 @@ private:
     bool previewSuspended_ = false;
     int vibranceAutoAmount_ = 0;
     AdjustmentControls* controls_ = nullptr;
+    AdjustmentControls* advancedControls_ = nullptr;
     PresetCombo* preset_ = nullptr;
     QCheckBox* preview_ = nullptr;
     QTimer* previewTimer_ = nullptr;

@@ -2,7 +2,7 @@
 //! the block a new adjustment layer carries. The catalogue rows point at these
 //! hooks directly.
 
-use pictura_core::AdjustmentData;
+use pictura_core::{AdjustmentData, ShadowsHighlightsOptions, ShadowsHighlightsParams};
 use pictura_core::{GradientMapParams, GradientStop, SelectiveColorMethod, SelectiveRange};
 
 use crate::DescValue;
@@ -66,6 +66,38 @@ pub fn encode_shadows_highlights(shadows: u16, highlights: u16) -> AdjustmentDat
         key: *b"shdH",
         data: data.into(),
     }
+}
+
+pub fn encode_shadows_highlights_local(params: ShadowsHighlightsParams) -> Option<AdjustmentData> {
+    let local = params.local.filter(|_| params.is_valid())?;
+    let fields = [
+        params.shadows_amount,
+        params.highlights_amount,
+        1.0,
+        local.shadows_width,
+        local.shadows_radius,
+        local.highlights_width,
+        local.highlights_radius,
+        local.brightness,
+        local.color_correction,
+        local.midtone_contrast,
+        local.black_clip * 100.0,
+        local.white_clip * 100.0,
+    ];
+    if fields[..10].iter().any(|v| *v != v.round())
+        || (local.black_clip * 100.0).round() / 100.0 != local.black_clip
+        || (local.white_clip * 100.0).round() / 100.0 != local.white_clip
+    {
+        return None;
+    }
+    let data: Vec<u8> = fields
+        .into_iter()
+        .flat_map(|v| (v.round() as i16).to_be_bytes())
+        .collect();
+    Some(AdjustmentData {
+        key: *b"shd2",
+        data: data.into(),
+    })
 }
 
 pub fn brightness_contrast_dialog(_ctx: Defaults) -> AdjustmentData {
@@ -154,7 +186,12 @@ pub fn selective_color_dialog(_ctx: Defaults) -> AdjustmentData {
 }
 
 pub fn shadows_highlights_dialog(_ctx: Defaults) -> AdjustmentData {
-    encode_shadows_highlights(0, 0)
+    encode_shadows_highlights_local(ShadowsHighlightsParams {
+        shadows_amount: 35.0,
+        highlights_amount: 0.0,
+        local: Some(ShadowsHighlightsOptions::FACTORY),
+    })
+    .expect("valid Shadows/Highlights factory settings")
 }
 
 pub fn invert_layer(_ctx: Defaults) -> AdjustmentData {
@@ -291,10 +328,6 @@ mod tests {
         let ctx = Defaults::rgb();
         assert_eq!(threshold_dialog(ctx), encode_threshold(128));
         assert_eq!(posterize_dialog(ctx), encode_posterize(4));
-        assert_eq!(
-            shadows_highlights_dialog(ctx),
-            encode_shadows_highlights(0, 0)
-        );
         assert_eq!(levels_dialog(ctx), levels_identity());
         assert_eq!(exposure_dialog(ctx), exposure_neutral());
         assert_eq!(

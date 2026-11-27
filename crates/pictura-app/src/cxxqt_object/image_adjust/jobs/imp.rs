@@ -100,18 +100,21 @@ pub(super) fn adjust_preview(
 ) -> Option<AdjustResult> {
     let mask = selection;
     let mode = pictura_render::document_color_mode(&doc).into();
+    let native =
+        pictura_render::adjustment_native_target(&doc, &request.path, &request.adjustment).ok()?;
     let layer = pictura_render::resolve_path_mut(&mut doc, &request.path)?;
     if layer.is_group() || layer.has_adjustment_content() || layer_pixel_locked(layer) {
         return None;
     }
     let rect = layer.rect;
-    pictura_render::apply_adjustment_region_in_mode(
+    pictura_render::apply_adjustment_region_with_native(
         layer,
         &request.adjustment,
         mask.as_ref(),
         rect,
         None,
         mode,
+        native,
     )
     .ok()?;
     let layer = layer.clone();

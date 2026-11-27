@@ -17,6 +17,7 @@ set(PICTURA_QT_TEST_DRIVERS
 )
 set(PICTURA_QT_TEST_INCLUDED_SOURCES
     tst_actions_panel_cases.cpp
+    tst_image_adjustments_shadows_highlights_cases.cpp
     tst_image_adjustments_vibrance_cases.cpp
 )
 set(PICTURA_QT_TEST_DRIVER_shell

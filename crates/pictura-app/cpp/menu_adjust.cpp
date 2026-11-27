@@ -19,6 +19,7 @@
 #include "panels/channels_panel.h"
 #include "panels/properties_panel.h"
 #include "api/document_api.h"
+#include "api/document_bridge.h"
 #include "fill_layer_editor.h"
 #include "hdr_toning_dialog.h"
 #include "match_color_dialog.h"
@@ -76,10 +77,18 @@ void MenuRegistrar::wireImageAdjustments()
                                : commandIdForPath({QStringLiteral("Image"),
                                                    QStringLiteral("Adjustments"), entry.title});
         commands_->setImplemented(id, true);
+        const bool shadowsHighlights = kind == QLatin1String("shadows-highlights");
+        const auto entryReady = [this, ready, shadowsHighlights]() {
+            if (!ready()) {
+                return false;
+            }
+            const int depth = image_depth_bits(*activeView());
+            return !shadowsHighlights || depth == 8 || depth == 16;
+        };
         const bool needsComposite = entry.image != QLatin1String("root")
                                     && compositeOnly.contains(entry.title);
-        commands_->setEnabledProvider(id, [this, ready, compositeRgb, needsComposite, kind]() {
-            return ready() && (!needsComposite || compositeRgb())
+        commands_->setEnabledProvider(id, [this, entryReady, compositeRgb, needsComposite, kind]() {
+            return entryReady() && (!needsComposite || compositeRgb())
                    && adjustmentChannelAvailable(kind, activeView(), panels_);
         });
         if (entry.image != QLatin1String("dialog")) {
@@ -96,13 +105,13 @@ void MenuRegistrar::wireImageAdjustments()
         // CS6 marks every dialog-opening entry with an ellipsis.
         const QString leaf = entry.title;
         commands_->setLabelProvider(id, [leaf]() { return commandDisplayText(leaf + QStringLiteral("…")); });
-        commands_->setHandler(id, [this, kind]() {
+        commands_->setHandler(id, [this, kind, entryReady]() {
             PictureView* view = activeView();
             if (!view || !adjustmentChannelAvailable(kind, view, panels_)
                 || (adjustmentRequiresCompositeChannel(kind) && filter_target_smart(*view))) {
                 return;
             }
-            if (!filter_target_ready(*view)) {
+            if (!entryReady()) {
                 reportFilterRefusal(view);
                 return;
             }

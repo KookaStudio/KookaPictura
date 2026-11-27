@@ -62,7 +62,17 @@ pub fn apply_with_coverage_in_mode(
         Adjustment::PhotoFilter(p) => photo_filter(p, buf, n),
         Adjustment::ChannelMixer(p) => channel_mixer(p, buf, n),
         Adjustment::Vibrance(p) => vibrance(p, buf, n),
-        Adjustment::ShadowsHighlights(p) => shadows_highlights(p, buf, n),
+        Adjustment::ShadowsHighlights(p) => match p.local {
+            Some(_) => crate::shadow_highlight::apply(
+                p,
+                buf.data.as_mut_slice(),
+                buf.width as usize,
+                buf.height as usize,
+                mode,
+                256,
+            ),
+            None => shadows_highlights(p, buf, n),
+        },
         Adjustment::ColorBalance(p) => color_balance(p, buf, n, mode),
         Adjustment::SelectiveColor(p) => selective_color(p, buf, n),
         Adjustment::Auto(kind) => auto(*kind, buf, n, coverage),

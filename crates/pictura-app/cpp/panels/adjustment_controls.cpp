@@ -181,6 +181,12 @@ void AdjustmentControls::addSlider(const QStringList& cells, bool threshold)
     head->addWidget(new QLabel(cells.value(2) + QLatin1Char(':'), holder));
     head->addStretch(1);
     head->addWidget(spin);
+    const QString unit = cells.value(9);
+    if (!unit.isEmpty()) {
+        auto* label = new QLabel(unit, holder);
+        label->setObjectName(QStringLiteral("adjustmentUnit"));
+        head->addWidget(label);
+    }
     column->addLayout(head);
     if (threshold) {
         thresholdHistogram_ = new HistogramView(holder);
