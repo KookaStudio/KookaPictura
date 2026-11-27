@@ -432,6 +432,7 @@ void PathComponentTransformTest::targetChangeCancels()
     drawPaths(f);
     const QPointF original = anchor(f, 0, 0);
     const int before = f.view->history_index();
+    const int states = f.view->history_count();
     QVERIFY(dispatch(f, "edit.transform.path.scale"));
     QVERIFY(f.tools->setTransformWidth(200.0, false));
     QVERIFY(pictura::paths_set_active(*f.view, -2));
@@ -445,7 +446,13 @@ void PathComponentTransformTest::targetChangeCancels()
     QVERIFY(f.frame.registry()->dispatch(QStringLiteral("edit.undo")));
     QVERIFY(!f.view->transform_session_active());
     QCOMPARE(anchor(f, 0, 0), original);
+    QCOMPARE(f.view->history_index(), before - 1);
+    QCOMPARE(f.view->history_count(), states);
+    QVERIFY(f.view->redo());
+    QVERIFY(!f.view->transform_session_active());
+    QCOMPARE(anchor(f, 0, 0), original);
     QCOMPARE(f.view->history_index(), before);
+    QCOMPARE(f.view->history_count(), states);
     const int originalIndex = f.frame.activeDocumentIndex();
     Fixture other(*window_, seed(), QStringLiteral("path_transform_other_document"));
     QVERIFY(other.ok());
