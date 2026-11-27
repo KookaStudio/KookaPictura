@@ -14,4 +14,4 @@
 ## 3. Integration and verification
 
 - [x] 3.1 Review and update ROADMAP.md and PARITY.md for changed feature coverage.
-- [ ] 3.2 Build the completed implementation, run the planned Qt suite and applicable repository gates, and resolve any failures. This verification is deferred by instruction.
+- [x] 3.2 Build the completed implementation, run the planned Qt suite and applicable repository gates, and resolve any failures.
