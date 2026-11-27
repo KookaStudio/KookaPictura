@@ -18,7 +18,6 @@
 #include <QtGui/QAction>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QToolButton>
-#include <QtWidgets/QTreeView>
 #include <limits>
 
 class ContentAwareScaleTest : public QObject {
@@ -182,9 +181,11 @@ void ContentAwareScaleTest::refusesTargets()
     QVERIFY(!action->isEnabled());
     window_->closeDocument(window_->activeDocumentIndex(), false);
     for (int depth : {16, 32}) {
-        QVERIFY(window_->newDocument(QStringLiteral("Depth"), 40, 30, QStringLiteral("rgb"), depth,
+        QVERIFY(window_->newDocument(QStringLiteral("Depth"), 40, 30, QStringLiteral("rgb"), 8,
                                      QStringLiteral("white")));
         view = window_->activeView();
+        QVERIFY(pictura::convert_image_depth(*view, depth));
+        QCOMPARE(view->document_depth_bits(), depth);
         const QString path = QString::number(view->add_layer(0));
         window_->selectLayerPath(path);
         QVERIFY(view->select_rect(1, 1, 8, 8, QStringLiteral("new"), 0.0));
@@ -232,8 +233,9 @@ void ContentAwareScaleTest::selectionLimitsTarget()
     QVERIFY(coverage > 0 && coverage < 255);
     QVERIFY(beginScale());
     auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools->setTransformPivotPreset(0));
     QVERIFY(tools->setTransformWidth(50.0, false));
-    QVERIFY(tools->setTransformPosition(18.0, 13.0));
+    QVERIFY(tools->setTransformPosition(17.0, 8.0));
     auto* commit = window_->findChild<QToolButton*>(QStringLiteral("optionsContentAwareCommit"));
     QVERIFY(commit);
     QTRY_VERIFY_WITH_TIMEOUT(commit->isEnabled(), 10000);
@@ -293,13 +295,9 @@ void ContentAwareScaleTest::exclusiveSession()
     QCOMPARE(view->history_count(), history + 1);
 
     auto* panel = window_->findChild<pictura::LayersPanel*>();
-    auto* tree = panel ? panel->findChild<QTreeView*>() : nullptr;
-    QVERIFY(panel && tree);
+    QVERIFY(panel);
     const auto clickOther = [&]() {
-        const QRect row = panel->rowViewportRectForTest(QStringLiteral("0"));
-        QVERIFY(row.isValid());
-        QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
-                          QPoint(row.right() - 10, row.center().y()));
+        QVERIFY(panel->clickRowForTest(QStringLiteral("0")));
         QCoreApplication::processEvents();
     };
     QVERIFY(beginScale());
@@ -355,6 +353,7 @@ void ContentAwareScaleTest::protectOffsetLayer()
     auto* protect = window_->findChild<QComboBox*>(QStringLiteral("optionsContentAwareProtect"));
     auto* commit = window_->findChild<QToolButton*>(QStringLiteral("optionsContentAwareCommit"));
     QVERIFY(protect && commit);
+    QVERIFY(tools->setTransformPivotPreset(0));
     QVERIFY(tools->setTransformWidth(91.6666667, false));
     QTRY_VERIFY_WITH_TIMEOUT(commit->isEnabled(), 10000);
     const QImage plain = pictura::content_aware_test::previewImage(*view);
@@ -376,6 +375,9 @@ void ContentAwareScaleTest::supersededPreview()
     auto* view = window_->activeView();
     auto* tools = window_->findChild<pictura::ToolController*>();
     QVERIFY(beginScale());
+    auto* commit = window_->findChild<QToolButton*>(QStringLiteral("optionsContentAwareCommit"));
+    QVERIFY(commit);
+    QTRY_VERIFY_WITH_TIMEOUT(commit->isEnabled(), 10000);
     pictura::content_aware_test::holdJobs(*view, true);
     QVERIFY(tools->setTransformWidth(50.0, false));
     const quint64 older = pictura::content_aware_test::currentGeneration(*view);
@@ -387,8 +389,6 @@ void ContentAwareScaleTest::supersededPreview()
     pictura::content_aware_test::releaseJob(*view, older);
     QTRY_VERIFY_WITH_TIMEOUT(pictura::content_aware_test::jobFinished(*view, older), 10000);
     QTRY_VERIFY_WITH_TIMEOUT(pictura::content_aware_test::jobStarted(*view, current), 10000);
-    auto* commit = window_->findChild<QToolButton*>(QStringLiteral("optionsContentAwareCommit"));
-    QVERIFY(commit);
     QVERIFY(!commit->isEnabled());
     pictura::content_aware_test::releaseJob(*view, current);
     QTRY_VERIFY_WITH_TIMEOUT(commit->isEnabled(), 10000);
@@ -401,6 +401,7 @@ void ContentAwareScaleTest::supersededPreview()
     QVERIFY(!tools->transformPending());
     const QImage committed = view->image();
     QVERIFY(beginScale());
+    QTRY_VERIFY_WITH_TIMEOUT(commit->isEnabled(), 10000);
     pictura::content_aware_test::holdJobs(*view, true);
     QVERIFY(tools->setTransformWidth(50.0, false));
     const quint64 cancelled = pictura::content_aware_test::currentGeneration(*view);
