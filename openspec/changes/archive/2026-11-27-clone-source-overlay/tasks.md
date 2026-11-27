@@ -6,12 +6,12 @@
 
 ## 2. Overlay state and rendering
 
-- [ ] 2.1 Bind the controls and per-slot session settings; verify defaults, slot changes, and non-destructive edits using `controlsAndSlots`.
-- [ ] 2.2 Integrate Healing Brush with the shared slot and extend its offset-only sampling to apply the slot transform; connect both tools’ sampling maps to a transient canvas preview with bounded asynchronous source caching and stale-result cancellation. Verify `slotsKeepSources`, `flipAndOffset`, `previewMapping`, `nonAlignedMapping`, `healingTransformedSampling`, and `previewEligibility`.
-- [ ] 2.3 Implement stroke visibility and brush-footprint clipping; verify `autoHide` and `brushClipping`.
-- [ ] 2.4 Implement opacity, inversion, and the four blend modes; verify `blendAndOpacity`, `sourceAlpha`, and `grayAlignment`.
+- [x] 2.1 Bind the controls and per-slot session settings; verify defaults, slot changes, and non-destructive edits using `controlsAndSlots`.
+- [x] 2.2 Integrate Healing Brush with the shared slot and extend its offset-only sampling to apply the slot transform; connect both tools’ sampling maps to a transient canvas preview with bounded asynchronous source caching and stale-result cancellation. Verify `slotsKeepSources`, `flipAndOffset`, `previewMapping`, `nonAlignedMapping`, `healingTransformedSampling`, and `previewEligibility`.
+- [x] 2.3 Implement stroke visibility and brush-footprint clipping; verify `autoHide` and `brushClipping`.
+- [x] 2.4 Implement opacity, inversion, and the four blend modes; verify `blendAndOpacity`, `sourceAlpha`, and `grayAlignment`.
 
 ## 3. Integration
 
-- [ ] 3.1 Review and update ROADMAP.md and PARITY.md for changed feature coverage; inspect the resulting tracker entries.
+- [x] 3.1 Review and update ROADMAP.md and PARITY.md for changed feature coverage; inspect the resulting tracker entries.
 - [ ] 3.2 After implementation, run the authorized build and planned Qt suite, then applicable project gates; archive the change after tracker review and validate OpenSpec when authorized.
