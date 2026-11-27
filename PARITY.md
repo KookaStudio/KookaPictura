@@ -1,7 +1,7 @@
 # Feature parity tracker
 
 Assessed: 2026-11-27
-Pictura commit: 616cce308
+Pictura commit: e7ca8f53
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -13,12 +13,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 214 | 80 | 52 | 4 | 350 | 61.1% | 8 |
-| CS6 Standard, in scope | 214 | 80 | 46 | 2 | 342 | 62.6% | 8 |
-| CS6 Extended | 215 | 80 | 68 | 4 | 367 | 58.6% | 23 |
-| CS6 Extended, in scope | 215 | 80 | 47 | 2 | 344 | 62.5% | 23 |
-| CC 28.0 | 216 | 82 | 73 | 4 | 375 | 57.6% | 20 |
-| CC 28.0, in scope | 216 | 82 | 55 | 2 | 355 | 60.8% | 20 |
+| CS6 Standard | 215 | 79 | 52 | 4 | 350 | 61.4% | 8 |
+| CS6 Standard, in scope | 215 | 79 | 46 | 2 | 342 | 62.9% | 8 |
+| CS6 Extended | 216 | 79 | 68 | 4 | 367 | 58.9% | 23 |
+| CS6 Extended, in scope | 216 | 79 | 47 | 2 | 344 | 62.8% | 23 |
+| CC 28.0 | 217 | 81 | 73 | 4 | 375 | 57.9% | 20 |
+| CC 28.0, in scope | 217 | 81 | 55 | 2 | 355 | 61.1% | 20 |
 
 ## Baselines
 
@@ -48,7 +48,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
 | Color & bit depth | 16/29 (55.2%) | 16/29 (55.2%) | 16/29 (55.2%) |
 | Automation & extensibility | 3/19 (15.8%) | 3/19 (15.8%) | 3/23 (13.0%) |
-| Shell, panels & preferences | 28/60 (46.7%) | 28/63 (44.4%) | 28/62 (45.2%) |
+| Shell, panels & preferences | 29/60 (48.3%) | 29/63 (46.0%) | 29/62 (46.8%) |
 
 ## Feature rows
 
@@ -440,7 +440,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | ID | Feature | S | E | CC | Status | Scope | Evidence | Check | Notes | Tracking |
 |---|---|---|---|---|---|---|---|---|---|---|
 | P-PAN-01 | Layers panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels/layers_panel.cpp | none | — | — |
-| P-PAN-02 | History panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | History Options, Clear History, purge, and New Document from state remain | #514 |
+| P-PAN-02 | History panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | — |
 | P-PAN-03 | Channels panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Spot channels, Split/Merge, and Panel Options remain | #513 |
 | P-PAN-04 | Paths panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Make Work Path, clipping-path designation, and thumbnail size remain | #521 |
 | P-PAN-05 | Colour panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | — |
@@ -529,6 +529,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-27 | e7ca8f53 | 215/350 (61.4%) | 216/367 (58.9%) | 28.0 | 217/375 (57.9%) |
 | 2026-11-27 | 616cce308 | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
 | 2026-11-27 | 934c214cf | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
 | 2026-11-27 | 47d505216 | 214/349 (61.3%) | 215/366 (58.7%) | 28.0 | 216/374 (57.8%) |

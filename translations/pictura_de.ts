@@ -1748,6 +1748,18 @@ GPU-Treiber: %5</translation>
         <translation>Neuer Schnappschuss…</translation>
     </message>
     <message>
+        <source>Clear History</source>
+        <translation>Verlauf löschen</translation>
+    </message>
+    <message>
+        <source>New Document</source>
+        <translation>Neues Dokument</translation>
+    </message>
+    <message>
+        <source>History Options…</source>
+        <translation>Verlaufsoptionen…</translation>
+    </message>
+    <message>
         <source>New Video Layer From File</source>
         <translation>Neue Videoebene aus Datei</translation>
     </message>

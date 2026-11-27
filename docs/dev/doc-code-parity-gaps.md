@@ -111,7 +111,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | PAN-3 | `panels/tool-presets-panel.md` | Tool Presets panel + `.tpl` libraries | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #511 |
 | PAN-4 | `layer-styles.md` | Styles panel + `.asl` presets | MISSING | `frame_build.cpp:79` | #512 |
 | PAN-5 | `panels/channels-panel.md` | Spot channels, Split/Merge, and Name/Color/Panel Options (alpha Masked/Selected Areas shipped) | PARTIAL | `panel_group_menu.cpp:90-98`; `frame_selection_dialogs.cpp` (Channel Options) | #513 |
-| PAN-6 | `panels/history-panel.md` | History Options, Clear History/purge, New Document from state | MISSING | `panel_group_menu.cpp:195-198` | #514 |
+| PAN-6 | `panels/history-panel.md` | History Options, Clear History/purge, New Document from state | SHIPPED | `panels/history_panel.cpp`; `panels/panel_group_menu.cpp`; `menu_panel_commands.cpp`; `src/history/nonlinear.rs` | #514 |
 | PAN-7 | `panels/histogram-panel.md` | View modes, statistics, source menu, cache/refresh, 16/32-bit bins | PARTIAL | `histogram_panel.cpp:79-142` | #515 |
 | PAN-8 | `panels/info-panel.md` | Sampler persistence, sample-size readout, marquee/transform readouts, before/after, gamut exclamation | PARTIAL | `info_panel.cpp:623-685` | #516 |
 | PAN-12 | `panels/navigator-panel.md` | Proxy colour, Ctrl-drag proxy positioning, zoom buttons, typed zoom | MISSING | `navigator_panel.cpp:138-159` | #520 |

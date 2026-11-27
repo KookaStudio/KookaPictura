@@ -7,11 +7,13 @@
 
 #include "commands.h"
 #include "frame.h"
+#include "panels/history_panel.h"
 
 #include "api/transform_api.h"
 
 #include "api/document_bridge.h"
 #include "api/engine_bridge.h"
+#include "session.h"
 
 #include "qt_test_support.h"
 
@@ -33,6 +35,9 @@ void EditClipboardTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    auto* history = window_->findChild<pictura::HistoryPanel*>(QStringLiteral("historyPanel"));
+    QVERIFY(history);
+    history->setOptionsForTest(false, false, false, false, false);
 }
 
 void EditClipboardTest::editClipboard()

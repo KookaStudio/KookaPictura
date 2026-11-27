@@ -35,6 +35,15 @@ bool purgeUndo(PictureView& view);
 bool purgeHistories(PictureView& view);
 bool purgeAll(PictureView& view);
 
+/// Apply the capture-affecting History Options to `view`.
+void setHistoryOptions(PictureView& view, bool allowNonLinear, bool visibilityUndoable,
+                       bool autoSnapshotOnSave);
+
+/// Create a new document in `target` from state or named snapshot `index` of
+/// `source`, with one `Duplicate State` history entry.
+bool newDocumentFromState(const PictureView& source, PictureView& target, bool snapshot,
+                          int index);
+
 /// Connect `PictureView::changed` without the consumer including the generated
 /// bridge header just for the signal.
 QMetaObject::Connection connectChanged(PictureView& view, const QObject* context,

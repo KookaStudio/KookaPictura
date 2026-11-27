@@ -36,6 +36,8 @@
 #include "filter_commands.h"
 #include "filter_preview_dialog.h"
 #include "frame.h"
+#include "panels/history_panel.h"
+#include "session.h"
 #include "image_view.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
@@ -202,6 +204,9 @@ void OffthreadJobsTest::initTestCase()
     QVERIFY(dir_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    auto* history = window_->findChild<pictura::HistoryPanel*>(QStringLiteral("historyPanel"));
+    QVERIFY(history);
+    history->setOptionsForTest(false, false, false, false, false);
 }
 
 void OffthreadJobsTest::cleanup()

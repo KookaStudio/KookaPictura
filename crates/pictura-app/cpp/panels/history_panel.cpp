@@ -3,6 +3,7 @@
 #include "api/history_api.h"
 #include "memory_refusal.h"
 #include "icons.h"
+#include "session.h"
 
 #include <QtCore/QSize>
 #include <QtCore/QTimer>
@@ -10,6 +11,11 @@
 #include <QtGui/QFont>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPixmap>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QCheckBox>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QFormLayout>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
@@ -47,6 +53,13 @@ QIcon sourceIcon(bool source)
 HistoryPanel::HistoryPanel(QWidget* parent)
     : QWidget(parent)
 {
+    const SessionState options = pictura::loadSession();
+    autoFirstSnapshot_ = options.historyAutoFirstSnapshot;
+    autoSnapshotOnSave_ = options.historyAutoSnapshotOnSave;
+    allowNonLinear_ = options.historyAllowNonLinear;
+    showSnapshotDialog_ = options.historyShowSnapshotDialog;
+    visibilityUndoable_ = options.historyVisibilityUndoable;
+
     QWidget* body = this;
     auto* layout = new QVBoxLayout(body);
     list_ = new QListWidget(body);
@@ -61,7 +74,8 @@ HistoryPanel::HistoryPanel(QWidget* parent)
     layout->addWidget(snapshotButton_);
 
     connect(list_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) { activate(item); });
-    connect(snapshotButton_, &QPushButton::clicked, this, [this] { createSnapshot(); });
+    connect(snapshotButton_, &QPushButton::clicked, this,
+            [this] { createSnapshot(showSnapshotDialog_); });
 }
 
 void HistoryPanel::setView(PictureView* view)
@@ -74,6 +88,7 @@ void HistoryPanel::setView(PictureView* view)
         viewConnection_ = history_api::connectChanged(*view_, this, [this] {
             QTimer::singleShot(0, this, [this] { refresh(); });
         });
+        applyOptionsToView();
     }
     refresh();
 }
@@ -149,6 +164,103 @@ bool HistoryPanel::eventFilter(QObject* watched, QEvent* event)
     return QWidget::eventFilter(watched, event);
 }
 
+HistoryPanel::Target HistoryPanel::selectedTarget() const
+{
+    if (!view_) {
+        return {};
+    }
+    if (QListWidgetItem* item = list_ ? list_->currentItem() : nullptr) {
+        return {item->data(kKindRole).toInt() == kSnapshotKind,
+                item->data(kIndexRole).toInt()};
+    }
+    return {false, history_api::index(*view_)};
+}
+
+void HistoryPanel::clearHistory(bool purge)
+{
+    if (!view_) {
+        return;
+    }
+    const bool cleared =
+        purge ? history_api::purgeAll(*view_) : history_api::purgeUndo(*view_);
+    if (cleared) {
+        refresh();
+    }
+}
+
+void HistoryPanel::openHistoryOptions()
+{
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("historyOptionsDialog"));
+    dialog.setWindowTitle(tr("History Options"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* first = new QCheckBox(tr("Automatically Create First Snapshot"), &dialog);
+    first->setObjectName(QStringLiteral("historyOptionFirstSnapshot"));
+    first->setChecked(autoFirstSnapshot_);
+    auto* save = new QCheckBox(tr("Automatically Create New Snapshot When Saving"), &dialog);
+    save->setObjectName(QStringLiteral("historyOptionAutoSave"));
+    save->setChecked(autoSnapshotOnSave_);
+    auto* nonlinear = new QCheckBox(tr("Allow Non-Linear History"), &dialog);
+    nonlinear->setObjectName(QStringLiteral("historyOptionNonLinear"));
+    nonlinear->setChecked(allowNonLinear_);
+    auto* prompt = new QCheckBox(tr("Show New Snapshot Dialog By Default"), &dialog);
+    prompt->setObjectName(QStringLiteral("historyOptionSnapshotDialog"));
+    prompt->setChecked(showSnapshotDialog_);
+    auto* visibility = new QCheckBox(tr("Make Layer Visibility Changes Undoable"), &dialog);
+    visibility->setObjectName(QStringLiteral("historyOptionVisibilityUndo"));
+    visibility->setChecked(visibilityUndoable_);
+    layout->addWidget(first);
+    layout->addWidget(save);
+    layout->addWidget(nonlinear);
+    layout->addWidget(prompt);
+    layout->addWidget(visibility);
+    auto* buttons =
+        new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    autoFirstSnapshot_ = first->isChecked();
+    autoSnapshotOnSave_ = save->isChecked();
+    allowNonLinear_ = nonlinear->isChecked();
+    showSnapshotDialog_ = prompt->isChecked();
+    visibilityUndoable_ = visibility->isChecked();
+    persistOptions();
+    applyOptionsToView();
+}
+
+void HistoryPanel::applyOptionsToView()
+{
+    if (view_) {
+        history_api::setHistoryOptions(*view_, allowNonLinear_, visibilityUndoable_,
+                                       autoSnapshotOnSave_);
+    }
+}
+
+void HistoryPanel::setOptionsForTest(bool autoFirst, bool autoSave, bool nonLinear,
+                                     bool showDialog, bool visibilityUndoable)
+{
+    autoFirstSnapshot_ = autoFirst;
+    autoSnapshotOnSave_ = autoSave;
+    allowNonLinear_ = nonLinear;
+    showSnapshotDialog_ = showDialog;
+    visibilityUndoable_ = visibilityUndoable;
+    applyOptionsToView();
+}
+
+void HistoryPanel::persistOptions()
+{
+    SessionState state = pictura::loadSession();
+    state.historyAutoFirstSnapshot = autoFirstSnapshot_;
+    state.historyAutoSnapshotOnSave = autoSnapshotOnSave_;
+    state.historyAllowNonLinear = allowNonLinear_;
+    state.historyShowSnapshotDialog = showSnapshotDialog_;
+    state.historyVisibilityUndoable = visibilityUndoable_;
+    pictura::saveSession(state);
+}
+
 bool HistoryPanel::performPanelMenuAction(const QString& actionId)
 {
     if (actionId == QLatin1String("stepForward")) {
@@ -160,23 +272,35 @@ bool HistoryPanel::performPanelMenuAction(const QString& actionId)
             reportMemoryRefusal(this, tr("undo"));
         }
     } else if (actionId == QLatin1String("newSnapshot")) {
-        createSnapshot();
+        createSnapshot(true);
+    } else if (actionId == QLatin1String("clearHistory")) {
+        clearHistory(QApplication::keyboardModifiers().testFlag(Qt::AltModifier));
+    } else if (actionId == QLatin1String("clearHistoryPurge")) {
+        clearHistory(true);
+    } else if (actionId == QLatin1String("historyOptions")) {
+        openHistoryOptions();
     } else {
         return false;
     }
     return true;
 }
 
-void HistoryPanel::createSnapshot()
+void HistoryPanel::createSnapshot(bool prompt)
 {
     if (!view_) {
         return;
     }
-    bool accepted = false;
-    const QString label = QInputDialog::getText(this, tr("Create Snapshot"), tr("Label:"),
-                                                QLineEdit::Normal, tr("Snapshot"), &accepted);
-    if (!accepted || label.isEmpty()) {
-        return;
+    QString label;
+    if (prompt) {
+        bool accepted = false;
+        label = QInputDialog::getText(
+            this, tr("Create Snapshot"), tr("Label:"), QLineEdit::Normal,
+            tr("Snapshot %1").arg(history_api::snapshotCount(*view_) + 1), &accepted);
+        if (!accepted || label.isEmpty()) {
+            return;
+        }
+    } else {
+        label = tr("Snapshot %1").arg(history_api::snapshotCount(*view_) + 1);
     }
     if (!history_api::addSnapshot(*view_, label)) {
         reportMemoryRefusal(this, tr("create the snapshot"));

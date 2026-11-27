@@ -1748,6 +1748,18 @@ Näytönohjaimen ajuri: %5</translation>
         <translation>Uusi tilannevedos…</translation>
     </message>
     <message>
+        <source>Clear History</source>
+        <translation>Tyhjennä historia</translation>
+    </message>
+    <message>
+        <source>New Document</source>
+        <translation>Uusi asiakirja</translation>
+    </message>
+    <message>
+        <source>History Options…</source>
+        <translation>Historia-asetukset…</translation>
+    </message>
+    <message>
         <source>New Video Layer From File</source>
         <translation>Uusi videotaso tiedostosta</translation>
     </message>
