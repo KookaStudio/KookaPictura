@@ -79,6 +79,7 @@ fields! {
     "general" / "imageInterpolation": String = "bicubic".into();
     "general" / "useShiftKeyForToolSwitch": bool = true;
     "general" / "zoomResizesWindows": bool = false;
+    "general" / "animatedZoom": bool = false;
     "general" / "historyLogEnabled": bool = false;
     "general" / "historyLogDestination": i32 = 0;
     "general" / "historyLogVerbosity": i32 = 0;

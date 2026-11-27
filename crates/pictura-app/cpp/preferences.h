@@ -29,6 +29,7 @@ struct Preferences {
 QString configurationDirectory();
 QString preferencesFilePath();
 bool initializePreferences(QString* notice = nullptr);
+bool animatedZoomAvailable();
 Preferences defaultPreferences();
 Preferences loadPreferences();
 bool savePreferences(const Preferences& before, const Preferences& after,

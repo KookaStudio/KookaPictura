@@ -6,6 +6,7 @@
 #include <utility>
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QVariant>
 #include <QtCore/QDebug>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
@@ -286,6 +287,12 @@ bool initializePreferences(QString* notice)
     bool ready = false;
     readPreferences(&ready, notice);
     return ready;
+}
+
+bool animatedZoomAvailable()
+{
+    const auto* app = QCoreApplication::instance();
+    return app && !app->property("picturaTimedZoomUnavailable").toBool();
 }
 
 Preferences defaultPreferences()

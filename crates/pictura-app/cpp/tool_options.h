@@ -326,6 +326,7 @@ struct HandOptions {
 // The Zoom tool: Resize Windows To Fit resizes a floating window to the
 // zoomed image; Zoom All Windows zooms every other window by the same factor.
 struct ZoomOptions {
+    bool scrubby = true;
     bool resizeToFit = false;
     bool zoomAll = false;
 };

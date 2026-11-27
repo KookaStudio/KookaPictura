@@ -166,6 +166,7 @@ template <typename F> void fields(HandOptions& o, F&& f) { f("scrollAll", o.scro
 
 template <typename F> void fields(ZoomOptions& o, F&& f)
 {
+    f("scrubby", o.scrubby);
     f("resizeToFit", o.resizeToFit);
     f("zoomAll", o.zoomAll);
 }

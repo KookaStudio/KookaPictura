@@ -5,6 +5,8 @@
 // the frame's.
 
 #include <QtTest/QtTest>
+#include <QtCore/QTimer>
+#include <QtCore/QPointer>
 
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QApplication>
@@ -97,6 +99,12 @@ private slots:
     void plainDragScrollsOneWindow();
     void zoomAllWindows();
     void shiftClickZoomsAllWindows();
+    void scrubZoomsAllWindows();
+    void shiftScrubZoomsAllWindows();
+    void scrubClampedAndLocal();
+    void scrubResizesFloatingWindow();
+    void zoomGestureDocumentSwitch();
+    void animatedZoomFanoutAndResize();
     void resizeWindowsToFit();
     void zoomResizesWindowsPref();
     void handZoomOptionsPersist();
@@ -350,6 +358,137 @@ void DocumentNavigateTest::shiftClickZoomsAllWindows()
     const double otherZoom = other->zoom();
     zoomClick(clicked, Qt::NoModifier);
     QCOMPARE(other->zoom(), otherZoom);
+}
+
+void DocumentNavigateTest::scrubZoomsAllWindows()
+{
+    QVERIFY(newDoc(QStringLiteral("Other"))); QVERIFY(newDoc(QStringLiteral("Clicked")));
+    ImageView* other = window_->canvasAt(0); ImageView* clicked = window_->canvasAt(1);
+    QVERIFY(other && clicked); window_->setActiveTool(ToolId::Zoom);
+    auto* tools = window_->findChild<ToolController*>(); QVERIFY(tools);
+    auto* group = tools->optionsFor<ZoomGroup>(ToolId::Zoom); QVERIFY(group);
+    auto opts = group->get(); opts.scrubby = true; opts.zoomAll = true; group->set(opts);
+    clicked->setZoom(1.0, widgetCentre(clicked)); other->setZoom(0.5, widgetCentre(other));
+    const QPointF centre = widgetCentre(clicked);
+    emit clicked->mousePressed(clicked->widgetToImage(centre), Qt::LeftButton, 0);
+    emit clicked->mouseMoved(clicked->widgetToImage(centre + QPointF(40, 0)));
+    emit clicked->mouseReleased(clicked->widgetToImage(centre + QPointF(40, 0)));
+    QVERIFY(clicked->zoom() > 1.0);
+    QVERIFY(qAbs(other->zoom() / 0.5 - clicked->zoom()) < 1e-6);
+    opts.zoomAll = false; group->set(opts);
+}
+
+void DocumentNavigateTest::shiftScrubZoomsAllWindows()
+{
+    QVERIFY(newDoc(QStringLiteral("Other"))); QVERIFY(newDoc(QStringLiteral("Clicked")));
+    ImageView* other = window_->canvasAt(0); ImageView* clicked = window_->canvasAt(1);
+    QVERIFY(other && clicked); window_->setActiveTool(ToolId::Zoom);
+    auto* tools = window_->findChild<ToolController*>(); QVERIFY(tools);
+    auto* group = tools->optionsFor<ZoomGroup>(ToolId::Zoom); QVERIFY(group);
+    auto opts = group->get(); opts.scrubby = true; opts.zoomAll = false; group->set(opts);
+    clicked->setZoom(1.0, widgetCentre(clicked)); other->setZoom(0.5, widgetCentre(other));
+    const QPointF centre = widgetCentre(clicked);
+    emit clicked->mousePressed(clicked->widgetToImage(centre), Qt::LeftButton, int(Qt::ShiftModifier));
+    emit clicked->mouseMoved(clicked->widgetToImage(centre + QPointF(40, 0)));
+    emit clicked->mouseReleased(clicked->widgetToImage(centre + QPointF(40, 0)));
+    QVERIFY(clicked->zoom() > 1.0);
+    QVERIFY(qAbs(other->zoom() / 0.5 - clicked->zoom()) < 1e-6);
+}
+
+void DocumentNavigateTest::scrubClampedAndLocal()
+{
+    QVERIFY(newDoc(QStringLiteral("Other"))); QVERIFY(newDoc(QStringLiteral("Clicked")));
+    ImageView* other = window_->canvasAt(0); ImageView* clicked = window_->canvasAt(1);
+    QVERIFY(other && clicked); window_->setActiveTool(ToolId::Zoom);
+    auto* tools = window_->findChild<ToolController*>(); QVERIFY(tools);
+    auto* group = tools->optionsFor<ZoomGroup>(ToolId::Zoom); QVERIFY(group);
+    auto opts = group->get(); opts.scrubby = true; opts.zoomAll = true; opts.resizeToFit = false; group->set(opts);
+    const QPointF centre = widgetCentre(clicked);
+    clicked->setZoom(31.0, centre); other->setZoom(0.5, widgetCentre(other));
+    emit clicked->mousePressed(clicked->widgetToImage(centre), Qt::LeftButton, 0);
+    emit clicked->mouseMoved(clicked->widgetToImage(centre + QPointF(100, 0)));
+    emit clicked->mouseReleased(clicked->widgetToImage(centre + QPointF(100, 0)));
+    QCOMPARE(clicked->zoom(), 32.0);
+    QVERIFY(qAbs(other->zoom() / 0.5 - 32.0 / 31.0) < 1e-6);
+    opts.zoomAll = false; group->set(opts);
+    clicked->setZoom(1.0, centre); const double unchanged = other->zoom();
+    emit clicked->mousePressed(clicked->widgetToImage(centre), Qt::LeftButton, 0);
+    emit clicked->mouseMoved(clicked->widgetToImage(centre + QPointF(30, 0)));
+    emit clicked->mouseReleased(clicked->widgetToImage(centre + QPointF(30, 0)));
+    QVERIFY(clicked->zoom() > 1.0); QCOMPARE(other->zoom(), unchanged);
+}
+
+void DocumentNavigateTest::scrubResizesFloatingWindow()
+{
+    QVERIFY(newDoc(QStringLiteral("Floating"))); QVERIFY(smallFloat(0));
+    window_->setActiveTool(ToolId::Zoom);
+    auto* tools = window_->findChild<ToolController*>(); QVERIFY(tools);
+    auto* group = tools->optionsFor<ZoomGroup>(ToolId::Zoom); QVERIFY(group);
+    auto opts = group->get(); opts.scrubby = true; opts.zoomAll = false; opts.resizeToFit = true; group->set(opts);
+    auto* floating = window_->floatWindowForTest(0); auto* canvas = window_->canvasAt(0);
+    const QRect before = floating->globalGeometry(); const QPointF centre = widgetCentre(canvas);
+    emit canvas->mousePressed(canvas->widgetToImage(centre), Qt::LeftButton, 0);
+    emit canvas->mouseMoved(canvas->widgetToImage(centre + QPointF(40, 0)));
+    emit canvas->mouseReleased(canvas->widgetToImage(centre + QPointF(40, 0)));
+    QCoreApplication::processEvents();
+    QVERIFY(floating->globalGeometry().size() != before.size());
+}
+
+void DocumentNavigateTest::zoomGestureDocumentSwitch()
+{
+    QVERIFY(newDoc(QStringLiteral("First"))); QVERIFY(newDoc(QStringLiteral("Second")));
+    auto* first = window_->canvasAt(0); auto* second = window_->canvasAt(1); QVERIFY(first && second);
+    window_->setActiveTool(ToolId::Zoom);
+    auto* tools = window_->findChild<ToolController*>(); QVERIFY(tools);
+    auto* group = tools->optionsFor<ZoomGroup>(ToolId::Zoom); QVERIFY(group);
+    auto opts = group->get(); opts.scrubby = true; group->set(opts);
+    const QPointF centre = widgetCentre(second);
+    emit second->mousePressed(second->widgetToImage(centre), Qt::LeftButton, 0);
+    emit second->mouseMoved(second->widgetToImage(centre + QPointF(30, 0)));
+    const double oldZoom = second->zoom(), newZoom = first->zoom();
+    window_->setActiveDocumentIndex(0);
+    emit second->mouseMoved(second->widgetToImage(centre + QPointF(60, 0)));
+    QCOMPARE(second->zoom(), oldZoom); QCOMPARE(first->zoom(), newZoom);
+    auto before = loadPreferences(); auto after = before; after.animatedZoom = true; QVERIFY(savePreferences(before, after));
+    const QPointF firstCentre = widgetCentre(first);
+    emit first->mousePressed(first->widgetToImage(firstCentre), Qt::LeftButton, 0);
+    auto* timer = first->findChild<QTimer*>(QStringLiteral("zoomHoldTimer")); QVERIFY(timer);
+    QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+    const double firstZoom = first->zoom(), secondZoom = second->zoom();
+    window_->setActiveDocumentIndex(1);
+    QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+    QCOMPARE(first->zoom(), firstZoom); QCOMPARE(second->zoom(), secondZoom);
+    const QPointF secondCentre = widgetCentre(second);
+    emit second->mousePressed(second->widgetToImage(secondCentre), Qt::LeftButton, 0);
+    QPointer<QTimer> closingTimer = second->findChild<QTimer*>(QStringLiteral("zoomHoldTimer"));
+    QVERIFY(closingTimer);
+    QMetaObject::invokeMethod(closingTimer.data(), "timeout", Qt::DirectConnection);
+    const double survivorZoom = first->zoom();
+    window_->closeDocument(1, false);
+    if (closingTimer) QMetaObject::invokeMethod(closingTimer.data(), "timeout", Qt::DirectConnection);
+    QCOMPARE(first->zoom(), survivorZoom);
+    before = loadPreferences(); after = before; after.animatedZoom = false; QVERIFY(savePreferences(before, after));
+}
+
+void DocumentNavigateTest::animatedZoomFanoutAndResize()
+{
+    QVERIFY(newDoc(QStringLiteral("Other"))); QVERIFY(newDoc(QStringLiteral("Floating")));
+    QVERIFY(smallFloat(1)); window_->setActiveTool(ToolId::Zoom);
+    auto* tools = window_->findChild<ToolController*>(); QVERIFY(tools);
+    auto* group = tools->optionsFor<ZoomGroup>(ToolId::Zoom); QVERIFY(group);
+    auto opts = group->get(); opts.zoomAll = true; opts.resizeToFit = true; group->set(opts);
+    auto before = loadPreferences(); auto after = before; after.animatedZoom = true; QVERIFY(savePreferences(before, after));
+    auto* canvas = window_->canvasAt(1); auto* other = window_->canvasAt(0);
+    auto* floating = window_->floatWindowForTest(1); QVERIFY(canvas && other && floating);
+    const double zoom = canvas->zoom(), otherZoom = other->zoom();
+    const QRect geometry = floating->globalGeometry(); const QPointF centre = widgetCentre(canvas);
+    emit canvas->mousePressed(canvas->widgetToImage(centre), Qt::LeftButton, 0);
+    auto* timer = canvas->findChild<QTimer*>(QStringLiteral("zoomHoldTimer")); QVERIFY(timer);
+    QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+    QVERIFY(qAbs(other->zoom() / otherZoom - canvas->zoom() / zoom) < 1e-6);
+    QCoreApplication::processEvents(); QVERIFY(floating->globalGeometry().size() != geometry.size());
+    emit canvas->mouseReleased(canvas->widgetToImage(centre));
+    before = loadPreferences(); after = before; after.animatedZoom = false; QVERIFY(savePreferences(before, after));
 }
 
 void DocumentNavigateTest::resizeWindowsToFit()
