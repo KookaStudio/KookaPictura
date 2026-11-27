@@ -279,14 +279,19 @@ void CurvesControlsTest::curvesPropertiesLayout()
     clippingMenu->trigger();
     QVERIFY(clipping->isChecked() && canvas->filterPreviewShownForTest());
     QVERIFY(view_->add_adjustment(QStringLiteral("levels")));
+    layers->refresh();
+    QString levelsPath;
     for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
         const auto row = pictura::layers_api::rowAt(*view_, i);
         if (row.adjustmentKind == QLatin1String("levels")) {
-            QVERIFY(layers->selectRowForTest(row.path));
+            levelsPath = row.path;
             break;
         }
     }
+    QVERIFY(!levelsPath.isEmpty());
+    QVERIFY(layers->selectRowForTest(levelsPath));
     panel->refresh();
+    QCOMPARE(panel->currentPath(), levelsPath);
     QVERIFY(!canvas->filterPreviewShownForTest());
     QVERIFY(!panel->findChild<pictura::CurveWidget*>(QStringLiteral("adjustmentCurve")));
     QCOMPARE(panel->findChild<QPushButton*>(QStringLiteral("propertiesAuto")), autoButton);
