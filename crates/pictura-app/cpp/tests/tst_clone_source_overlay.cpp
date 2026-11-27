@@ -178,9 +178,10 @@ struct OverlayFixture {
     void move(QPointF p) { f.canvas->mouseMoved(p); QApplication::processEvents(); }
     QColor pixel(QPointF p) const
     {
-        QElapsedTimer wait;
-        wait.start();
-        while (f.tools->cloneOverlayPendingForTest() && wait.elapsed() < 10000) QTest::qWait(10);
+        if (!QTest::qWaitFor([this] { return !f.tools->cloneOverlayPendingForTest(); }, 10000)) {
+            QTest::qFail("Clone overlay preview did not finish", __FILE__, __LINE__);
+            return {};
+        }
         const QPoint where = f.canvas->imageToWidget(p).toPoint();
         return f.canvas->grab().toImage().pixelColor(where);
     }
