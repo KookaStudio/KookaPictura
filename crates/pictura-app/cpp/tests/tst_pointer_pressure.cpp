@@ -17,6 +17,9 @@ private slots:
 void PointerPressureTest::tabletAndMouse()
 {
     pictura::ImageView canvas;
+    canvas.setTabletTracking(true);
+    canvas.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&canvas));
     pictura::ToolController tools;
     tools.bindCanvas(&canvas);
     QVERIFY(!tools.hasTabletPressure());
@@ -30,13 +33,13 @@ void PointerPressureTest::tabletAndMouse()
     QTabletEvent tablet(QEvent::TabletMove, &stylus, pos, pos, 0.25, 0, 0, 0, 0, 0,
                         Qt::NoModifier, Qt::NoButton, Qt::NoButton);
     QApplication::sendEvent(&canvas, &tablet);
-    QVERIFY(tools.hasTabletPressure());
+    QVERIFY2(tools.hasTabletPressure(), "The tablet move did not reach ImageView");
     QCOMPARE(tools.pressure(), 0.25);
 
     QMouseEvent synthetic(QEvent::MouseMove, pos, pos, pos, Qt::NoButton, Qt::NoButton,
                           Qt::NoModifier, Qt::MouseEventSynthesizedByQt);
     QApplication::sendEvent(&canvas, &synthetic);
-    QVERIFY(tools.hasTabletPressure());
+    QVERIFY2(tools.hasTabletPressure(), "The synthesized mouse move cleared tablet input");
     QCOMPARE(tools.pressure(), 0.25);
 
     QMouseEvent mouse(QEvent::MouseMove, pos, pos, Qt::NoButton, Qt::NoButton, Qt::NoModifier);

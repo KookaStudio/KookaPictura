@@ -421,11 +421,23 @@ void PenToolsTest::magneticOptions()
     QCOMPARE(contrast->value(), 20.0);
     QCOMPARE(frequency->value(), 60.0);
     QVERIFY(!pressure->isChecked());
-    width->setValue(256);
-    f.tools->applyBrushShortcut(Qt::Key_BracketRight, 0, false);
+    auto* edit = width->findChild<QLineEdit*>();
+    QVERIFY(edit);
+    edit->setFocus();
+    edit->selectAll();
+    QTest::keyClicks(edit, "256");
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(group->get().magneticWidth, 256);
+    QVERIFY(f.tools->applyBrushShortcut(Qt::Key_BracketRight, 0, false));
     QCOMPARE(width->value(), 256.0);
-    f.tools->applyBrushShortcut(Qt::Key_BracketLeft, 0, false);
+    QVERIFY(f.tools->applyBrushShortcut(Qt::Key_BracketLeft, 0, false));
     QCOMPARE(width->value(), 255.0);
+    edit->selectAll();
+    QTest::keyClicks(edit, "1");
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(group->get().magneticWidth, 1);
+    QVERIFY(f.tools->applyBrushShortcut(Qt::Key_BracketLeft, 0, false));
+    QCOMPARE(width->value(), 1.0);
     group->set({});
 }
 
