@@ -86,6 +86,8 @@ void PathComponentTransformTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
 }
 
 void PathComponentTransformTest::affineControls()

@@ -9,7 +9,7 @@
 // Dragging an anchor or handle of a live shape first asks to turn it into a
 // regular path (Photoshop CC's prompt); moving the whole shape keeps it live.
 //
-// ponytail: no segment drags, marquee, Shift-click multi-selection, arrow
+// ponytail: no segment drags or arrow
 // nudges, path operations, alignment, or Constrain Path Dragging; the
 // selection lives in the tool and is dropped on a tool switch.
 
@@ -419,7 +419,8 @@ private:
         for (int sp = 0; sp < path_subpath_count(v); ++sp) {
             if (id_ == ToolId::PathSelection) {
                 const auto b = path_subpath_bounds(v, sp);
-                if (b.size() == 4 && box.contains(QRectF(QPointF(b[0], b[1]), QPointF(b[2], b[3])))) {
+                if (b.size() == 4 && box.contains(QPointF(b[0], b[1]))
+                    && box.contains(QPointF(b[2], b[3]))) {
                     selectedComponents_.insert(sp);
                     selected_ = sp;
                     whole_ = true;
