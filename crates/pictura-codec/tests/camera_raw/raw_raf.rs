@@ -116,11 +116,11 @@ fn packed_rafs_decode_exactly() {
 }
 
 #[test]
-fn compressed_rafs_are_refused() {
+fn headerless_short_rafs_are_refused() {
     let r = file(Coding::Bytes(vec![0x5A; WIDTH * HEIGHT], None));
     assert_eq!(sniff_raw(&raf(&r)), Some(RawFormat::Raf));
     let why = unsupported(&r);
-    assert!(why.contains("compressed sensor data"), "{why}");
+    assert!(why.contains("compressed-data header"), "{why}");
 }
 
 #[test]
@@ -328,9 +328,7 @@ fn raf_corpus_reads_when_present() {
         let image = match read(&bytes) {
             Ok(image) => image,
             Err(PsdError::Unsupported(why))
-                if ["compressed sensor data", "SuperCCD", "EXR"]
-                    .iter()
-                    .any(|k| why.contains(k)) =>
+                if ["SuperCCD", "EXR"].iter().any(|k| why.contains(k)) =>
             {
                 eprintln!("{name}: refused, {why}");
                 refused += 1;

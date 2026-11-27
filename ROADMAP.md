@@ -527,7 +527,10 @@ gaps are the CS6 Extended 3D object and camera tools.
       parity); 10 bodies open with camera-JPEG-fitted colour; the Open dialog
       lists RAF (#1473). `crates/pictura-codec/src/dng/raf.rs`,
       `crates/pictura-codec/src/dng/demosaic/xtrans.rs`.
-- [ ] Fujifilm-compressed RAF sensor data (#1620)
+- [x] **Fujifilm-compressed RAF sensor data** — lossless and lossy
+      compressed RAFs of X-Trans and Bayer bodies at 12, 14 and 16 bits
+      decode sample for sample as LibRaw does, ported from LibRaw (#1620).
+      `crates/pictura-codec/src/dng/raf_compressed.rs`.
 - [ ] Fujifilm SuperCCD and EXR RAF sensors (#1621)
 - [ ] Colour for the remaining Fujifilm RAF bodies (#1622)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)

@@ -348,8 +348,33 @@ tags (#1473). The packed bit orders were found by trying candidate orders and
 keeping the smoothest image; the X-Trans phase was checked against the DNG
 Adobe's converter wrote from the same raw.pixls.us X100S file (its CFA
 pattern and samples only, compared in a test), and the Bayer phase by
-correlating with the camera JPEG. No dcraw, LibRaw or rawspeed code is used,
-and Fujifilm-compressed data is not implemented (#1620).
+correlating with the camera JPEG. No dcraw, LibRaw or rawspeed code is used
+in this container reader; the compressed coding below is a separate, ported
+module.
+
+## Fujifilm compressed coding (`crates/pictura-codec/src/dng/raf_compressed.rs`)
+
+**Ported code, not an independent implementation.** By owner decision
+(#1620) Fujifilm's compressed RAF coding is ported openly from LibRaw 0.22.1
+(Source: https://github.com/LibRaw/LibRaw, tag `0.22.1`, commit
+b860248a89d9082b8e0a1e202e516f46af9adb29, file
+`src/decoders/fuji_compressed.cpp`): the header checks, the strip and
+quantizer-base layout, the quantizer tables, the gradient-adaptive codes,
+the six-pass X-Trans and Bayer line decode and the copy through the CFA.
+LibRaw is dual-licensed **LGPL-2.1** or **CDDL-1.0**; the port takes the
+LGPL-2.1 and is distributed under **GPL-3.0-or-later** as LGPL-2.1 section
+3 permits. The file carries LibRaw's copyright notices (Alexey Danilchenko;
+Alex Tutubalin, LibRaw LLC). The port was checked sample for sample against
+LibRaw 0.22.1's raw plane (through rawpy) on 13 compressed files from 8
+bodies, lossless and lossy, X-Trans and Bayer, 14 and 16 bits (raw.pixls.us,
+not committed).
+
+Patents (OVR-004): a Google Patents status search on 2026-11-26 for
+Fujifilm-assigned patents on lossless or lossy compression of RAW or
+colour-filter-array data with gradient-context adaptive coding found none;
+the hits were other assignees' general adaptive Golomb-Rice and CFA
+compression patents. A search that finds nothing is not clearance, and this
+is not a legal conclusion.
 
 The X-Trans demosaic (`crates/pictura-codec/src/dng/demosaic/xtrans.rs`) is
 designed here; it does not follow a published or third-party method.

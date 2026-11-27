@@ -4,6 +4,18 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Fujifilm-compressed RAF, #1620** (OpenSpec change
+  `vendor-raw-raf-compressed`; `codec/vendor-raw-containers` modified).
+  `dng/raf_compressed.rs` ports LibRaw 0.22.1's `fuji_compressed.cpp` openly
+  (owner decision; LGPL-2.1 → GPL-3.0+), lossless and lossy, X-Trans and
+  Bayer. `raf.rs` takes the `IS` header at `0xF007` when the data is not two
+  bytes a photosite; the header's size replaces `0xF001`/`0xF002`. Strips
+  decode one six-row line at a time in parallel (no second plane): 0.34 s
+  for the X-H1, 0.97 s for the GFX100S. Bit-exact against LibRaw (rawpy) on
+  13 files / 8 bodies (`compressed_rafs_match_libraw_when_present`);
+  synthetic coverage through the test encoder `raw/raf_encode.rs`. Samples:
+  `~/Downloads/PHOTOSHOP/RAW/FujiFilm/pixls-compressed`. Colour for the
+  newer bodies is still #1622.
 - **Indexed Color Table, #555** (OpenSpec change `indexed-color-table`,
   capability `ui/image-mode-menu`). Indexed documents with an editable palette
   can change entries, interpolate ranges, assign a transparent entry, and load
