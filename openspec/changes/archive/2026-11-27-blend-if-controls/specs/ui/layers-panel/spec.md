@@ -264,4 +264,3 @@ rather than fail.
 - **THEN** its card carries no 1 px black outline, while a pixel or fill row
   with a raster image thumbnail keeps its outline; a synthetic Smart Filters or
   layer-effects row draws no card at all
-

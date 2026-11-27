@@ -11,4 +11,6 @@
 ## 2. Integration
 
 - [x] 2.1 Review tracker coverage and archive the change.
-- [ ] 2.2 Run the build, Qt and Rust regressions, formatting and verification gates when authorized.
+- [x] 2.2 Build the optimized app in Arch x86-64 Docker and run the focused Qt and Rust regressions, formatting, repository guards and the packaged headless self-test.
+
+Verified at `dde68d0e2314165a3195700e5a1e8e31daff8180`. Five Qt suites and eleven Rust tests passed. The packaged self-test passed 466 checks and skipped one check without a GPU adapter.
