@@ -14,6 +14,14 @@ Snapshot for resuming after a context break. Update after each milestone.
   The panel offers Current Tool Only, Sort By Tool, Text/Small/Large List,
   New/Rename/Delete, persisted drag order, and Load/Replace/Reset/Save through
   the Preset Manager. Every tool's options-bar picker now shares the list.
+- **Hand navigation, #534** (OpenSpec change `birds-eye-flick-panning`, capability
+  `tools/hand-navigation-gestures`). Hold H and drag a viewport outline over the
+  fit overview to relocate at the original zoom. General > Flick Panning offers
+  Automatic, On, and Off. Automatic follows the animation hint exposed by the
+  Qt style, and On overrides it. Flick requires GPU compute and sends only the
+  applied pan delta to visible peers when Scroll All Windows or Shift is active.
+  The focused Qt suite and native smoke are pending.
+
 - **Olympus-compressed ORF, #1535** (OpenSpec change
   `vendor-raw-orf-compressed`; `codec/vendor-raw-containers` modified).
   `dng/orf_decode.rs` ports LibRaw 0.22.1's `olympus14.cpp` openly (owner

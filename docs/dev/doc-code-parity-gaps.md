@@ -132,7 +132,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-7 | `pen-and-path-tools.md` | Magnetic Pen | MISSING | `options_bar_pen.cpp:19` | #531 |
 | TOOL-8 | `merge-and-flatten.md` | Merge Shape Components (path boolean ops) | MISSING | no path-boolean in `pictura-core/src/path*` | #532 |
 | TOOL-9 | `hand-and-zoom.md` | Hand/Zoom options bar: Scrubby and Animated Zoom; the multi-window options (Scroll All, Zoom All, Resize Windows To Fit) landed in #500 | PARTIAL | `options_bar_navigate.cpp` | #533 |
-| TOOL-10 | `hand-and-zoom.md` | Bird's Eye View + Flick Panning | MISSING | none found | #534 |
+| TOOL-10 | `hand-and-zoom.md` | Bird's Eye View + Flick Panning | SHIPPED | `crates/pictura-app/cpp/image_view_hand.cpp` | #534 |
 | TOOL-11 | `eyedropper-color-sampler-ruler.md` | Ruler protractor + Straighten from the ruler | MISSING | `tool_ruler.cpp:37` | #535 |
 | TOOL-12 | `eyedropper-color-sampler-ruler.md` | Eyedropper modifiers (Alt→background, temporary) + Shift-click sampler | MISSING | `tool_eyedropper.cpp:23-36` | #536 |
 | TOOL-13 | `clone-stamp-and-pattern-stamp.md` | Clone Source overlay controls | MISSING | `clone_source_panel.h` | #537 |
