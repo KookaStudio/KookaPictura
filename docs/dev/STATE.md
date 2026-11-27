@@ -4,6 +4,16 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Tool Presets panel, #511** (OpenSpec change `tool-presets-panel`;
+  capabilities `ui/tool-presets-panel` added, `ui/preset-manager` and
+  `codec/preset-libraries` modified). `Window > Panels > Tool Presets` opens a
+  dock over the shared Tools list in the Painting workspace. Create captures
+  the active tool and the full `toolOptionsToJson` snapshot; apply switches the
+  tool and patches the options. Native `.kpset` tool rows keep the snapshot in
+  the preserved opaque field; `.tpl` import stays at its Brush/Pencil mapping.
+  The panel offers Current Tool Only, Sort By Tool, Text/Small/Large List,
+  New/Rename/Delete, persisted drag order, and Load/Replace/Reset/Save through
+  the Preset Manager. Every tool's options-bar picker now shares the list.
 - **History Options, Clear History/purge, and New Document from state, #514**
   (OpenSpec change `history-options-clear-new-document`; capabilities
   `ui/history-panel`, `document/edit-history` modified). The History panel menu

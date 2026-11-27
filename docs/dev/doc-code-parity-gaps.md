@@ -108,7 +108,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 |---|---|---|---|---|---|
 | PAN-1 | `panels/adjustments-panel.md` | Adjustments panel icon grid (creation shipped; mode/depth gating and fill-layer presets remain) | PARTIAL | `panels/adjustments_panel.cpp` | #509, #1521 |
 | PAN-2 | `panels/measurement-log-panel.md` | Measurement Log panel, Record Measurements, and its export workflow | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #510 |
-| PAN-3 | `panels/tool-presets-panel.md` | Tool Presets panel + `.tpl` libraries | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #511 |
+| PAN-3 | `panels/tool-presets-panel.md` | Tool Presets panel + `.tpl` libraries | DONE | `crates/pictura-app/cpp/panels/tool_presets_panel.cpp` | — |
 | PAN-4 | `layer-styles.md` | Styles panel + `.asl` presets | MISSING | `frame_build.cpp:79` | #512 |
 | PAN-5 | `panels/channels-panel.md` | Spot channels, Split/Merge, and Name/Color/Panel Options (alpha Masked/Selected Areas shipped) | PARTIAL | `panel_group_menu.cpp:90-98`; `frame_selection_dialogs.cpp` (Channel Options) | #513 |
 | PAN-6 | `panels/history-panel.md` | History Options, Clear History/purge, New Document from state | SHIPPED | `panels/history_panel.cpp`; `panels/panel_group_menu.cpp`; `menu_panel_commands.cpp`; `src/history/nonlinear.rs` | #514 |
