@@ -197,9 +197,14 @@ pub mod ffi {
 
         /// Add a magnetic trace, preserving each fastening index. When save is true,
         /// save the Work Path and commit; otherwise leave the edit live for output.
-        fn path_add_magnetic(view: Pin<&mut PictureView>, points: &[f64],
-                             fastenings: &[i32], close: bool, save: bool,
-                             name: &QString) -> bool;
+        fn path_add_magnetic(
+            view: Pin<&mut PictureView>,
+            points: &[f64],
+            fastenings: &[i32],
+            close: bool,
+            save: bool,
+            name: &QString,
+        ) -> bool;
 
         /// The targeted path's subpaths in the flat anchor/handle form; empty when there is no target.
         fn path_target_outline(view: &PictureView) -> Vec<f64>;

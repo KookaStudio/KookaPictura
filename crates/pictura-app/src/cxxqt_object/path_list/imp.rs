@@ -392,7 +392,15 @@ pub(super) fn paths_stroke_magnetic(
     let Some(restore) = view.as_mut().rust_mut().session.live.take_path() else {
         return false;
     };
-    let stroked = paths_stroke(view.as_mut(), foreground, diameter, hardness, opacity, flow, spacing);
+    let stroked = paths_stroke(
+        view.as_mut(),
+        foreground,
+        diameter,
+        hardness,
+        opacity,
+        flow,
+        spacing,
+    );
     view.as_mut().rust_mut().session.live.set_path(restore);
     stroked
 }

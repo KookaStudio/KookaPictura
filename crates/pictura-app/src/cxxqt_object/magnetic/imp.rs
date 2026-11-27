@@ -11,7 +11,9 @@ pub(super) fn magnetic_begin(mut view: Pin<&mut PictureView>, contrast: i32) -> 
 }
 
 pub(super) fn magnetic_pen_begin(mut view: Pin<&mut PictureView>, contrast: i32) -> bool {
-    view.as_mut().rust_mut().begin_magnetic_field(contrast, true)
+    view.as_mut()
+        .rust_mut()
+        .begin_magnetic_field(contrast, true)
 }
 
 impl super::super::state::PictureViewRust {

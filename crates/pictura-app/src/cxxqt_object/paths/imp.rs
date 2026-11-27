@@ -681,13 +681,23 @@ pub(super) fn path_add_magnetic(
     save: bool,
     name: &QString,
 ) -> bool {
-    let mut points: Vec<(f64, f64)> = points.as_chunks::<2>().0.iter().map(|&[x, y]| (x, y)).collect();
-    if close && points.len() > 2 && points.first() == points.last() { points.pop(); }
+    let mut points: Vec<(f64, f64)> = points
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&[x, y]| (x, y))
+        .collect();
+    if close && points.len() > 2 && points.first() == points.last() {
+        points.pop();
+    }
     if points.len() < 2 {
         return false;
     }
-    let mut bounds: Vec<usize> = fastenings.iter().filter_map(|&i| usize::try_from(i).ok())
-        .filter(|&i| i < points.len()).collect();
+    let mut bounds: Vec<usize> = fastenings
+        .iter()
+        .filter_map(|&i| usize::try_from(i).ok())
+        .filter(|&i| i < points.len())
+        .collect();
     bounds.push(0);
     bounds.push(points.len() - 1);
     bounds.sort_unstable();
@@ -695,20 +705,30 @@ pub(super) fn path_add_magnetic(
     let mut reduced = Vec::new();
     for pair in bounds.windows(2) {
         let part = pictura_core::path::simplify_freehand(&points[pair[0]..=pair[1]], 0.5);
-        if !reduced.is_empty() { reduced.pop(); }
+        if !reduced.is_empty() {
+            reduced.pop();
+        }
         reduced.extend(part);
     }
     begin_drawing(view.as_mut());
     let added = edit(view.as_mut(), |path| {
         path.finish_editing();
-        for &(x, y) in &reduced { path.append_corner(x, y); }
-        if close { path.close_active_subpath(); } else { path.finish_editing(); }
+        for &(x, y) in &reduced {
+            path.append_corner(x, y);
+        }
+        if close {
+            path.close_active_subpath();
+        } else {
+            path.finish_editing();
+        }
         true
     }) == Some(true);
     if added && save {
         {
             let mut rust = view.as_mut().rust_mut();
-            if rust.active_path == ActivePath::Work { save_work_copy(&mut rust, &name.to_string()); }
+            if rust.active_path == ActivePath::Work {
+                save_work_copy(&mut rust, &name.to_string());
+            }
         }
         commit(view, "Freeform Pen");
     }
