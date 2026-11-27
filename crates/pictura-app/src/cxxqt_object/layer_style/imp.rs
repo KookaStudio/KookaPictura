@@ -517,7 +517,7 @@ pub(super) fn layer_style_blend_if_status(view: &PictureView, path: &QString) ->
         return -1;
     };
     if !matches!(
-        doc.mode,
+        doc.document_color_mode(),
         pictura_core::ColorMode::Rgb | pictura_core::ColorMode::Grayscale
     ) {
         return -1;

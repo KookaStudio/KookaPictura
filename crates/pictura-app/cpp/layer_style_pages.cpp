@@ -5,6 +5,7 @@
 #include "layer_style_dialog.h"
 #include "blend_if_slider.h"
 
+#include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "panels/angle_dial.h"
 #include "gradient_editor_dialog.h"
@@ -163,7 +164,9 @@ QWidget* LayerStyleDialog::buildBlendingOptionsPage()
     advanced->addRow(QString(), clipped);
     QFormLayout* blendIf = page.group(tr("Blend If"));
     auto* channel = combo(QStringLiteral("blendIf.channel"), {tr("Gray")});
-    if (channels.size() == 3) channel->addItems(channels);
+    if (image_mode(*view_) == QStringLiteral("rgb")) {
+        channel->addItems(channels);
+    }
     auto* source = new BlendIfSlider;
     source->setObjectName(QStringLiteral("blendIf.source"));
     auto* destination = new BlendIfSlider;

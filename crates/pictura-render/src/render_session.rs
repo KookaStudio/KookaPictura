@@ -347,6 +347,7 @@ fn prefix_digest(doc: &Document, k: usize, level: u32, rect: PsdRect) -> u64 {
     doc.width.hash(&mut hasher);
     doc.height.hash(&mut hasher);
     doc.mode.hash(&mut hasher);
+    doc.document_color_mode().hash(&mut hasher);
     doc.global_light.angle.hash(&mut hasher);
     doc.global_light.altitude.hash(&mut hasher);
     // The pattern library lives in the layer-section extra bytes and is not

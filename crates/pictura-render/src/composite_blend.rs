@@ -4,7 +4,7 @@
 //! per-pixel arithmetic. See
 //! `openspec/changes/composite-hoist-layer-context/design.md`.
 
-use pictura_core::{BlendIf, BlendMode, Document, Layer, PsdRect, SampleRow, Samples};
+use pictura_core::{BlendIf, BlendMode, ColorMode, Document, Layer, PsdRect, SampleRow, Samples};
 
 use crate::composite::{blend_if_factor, unit_u8, Px};
 use crate::composite_native::resolve_native_mask;
@@ -29,6 +29,7 @@ pub(crate) struct BlendCtx<'a> {
     fill: f32,
     curve: Option<&'static crate::text_gamma::TextCurve>,
     blend_if: Option<&'a BlendIf>,
+    split_blend_if: bool,
     mode: BlendMode,
     mask: MaskGate<'a>,
 }
@@ -46,6 +47,13 @@ pub(crate) struct BlendOverride {
     pub(crate) no_curve: bool,
     pub(crate) no_channel_restrictions: bool,
     pub(crate) isolated_group: Option<bool>,
+}
+
+fn supports_split_ranges(doc: &Document) -> bool {
+    matches!(
+        doc.document_color_mode(),
+        ColorMode::Rgb | ColorMode::Grayscale
+    )
 }
 
 impl<'a> BlendCtx<'a> {
@@ -67,6 +75,7 @@ impl<'a> BlendCtx<'a> {
             fill,
             curve,
             blend_if,
+            split_blend_if: supports_split_ranges(doc),
             mode: layer.blend,
             mask: MaskGate::resolve(layer, doc, clip),
         }
@@ -281,10 +290,7 @@ pub(crate) fn blend_into_row_ctx(
     let gate = match ctx.blend_if {
         Some(view) => {
             let backdrop = row[(x - ox) as usize];
-            if matches!(
-                _doc.mode,
-                pictura_core::ColorMode::Rgb | pictura_core::ColorMode::Grayscale
-            ) {
+            if ctx.split_blend_if {
                 blend_if_factor(Some(view), cs, [backdrop.r, backdrop.g, backdrop.b])
             } else {
                 crate::composite::legacy_blend_if_factor(
@@ -334,10 +340,7 @@ pub(crate) fn blend_into_row_legacy(
     let gate = match blend_if {
         Some(view) if !view.is_default() => {
             let backdrop = row[(x - ox) as usize];
-            if matches!(
-                doc.mode,
-                pictura_core::ColorMode::Rgb | pictura_core::ColorMode::Grayscale
-            ) {
+            if supports_split_ranges(doc) {
                 blend_if_factor(Some(view), cs, [backdrop.r, backdrop.g, backdrop.b])
             } else {
                 crate::composite::legacy_blend_if_factor(
