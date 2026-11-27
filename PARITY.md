@@ -1,13 +1,13 @@
 # Feature parity tracker
 
 Assessed: 2026-11-27
-Pictura commit: 47d505216
+Pictura commit: 934c214cf
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
-Coverage includes the #558 HDR merge workflow.
+Coverage includes the #558 HDR merge workflow and the #577 Selective Color channel gating.
 
-This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The current assessment includes the #577 worktree changes relative to the listed commit. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
+This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
 ## Headline
 
@@ -529,7 +529,9 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-27 | 934c214cf | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
 | 2026-11-27 | 47d505216 | 214/349 (61.3%) | 215/366 (58.7%) | 28.0 | 216/374 (57.8%) |
+| 2026-11-27 | 260196c74 | 213/350 (60.9%) | 214/367 (58.3%) | 28.0 | 215/375 (57.3%) |
 | 2026-11-27 | 4a1fc6771 | 213/349 (61.0%) | 214/366 (58.5%) | 28.0 | 215/374 (57.5%) |
 | 2026-11-26 | cbfd55795 | 212/350 (60.6%) | 213/367 (58.0%) | 28.0 | 214/375 (57.1%) |
 | 2026-11-26 | 68a47c69 | 212/349 (60.7%) | 213/366 (58.2%) | 28.0 | 214/374 (57.2%) |
