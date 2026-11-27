@@ -450,19 +450,19 @@ jobs:
         # precompiled headers, so a header a local PCH would mask cannot reach
         # the release build.
         run: |
-          set -o pipefail
           export LD_LIBRARY_PATH="$RUNNER_TEMP/qt-tiff/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export PICTURA_CPU_BUDGET_PERCENT=100
           export PICTURA_CTEST_REGISTRATION_FILE="$RUNNER_TEMP/qt-ctest.json"
           set -o pipefail
           bash scripts/test-report.sh never --qt-only --configure --build \
+            --app-build-log "$RUNNER_TEMP/view-oracle-dev-app.jsonl" \
             --cmake-arg -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             --cmake-arg -DBUILD_TESTING=ON \
             --cmake-arg -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             --cmake-arg -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
             --cmake-arg "-DFETCHCONTENT_BASE_DIR=$GITHUB_WORKSPACE/build/fetchcontent" \
             --cmake-arg -DPICTURA_CARGO_JSON_REPORT=ON \
-            2>&1 | tee "$RUNNER_TEMP/qt-build.log" "$RUNNER_TEMP/view-oracle-dev-app.jsonl"
+            2>&1 | tee "$RUNNER_TEMP/qt-build.log"
 
       - name: Measure Qt build
         id: build_measure
