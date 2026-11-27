@@ -7,7 +7,7 @@ mod standards;
 use std::io::Read as _;
 
 use pictura_core::{BitDepth, ColorMode, Document, MarkerKind, PixelBuffer, Samples, SourcePlanes};
-use pictura_testkit::oracle;
+use pictura_testkit::oracle as testkit_oracle;
 
 use super::*;
 use crate::image_resources::{set_document_resolution, Resolution};
@@ -693,7 +693,7 @@ fn pdf_preserve_editing_defaults_to_masked() {
 
 #[test]
 fn pdf_spot_payload_matches_psd_tools() {
-    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+    if let Err(skip) = testkit_oracle::require(testkit_oracle::Tool::PsdTools) {
         skip.report();
         return;
     }
@@ -709,7 +709,7 @@ fn pdf_spot_payload_matches_psd_tools() {
         std::env::temp_dir().join(format!("pictura-spot-payload-{}.psd", std::process::id()));
     std::fs::write(&path, &psd).expect("temp PSD");
     let script = "from psd_tools import PSDImage\nimport sys\npsd=PSDImage.open(sys.argv[1])\nprint(psd.channels)\n";
-    let out = oracle::Command::new("python3")
+    let out = testkit_oracle::Command::new("python3")
         .args(["-c", script, path.to_str().unwrap()])
         .output()
         .expect("run python3");
