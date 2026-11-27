@@ -125,8 +125,16 @@ pub mod ffi {
 
         /// Paint Bucket with a native pattern preset snapshot.
         fn bucket_fill_preset(
-            view: Pin<&mut PictureView>, x: i32, y: i32, preset: &[u8], mode: &QString,
-            opacity: i32, tolerance: i32, antialias: bool, contiguous: bool, all_layers: bool,
+            view: Pin<&mut PictureView>,
+            x: i32,
+            y: i32,
+            preset: &[u8],
+            mode: &QString,
+            opacity: i32,
+            tolerance: i32,
+            antialias: bool,
+            contiguous: bool,
+            all_layers: bool,
         ) -> bool;
 
         /// `Edit ▸ Fill…`: fill the active pixel layer (its selection when there

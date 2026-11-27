@@ -380,20 +380,35 @@ pub(super) fn shape_add_layer(
         match rust.session.doc.as_mut() {
             Some(doc) => {
                 let before = doc.layer_section_extra.clone();
-                let fill_pattern = (fill_kind(spec) == 3).then(|| text(&spec.fill_pattern)).flatten();
+                let fill_pattern = (fill_kind(spec) == 3)
+                    .then(|| text(&spec.fill_pattern))
+                    .flatten();
                 let stroke_pattern = (spec.stroke && spec.stroke_kind == 3)
-                    .then(|| text(&spec.stroke_pattern)).flatten();
+                    .then(|| text(&spec.stroke_pattern))
+                    .flatten();
                 if (fill_kind(spec) == 3 && fill_pattern.is_none())
                     || (spec.stroke && spec.stroke_kind == 3 && stroke_pattern.is_none())
-                    || fill_pattern.as_deref().is_some_and(|p| !ensure_shape_pattern(doc, p))
-                    || stroke_pattern.as_deref().is_some_and(|p| !ensure_shape_pattern(doc, p)) {
+                    || fill_pattern
+                        .as_deref()
+                        .is_some_and(|p| !ensure_shape_pattern(doc, p))
+                    || stroke_pattern
+                        .as_deref()
+                        .is_some_and(|p| !ensure_shape_pattern(doc, p))
+                {
                     doc.layer_section_extra = before;
                     return QString::default();
                 }
                 let created = pictura_render::add_shape_layer(
-                    doc, &above, [c.r, c.g, c.b, 255], kind.layer_name(), &subpaths[0], live.as_ref(),
+                    doc,
+                    &above,
+                    [c.r, c.g, c.b, 255],
+                    kind.layer_name(),
+                    &subpaths[0],
+                    live.as_ref(),
                 );
-                if created.is_empty() { doc.layer_section_extra = before; }
+                if created.is_empty() {
+                    doc.layer_section_extra = before;
+                }
                 created
             }
             None => String::new(),
@@ -640,7 +655,9 @@ pub(super) fn shape_custom_preview(index: i32, size: i32) -> QImage {
 }
 
 fn ensure_shape_pattern(doc: &mut pictura_core::Document, payload: &str) -> bool {
-    let Some(params) = pattern_from_payload(payload) else { return false; };
+    let Some(params) = pattern_from_payload(payload) else {
+        return false;
+    };
     super::super::impl_layers::ensure_payload_pattern(doc, &params.pattern_id, payload)
 }
 
@@ -655,7 +672,9 @@ pub(super) fn edit_active(
 }
 
 fn edit_active_pattern(
-    mut view: Pin<&mut PictureView>, label: &str, pattern: Option<&str>,
+    mut view: Pin<&mut PictureView>,
+    label: &str,
+    pattern: Option<&str>,
     edit: impl FnOnce(&mut Layer, u32, u32) -> bool,
 ) -> bool {
     let edit = view.as_mut().edit(label, |rust| {
@@ -666,7 +685,9 @@ fn edit_active_pattern(
         let path = path.to_string();
         let patterns_before = pattern.map(|_| doc.layer_section_extra.clone());
         if pattern.is_some_and(|payload| !ensure_shape_pattern(doc, payload)) {
-            if let Some(saved) = patterns_before { doc.layer_section_extra = saved; }
+            if let Some(saved) = patterns_before {
+                doc.layer_section_extra = saved;
+            }
             return Edit::None;
         }
         let before = pictura_render::damage::influence(doc, &path);
@@ -681,7 +702,9 @@ fn edit_active_pattern(
                 None => Edit::Full,
             }
         } else {
-            if let Some(saved) = patterns_before { doc.layer_section_extra = saved; }
+            if let Some(saved) = patterns_before {
+                doc.layer_section_extra = saved;
+            }
             Edit::None
         }
     });
@@ -833,10 +856,15 @@ pub(super) fn shape_set_active_fill_style(
             Some(pictura_render::ShapeFill::Solid([c.r, c.g, c.b]))
         }
     };
-    if kind == 3 && fill.is_none() { return false; }
-    edit_active_pattern(view, "Change Shape Fill", (kind == 3).then_some(pattern), |layer, _, _| {
-        pictura_render::set_shape_fill_content(layer, fill.as_ref())
-    })
+    if kind == 3 && fill.is_none() {
+        return false;
+    }
+    edit_active_pattern(
+        view,
+        "Change Shape Fill",
+        (kind == 3).then_some(pattern),
+        |layer, _, _| pictura_render::set_shape_fill_content(layer, fill.as_ref()),
+    )
 }
 
 pub(super) fn shape_set_active_stroke_style(
@@ -889,9 +917,12 @@ pub(super) fn shape_set_active_stroke_style(
             })
         }
     };
-    edit_active_pattern(view, "Change Shape Stroke", (kind == 3).then_some(pattern), |layer, _, _| {
-        pictura_render::set_shape_stroke(layer, stroke.as_ref())
-    })
+    edit_active_pattern(
+        view,
+        "Change Shape Stroke",
+        (kind == 3).then_some(pattern),
+        |layer, _, _| pictura_render::set_shape_stroke(layer, stroke.as_ref()),
+    )
 }
 
 pub(super) fn shape_active_outline(view: &PictureView) -> Vec<f64> {

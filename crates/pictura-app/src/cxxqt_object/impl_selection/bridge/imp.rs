@@ -582,7 +582,12 @@ fn hard_pattern_bounds(selection: &Selection) -> Option<pictura_core::PsdRect> {
         let mut x = bounds.left as usize;
         while x < bounds.right as usize {
             let count = (bounds.right as usize - x).min(row.len());
-            selection.data.read_rect_into(x..x + count, y..y + 1, selection.width as usize, &mut row[..count]);
+            selection.data.read_rect_into(
+                x..x + count,
+                y..y + 1,
+                selection.width as usize,
+                &mut row[..count],
+            );
             if row[..count].iter().any(|&coverage| coverage != 255) {
                 return None;
             }
@@ -597,7 +602,12 @@ pub(super) fn selection_pattern_revision(view: &PictureView) -> u64 {
 }
 
 pub(super) fn selection_pattern_valid(view: &PictureView) -> bool {
-    view.rust().session.selection.as_ref().and_then(hard_pattern_bounds).is_some()
+    view.rust()
+        .session
+        .selection
+        .as_ref()
+        .and_then(hard_pattern_bounds)
+        .is_some()
 }
 
 pub(super) fn selection_pattern_preset(view: &PictureView, name: &QString) -> Vec<u8> {
@@ -605,12 +615,22 @@ pub(super) fn selection_pattern_preset(view: &PictureView, name: &QString) -> Ve
     use crate::cxxqt_object::picture::picture_region;
     use pictura_codec::preset_library::{encode_native, Kind, Library, Payload, Preset};
     let rust = view.rust();
-    let Some(doc) = rust.session.doc.as_ref() else { return Vec::new() };
-    let Some(selection) = rust.session.selection.as_ref() else { return Vec::new() };
-    let Some(bounds) = hard_pattern_bounds(selection) else { return Vec::new() };
-    if rust.selection_bounds() != Some(bounds) { return Vec::new(); }
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return Vec::new();
+    };
+    let Some(selection) = rust.session.selection.as_ref() else {
+        return Vec::new();
+    };
+    let Some(bounds) = hard_pattern_bounds(selection) else {
+        return Vec::new();
+    };
+    if rust.selection_bounds() != Some(bounds) {
+        return Vec::new();
+    }
     let count = (bounds.width() as u64).saturating_mul(bounds.height() as u64);
-    if !crate::cxxqt_object::helpers::memory_gate::admit_resident(count.saturating_mul(32)).admitted() {
+    if !crate::cxxqt_object::helpers::memory_gate::admit_resident(count.saturating_mul(32))
+        .admitted()
+    {
         return Vec::new();
     }
     let pixels = picture_region(doc, rust, bounds);
@@ -622,8 +642,13 @@ pub(super) fn selection_pattern_preset(view: &PictureView, name: &QString) -> Ve
     };
     encode_native(&Library {
         kind: Kind::Patterns,
-        entries: vec![Preset { name: name.to_string(), payload: Payload::Pattern(pattern), opaque: Vec::new() }],
-    }).unwrap_or_default()
+        entries: vec![Preset {
+            name: name.to_string(),
+            payload: Payload::Pattern(pattern),
+            opaque: Vec::new(),
+        }],
+    })
+    .unwrap_or_default()
 }
 
 #[cfg(test)]

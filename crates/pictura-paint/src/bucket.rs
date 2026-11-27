@@ -582,7 +582,13 @@ pub fn fill_within(
     })
 }
 
-fn paint_sample(paint: BucketPaint<'_>, mode: PaintMode, x: i32, y: i32, cover: f32) -> Option<(Rgba, f32)> {
+fn paint_sample(
+    paint: BucketPaint<'_>,
+    mode: PaintMode,
+    x: i32,
+    y: i32,
+    cover: f32,
+) -> Option<(Rgba, f32)> {
     let color = paint_at(paint, x, y);
     if !matches!(paint, BucketPaint::Foreground(_)) && color.a == 0 {
         return None;
@@ -600,12 +606,19 @@ fn paint_at(paint: BucketPaint<'_>, x: i32, y: i32) -> Rgba {
     match paint {
         BucketPaint::Foreground(color) => color,
         BucketPaint::Scripted(tile, script, origin, center) => scripted_pattern_at_center(
-            tile, script, x.saturating_add(origin.0), y.saturating_add(origin.1), center,
+            tile,
+            script,
+            x.saturating_add(origin.0),
+            y.saturating_add(origin.1),
+            center,
         ),
         BucketPaint::PatternOffset(tile, origin) => {
-            let [r, g, b, a] = tile.get(x.saturating_add(origin.0).rem_euclid(tile.width), y.saturating_add(origin.1).rem_euclid(tile.height));
+            let [r, g, b, a] = tile.get(
+                x.saturating_add(origin.0).rem_euclid(tile.width),
+                y.saturating_add(origin.1).rem_euclid(tile.height),
+            );
             Rgba { r, g, b, a }
-        },
+        }
         BucketPaint::Pattern(tile) => {
             let [r, g, b, a] = tile.get(x.rem_euclid(tile.width), y.rem_euclid(tile.height));
             Rgba { r, g, b, a }
@@ -625,14 +638,28 @@ pub fn scripted_pattern_at(tile: &RgbaImage, script: i32, x: i32, y: i32) -> Rgb
 }
 
 /// Sample a scripted layout around its document-space center.
-pub fn scripted_pattern_at_center(tile: &RgbaImage, script: i32, x: i32, y: i32, center: (i32, i32)) -> Rgba {
+pub fn scripted_pattern_at_center(
+    tile: &RgbaImage,
+    script: i32,
+    x: i32,
+    y: i32,
+    center: (i32, i32),
+) -> Rgba {
     if tile.width <= 0 || tile.height <= 0 {
-        return Rgba { r: 0, g: 0, b: 0, a: 0 };
+        return Rgba {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 0,
+        };
     }
     let (w, h) = (i64::from(tile.width), i64::from(tile.height));
     let (x, y) = (i64::from(x), i64::from(y));
     let (u, v) = match script {
-        1 => ((x + (y.div_euclid(h).rem_euclid(2) * w / 2)).rem_euclid(w), y.rem_euclid(h)),
+        1 => (
+            (x + (y.div_euclid(h).rem_euclid(2) * w / 2)).rem_euclid(w),
+            y.rem_euclid(h),
+        ),
         2 => {
             let side = w.max(h);
             let (lx, ly) = (x.rem_euclid(side), y.rem_euclid(side));
@@ -642,7 +669,12 @@ pub fn scripted_pattern_at_center(tile: &RgbaImage, script: i32, x: i32, y: i32,
                 (ly, h - 1 - lx)
             };
             if u < 0 || v < 0 || u >= w || v >= h {
-                return Rgba { r: 0, g: 0, b: 0, a: 0 };
+                return Rgba {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 0,
+                };
             }
             (u, v)
         }
@@ -654,7 +686,12 @@ pub fn scripted_pattern_at_center(tile: &RgbaImage, script: i32, x: i32, y: i32,
             let u = x.rem_euclid(cw) - (hash % w as u64) as i64;
             let v = y.rem_euclid(ch) - ((hash >> 16) % h as u64) as i64;
             if u < 0 || v < 0 || u >= w || v >= h {
-                return Rgba { r: 0, g: 0, b: 0, a: 0 };
+                return Rgba {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 0,
+                };
             }
             (u, v)
         }
@@ -667,7 +704,9 @@ pub fn scripted_pattern_at_center(tile: &RgbaImage, script: i32, x: i32, y: i32,
             let mut point = None;
             for offset in -1..=1 {
                 let theta = angle + (turn + offset) as f64 * std::f64::consts::TAU;
-                if theta < 0.0 { continue; }
+                if theta < 0.0 {
+                    continue;
+                }
                 let r = pitch * theta;
                 let sx = (r * theta.cos()).round() as i64 - w / 2;
                 let sy = (r * theta.sin()).round() as i64 - h / 2;
@@ -679,7 +718,14 @@ pub fn scripted_pattern_at_center(tile: &RgbaImage, script: i32, x: i32, y: i32,
             }
             match point {
                 Some(point) => point,
-                None => return Rgba { r: 0, g: 0, b: 0, a: 0 },
+                None => {
+                    return Rgba {
+                        r: 0,
+                        g: 0,
+                        b: 0,
+                        a: 0,
+                    }
+                }
             }
         }
         5 => {
@@ -687,7 +733,7 @@ pub fn scripted_pattern_at_center(tile: &RgbaImage, script: i32, x: i32, y: i32,
             let sx = if x >= cx { 2 * cx - 1 - x } else { x };
             let sy = if y >= cy { 2 * cy - 1 - y } else { y };
             (sx.rem_euclid(w), sy.rem_euclid(h))
-        },
+        }
         _ => (x.rem_euclid(w), y.rem_euclid(h)),
     };
     let [r, g, b, a] = tile.get(u as i32, v as i32);

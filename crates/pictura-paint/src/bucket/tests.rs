@@ -1138,13 +1138,27 @@ fn uniform_tiles_are_filled_without_allocating() {
     }
 }
 
-
 #[test]
 fn pattern_clear_respects_source_alpha() {
     let mut d = doc(3, 1, WHITE);
-    let tile = RgbaImage { width: 3, height: 1, data: vec![[0, 0, 0, 0], [0, 0, 0, 128], [0, 0, 0, 255]] };
+    let tile = RgbaImage {
+        width: 3,
+        height: 1,
+        data: vec![[0, 0, 0, 0], [0, 0, 0, 128], [0, 0, 0, 255]],
+    };
     let bounds = canvas(&d);
-    assert!(fill_within(&mut d, "0", bounds, None, BucketPaint::Pattern(&tile), PaintMode::Clear, 1.0, None, Alpha::Blend).is_some());
+    assert!(fill_within(
+        &mut d,
+        "0",
+        bounds,
+        None,
+        BucketPaint::Pattern(&tile),
+        PaintMode::Clear,
+        1.0,
+        None,
+        Alpha::Blend
+    )
+    .is_some());
     assert_eq!(pixel(&d, 0, 0)[3], 255);
     assert!((126..=128).contains(&pixel(&d, 1, 0)[3]));
     assert_eq!(pixel(&d, 2, 0)[3], 0);
@@ -1152,21 +1166,50 @@ fn pattern_clear_respects_source_alpha() {
 
 #[test]
 fn local_pattern_surface_uses_document_origin() {
-    let tile = RgbaImage { width: 3, height: 1, data: vec![[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]] };
+    let tile = RgbaImage {
+        width: 3,
+        height: 1,
+        data: vec![[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]],
+    };
     let mut local = doc(3, 1, WHITE);
     let bounds = canvas(&local);
-    assert!(fill_within(&mut local, "0", bounds, None, BucketPaint::PatternOffset(&tile, (1, 0)), PaintMode::Normal, 1.0, None, Alpha::Blend).is_some());
+    assert!(fill_within(
+        &mut local,
+        "0",
+        bounds,
+        None,
+        BucketPaint::PatternOffset(&tile, (1, 0)),
+        PaintMode::Normal,
+        1.0,
+        None,
+        Alpha::Blend
+    )
+    .is_some());
     assert_eq!(pixel(&local, 0, 0), [0, 255, 0, 255]);
     assert_eq!(pixel(&local, 1, 0), [0, 0, 255, 255]);
 }
 
-
 #[test]
 fn scripted_clear_leaves_gaps_untouched() {
     let mut d = doc(4, 4, WHITE);
-    let tile = RgbaImage { width: 1, height: 1, data: vec![[0, 0, 0, 255]] };
+    let tile = RgbaImage {
+        width: 1,
+        height: 1,
+        data: vec![[0, 0, 0, 255]],
+    };
     let bounds = canvas(&d);
-    assert!(fill_within(&mut d, "0", bounds, None, BucketPaint::Scripted(&tile, 3, (0, 0), (2, 2)), PaintMode::Clear, 1.0, None, Alpha::Blend).is_some());
+    assert!(fill_within(
+        &mut d,
+        "0",
+        bounds,
+        None,
+        BucketPaint::Scripted(&tile, 3, (0, 0), (2, 2)),
+        PaintMode::Clear,
+        1.0,
+        None,
+        Alpha::Blend
+    )
+    .is_some());
     assert_eq!(pixel(&d, 0, 0)[3], 0);
     assert_eq!(pixel(&d, 1, 0)[3], 255);
 }

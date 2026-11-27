@@ -11,8 +11,12 @@ fn scripted_pattern_geometry_and_determinism() {
         width: 3,
         height: 2,
         data: vec![
-            [255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255],
-            [255, 255, 0, 255], [0, 255, 255, 255], [255, 0, 255, 255],
+            [255, 0, 0, 255],
+            [0, 255, 0, 255],
+            [0, 0, 255, 255],
+            [255, 255, 0, 255],
+            [0, 255, 255, 255],
+            [255, 0, 255, 255],
         ],
     };
     let render = |script| {
@@ -23,12 +27,21 @@ fn scripted_pattern_geometry_and_determinism() {
     };
     let layouts: Vec<_> = (1..=5).map(render).collect();
     // Adjacent brick rows have the same tile shifted by half its width.
-    assert_eq!(scripted_pattern_at(&tile, 1, 0, 2), scripted_pattern_at(&tile, 1, 1, 0));
-    assert_ne!(scripted_pattern_at(&tile, 1, 0, 2), scripted_pattern_at(&tile, 1, 0, 0));
+    assert_eq!(
+        scripted_pattern_at(&tile, 1, 0, 2),
+        scripted_pattern_at(&tile, 1, 1, 0)
+    );
+    assert_ne!(
+        scripted_pattern_at(&tile, 1, 0, 2),
+        scripted_pattern_at(&tile, 1, 0, 0)
+    );
     // Every source pixel survives rotation in the neighboring square cell.
     for u in 0..3 {
         for v in 0..2 {
-            assert_eq!(scripted_pattern_at(&tile, 2, 3 + 1 - v, u), scripted_pattern_at(&tile, 2, u, v));
+            assert_eq!(
+                scripted_pattern_at(&tile, 2, 3 + 1 - v, u),
+                scripted_pattern_at(&tile, 2, u, v)
+            );
         }
     }
     assert_eq!(scripted_pattern_at(&tile, 2, 5, 0).a, 0);
@@ -40,17 +53,33 @@ fn scripted_pattern_geometry_and_determinism() {
             .map(|(x, y)| scripted_pattern_at(&tile, script, x, y).a)
             .collect();
         assert!(samples.contains(&0), "script {script} has gaps");
-        assert!(samples.contains(&255), "script {script} places tiles away from the origin");
+        assert!(
+            samples.contains(&255),
+            "script {script} places tiles away from the origin"
+        );
     }
     for y in 16..32 {
         for x in 16..32 {
-            assert_eq!(scripted_pattern_at(&tile, 5, x, y), scripted_pattern_at(&tile, 5, 63 - x, y));
-            assert_eq!(scripted_pattern_at(&tile, 5, x, y), scripted_pattern_at(&tile, 5, x, 63 - y));
+            assert_eq!(
+                scripted_pattern_at(&tile, 5, x, y),
+                scripted_pattern_at(&tile, 5, 63 - x, y)
+            );
+            assert_eq!(
+                scripted_pattern_at(&tile, 5, x, y),
+                scripted_pattern_at(&tile, 5, x, 63 - y)
+            );
         }
     }
-    assert_ne!(scripted_pattern_at(&tile, 5, 32, 17), scripted_pattern_at(&tile, 0, 32, 17));
+    assert_ne!(
+        scripted_pattern_at(&tile, 5, 32, 17),
+        scripted_pattern_at(&tile, 0, 32, 17)
+    );
     for (index, layout) in layouts.iter().enumerate() {
-        assert_eq!(*layout, render(index as i32 + 1), "script must be deterministic");
+        assert_eq!(
+            *layout,
+            render(index as i32 + 1),
+            "script must be deterministic"
+        );
         for previous in &layouts[..index] {
             assert_ne!(layout, previous, "scripts must produce distinct layouts");
         }
