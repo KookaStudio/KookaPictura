@@ -153,6 +153,7 @@ set(PICTURA_QT_TEST_DRIVER_paint
     tst_color_replacement
     tst_options_bars_parity
     tst_fill_tools
+    tst_pattern_authoring
     tst_eraser_tools
     tst_retouch_tools
     tst_stamp_hold

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "preset_store.h"
 #include <QtGui/QColor>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -31,6 +32,8 @@ public:
     bool preserveTransparency() const;
     bool isPatternFill() const;
     int selectedPatternIndex() const;
+    QByteArray selectedPatternBytes() const;
+    int script() const;
 
 private:
     void onContentsChanged(int index);
@@ -43,6 +46,9 @@ private:
     QCheckBox* preserveTransparency_ = nullptr;
     QToolButton* patternSwatch_ = nullptr;
     QWidget* patternPopup_ = nullptr;
+    QCheckBox* scripted_ = nullptr;
+    QComboBox* script_ = nullptr;
+    PresetRows patterns_;
 
     QColor foreground_;
     QColor background_;

@@ -378,14 +378,24 @@ pub(super) fn shape_add_layer(
             .map(str::to_string)
             .unwrap_or_default();
         match rust.session.doc.as_mut() {
-            Some(doc) => pictura_render::add_shape_layer(
-                doc,
-                &above,
-                [c.r, c.g, c.b, 255],
-                kind.layer_name(),
-                &subpaths[0],
-                live.as_ref(),
-            ),
+            Some(doc) => {
+                let before = doc.layer_section_extra.clone();
+                let fill_pattern = (fill_kind(spec) == 3).then(|| text(&spec.fill_pattern)).flatten();
+                let stroke_pattern = (spec.stroke && spec.stroke_kind == 3)
+                    .then(|| text(&spec.stroke_pattern)).flatten();
+                if (fill_kind(spec) == 3 && fill_pattern.is_none())
+                    || (spec.stroke && spec.stroke_kind == 3 && stroke_pattern.is_none())
+                    || fill_pattern.as_deref().is_some_and(|p| !ensure_shape_pattern(doc, p))
+                    || stroke_pattern.as_deref().is_some_and(|p| !ensure_shape_pattern(doc, p)) {
+                    doc.layer_section_extra = before;
+                    return QString::default();
+                }
+                let created = pictura_render::add_shape_layer(
+                    doc, &above, [c.r, c.g, c.b, 255], kind.layer_name(), &subpaths[0], live.as_ref(),
+                );
+                if created.is_empty() { doc.layer_section_extra = before; }
+                created
+            }
             None => String::new(),
         }
     };
@@ -629,11 +639,23 @@ pub(super) fn shape_custom_preview(index: i32, size: i32) -> QImage {
     rgba_image(rgba, size, size)
 }
 
+fn ensure_shape_pattern(doc: &mut pictura_core::Document, payload: &str) -> bool {
+    let Some(params) = pattern_from_payload(payload) else { return false; };
+    super::super::impl_layers::ensure_payload_pattern(doc, &params.pattern_id, payload)
+}
+
 /// Apply `edit` to the active shape layer; when it changed something,
 /// recomposite and record `label`.
 pub(super) fn edit_active(
     mut view: Pin<&mut PictureView>,
     label: &str,
+    edit: impl FnOnce(&mut Layer, u32, u32) -> bool,
+) -> bool {
+    edit_active_pattern(view.as_mut(), label, None, edit)
+}
+
+fn edit_active_pattern(
+    mut view: Pin<&mut PictureView>, label: &str, pattern: Option<&str>,
     edit: impl FnOnce(&mut Layer, u32, u32) -> bool,
 ) -> bool {
     let edit = view.as_mut().edit(label, |rust| {
@@ -642,6 +664,11 @@ pub(super) fn edit_active(
             return Edit::None;
         };
         let path = path.to_string();
+        let patterns_before = pattern.map(|_| doc.layer_section_extra.clone());
+        if pattern.is_some_and(|payload| !ensure_shape_pattern(doc, payload)) {
+            if let Some(saved) = patterns_before { doc.layer_section_extra = saved; }
+            return Edit::None;
+        }
         let before = pictura_render::damage::influence(doc, &path);
         let (width, height) = (doc.width, doc.height);
         let changed = pictura_render::resolve_path_mut(doc, path.as_str())
@@ -654,6 +681,7 @@ pub(super) fn edit_active(
                 None => Edit::Full,
             }
         } else {
+            if let Some(saved) = patterns_before { doc.layer_section_extra = saved; }
             Edit::None
         }
     });
@@ -805,7 +833,8 @@ pub(super) fn shape_set_active_fill_style(
             Some(pictura_render::ShapeFill::Solid([c.r, c.g, c.b]))
         }
     };
-    edit_active(view, "Change Shape Fill", |layer, _, _| {
+    if kind == 3 && fill.is_none() { return false; }
+    edit_active_pattern(view, "Change Shape Fill", (kind == 3).then_some(pattern), |layer, _, _| {
         pictura_render::set_shape_fill_content(layer, fill.as_ref())
     })
 }
@@ -860,7 +889,7 @@ pub(super) fn shape_set_active_stroke_style(
             })
         }
     };
-    edit_active(view, "Change Shape Stroke", |layer, _, _| {
+    edit_active_pattern(view, "Change Shape Stroke", (kind == 3).then_some(pattern), |layer, _, _| {
         pictura_render::set_shape_stroke(layer, stroke.as_ref())
     })
 }

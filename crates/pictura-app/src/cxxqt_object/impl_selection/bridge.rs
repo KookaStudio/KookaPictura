@@ -184,6 +184,15 @@ pub mod ffi {
         /// A nonempty selection whose coverage never exceeds 50%.
         fn selection_below_half(view: &PictureView) -> bool;
 
+        /// The document content revision for a pending pattern capture.
+        fn selection_pattern_revision(view: &PictureView) -> u64;
+
+        /// Whether the current selection is a nonempty hard rectangle.
+        fn selection_pattern_valid(view: &PictureView) -> bool;
+
+        /// Encode a hard rectangular selection as one native pattern preset, or empty on refusal.
+        fn selection_pattern_preset(view: &PictureView, name: &QString) -> Vec<u8>;
+
         /// The live selection coverage, row-major; empty without a selection.
         fn selection_coverage_bytes(view: &PictureView) -> Vec<u8>;
 

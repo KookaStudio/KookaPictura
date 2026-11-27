@@ -31,7 +31,7 @@ FillDialog::FillDialog(const QColor& foreground, const QColor& background, QWidg
     , background_(background)
 {
     setWindowTitle(tr("Fill"));
-    setFixedSize(400, 300);
+    setMinimumSize(400, 330);
 
     auto* outer = new QHBoxLayout(this);
     auto* left = new QVBoxLayout;
@@ -80,6 +80,27 @@ FillDialog::FillDialog(const QColor& foreground, const QColor& background, QWidg
     patternGroup->setVisible(false);
     contents_->setProperty("patternGroup", QVariant::fromValue<QObject*>(patternGroup));
 
+    scripted_ = new QCheckBox(tr("Scripted Patterns"), patternGroup);
+    scripted_->setObjectName(QStringLiteral("fillScriptedPatterns"));
+    script_ = new QComboBox(patternGroup);
+    script_->setObjectName(QStringLiteral("fillScript"));
+    script_->addItem(tr("Brick Fill"), 1);
+    script_->addItem(tr("Cross Weave"), 2);
+    script_->addItem(tr("Random Fill"), 3);
+    script_->addItem(tr("Spiral"), 4);
+    script_->addItem(tr("Symmetry Fill"), 5);
+    script_->setEnabled(false);
+    connect(scripted_, &QCheckBox::toggled, script_, &QComboBox::setEnabled);
+    left->addWidget(scripted_);
+    left->addWidget(script_);
+    scripted_->setVisible(false);
+    script_->setVisible(false);
+    patterns_ = PresetStore::current().rows(PresetType::Patterns);
+    if (patterns_.isEmpty()) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(contents_->model())) {
+            if (auto* item = model->item(contents_->findData(int(FillContent::Pattern)))) item->setEnabled(false);
+        }
+    }
     buildPatternGrid();
 
     auto* blendGroup = new QGroupBox(tr("Blending"), this);
@@ -145,23 +166,26 @@ void FillDialog::buildPatternGrid()
     grid->setSpacing(2);
     grid->setContentsMargins(4, 4, 4, 4);
 
-    const int count = stamp_pattern_count();
+    const int count = patterns_.size();
     const int cols = 7;
     for (int i = 0; i < count; ++i) {
         auto* button = new QToolButton(patternPopup_);
-        button->setIcon(patternIcon(i));
+        const auto& row = patterns_.at(i);
+        const QIcon icon = row.preview.isNull() ? patternIcon(row.values.value(QStringLiteral("index")).toInt()) : QIcon(QPixmap::fromImage(row.preview));
+        button->setIcon(icon);
         button->setIconSize(QSize(32, 32));
         button->setFixedSize(36, 36);
-        button->setToolTip(stamp_pattern_name(i));
-        connect(button, &QToolButton::clicked, this, [this, i] {
+        button->setToolTip(row.name);
+        connect(button, &QToolButton::clicked, this, [this, i, icon] {
             selectedPattern_ = i;
-            patternSwatch_->setIcon(patternIcon(i));
+            patternSwatch_->setIcon(icon);
             patternPopup_->hide();
         });
         grid->addWidget(button, i / cols, i % cols);
     }
     if (count > 0) {
-        patternSwatch_->setIcon(patternIcon(0));
+        const auto& row = patterns_.first();
+        patternSwatch_->setIcon(row.preview.isNull() ? patternIcon(row.values.value(QStringLiteral("index")).toInt()) : QIcon(QPixmap::fromImage(row.preview)));
     }
 
     connect(patternSwatch_, &QToolButton::clicked, this, [this] {
@@ -178,6 +202,8 @@ void FillDialog::onContentsChanged(int index)
             contents_->property("patternGroup").value<QObject*>())) {
         group->setVisible(content == FillContent::Pattern);
     }
+    scripted_->setVisible(content == FillContent::Pattern);
+    script_->setVisible(content == FillContent::Pattern);
     if (content == FillContent::Custom) {
         chooseColor();
     }
@@ -200,6 +226,11 @@ bool FillDialog::isPatternFill() const
 }
 
 int FillDialog::selectedPatternIndex() const { return selectedPattern_; }
+QByteArray FillDialog::selectedPatternBytes() const
+{
+    return selectedPattern_ >= 0 && selectedPattern_ < patterns_.size() ? patterns_.at(selectedPattern_).native : QByteArray();
+}
+int FillDialog::script() const { return scripted_->isChecked() ? script_->currentData().toInt() : 0; }
 
 QColor FillDialog::fillColor() const
 {

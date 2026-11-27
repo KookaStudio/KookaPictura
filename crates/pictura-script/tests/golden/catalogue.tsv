@@ -85,7 +85,7 @@ edit.transform.points.again	Edit/Transform Points/Again	Again		0	0
 edit.auto.align.layers	Edit/Auto-Align Layers…	Auto-Align Layers…		1	0
 edit.auto.blend.layers	Edit/Auto-Blend Layers…	Auto-Blend Layers…		1	0
 edit.define.brush.preset	Edit/Define Brush Preset…	Define Brush Preset…		0	0
-edit.define.pattern	Edit/Define Pattern…	Define Pattern…		0	0
+edit.define.pattern	Edit/Define Pattern…	Define Pattern…		1	0
 edit.define.custom.shape	Edit/Define Custom Shape…	Define Custom Shape…		0	0
 edit.purge.undo	Edit/Purge/Undo	Undo		1	0
 edit.purge.histories	Edit/Purge/Histories	Histories		1	0

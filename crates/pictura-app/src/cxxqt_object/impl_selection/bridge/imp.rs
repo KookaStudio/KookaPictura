@@ -570,3 +570,74 @@ mod tests {
         assert_eq!(result.points, points.to_vec());
     }
 }
+
+fn hard_pattern_bounds(selection: &Selection) -> Option<pictura_core::PsdRect> {
+    let bounds = selection.bounds()?;
+    let pixels = (bounds.width() as usize).checked_mul(bounds.height() as usize)?;
+    if pixels > (1 << 24) {
+        return None;
+    }
+    let mut row = [0u8; 4096];
+    for y in bounds.top as usize..bounds.bottom as usize {
+        let mut x = bounds.left as usize;
+        while x < bounds.right as usize {
+            let count = (bounds.right as usize - x).min(row.len());
+            selection.data.read_rect_into(x..x + count, y..y + 1, selection.width as usize, &mut row[..count]);
+            if row[..count].iter().any(|&coverage| coverage != 255) {
+                return None;
+            }
+            x += count;
+        }
+    }
+    Some(bounds)
+}
+
+pub(super) fn selection_pattern_revision(view: &PictureView) -> u64 {
+    view.rust().session.content_revision
+}
+
+pub(super) fn selection_pattern_valid(view: &PictureView) -> bool {
+    view.rust().session.selection.as_ref().and_then(hard_pattern_bounds).is_some()
+}
+
+pub(super) fn selection_pattern_preset(view: &PictureView, name: &QString) -> Vec<u8> {
+    use crate::cxxqt_object::helpers_composite::buffer_to_rgba_bytes;
+    use crate::cxxqt_object::picture::picture_region;
+    use pictura_codec::preset_library::{encode_native, Kind, Library, Payload, Preset};
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else { return Vec::new() };
+    let Some(selection) = rust.session.selection.as_ref() else { return Vec::new() };
+    let Some(bounds) = hard_pattern_bounds(selection) else { return Vec::new() };
+    if rust.selection_bounds() != Some(bounds) { return Vec::new(); }
+    let count = (bounds.width() as u64).saturating_mul(bounds.height() as u64);
+    if !crate::cxxqt_object::helpers::memory_gate::admit_resident(count.saturating_mul(32)).admitted() {
+        return Vec::new();
+    }
+    let pixels = picture_region(doc, rust, bounds);
+    let pattern = pictura_codec::PatternPixels {
+        pattern_id: String::new(),
+        width: bounds.width() as u32,
+        height: bounds.height() as u32,
+        rgba: buffer_to_rgba_bytes(&pixels),
+    };
+    encode_native(&Library {
+        kind: Kind::Patterns,
+        entries: vec![Preset { name: name.to_string(), payload: Payload::Pattern(pattern), opaque: Vec::new() }],
+    }).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod pattern_tests {
+    use super::*;
+
+    #[test]
+    fn pattern_selection_requires_hard_rectangle() {
+        let mut selection = Selection::rect(8, 8, 1, 2, 4, 3);
+        assert!(hard_pattern_bounds(&selection).is_some());
+        selection.data.write_rect_from(1..2, 2..3, 8, &[128]);
+        assert!(hard_pattern_bounds(&selection).is_none());
+        selection.data.write_rect_from(1..2, 2..3, 8, &[0]);
+        assert!(hard_pattern_bounds(&selection).is_none());
+        assert!(hard_pattern_bounds(&Selection::none(8, 8)).is_none());
+    }
+}

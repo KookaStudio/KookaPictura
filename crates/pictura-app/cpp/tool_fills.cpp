@@ -162,7 +162,15 @@ public:
         }
         const BucketOptions o = bucket_->get();
         const QRgb foreground = ctx.foreground().rgba();
+        if (o.fill == 1 && o.patternPreset.isEmpty() && o.pattern < 0) return true;
         const bool filled = runDocumentCommand(jobParent(ctx), *v, QObject::tr("Paint Bucket"), [&] {
+            if (o.fill == 1 && !o.patternPreset.isEmpty()) {
+                const auto* data = reinterpret_cast<const std::uint8_t*>(o.patternPreset.constData());
+                bucket_fill_preset(*v, qFloor(imagePos.x()), qFloor(imagePos.y()),
+                                          ::rust::Slice<const std::uint8_t>(data, o.patternPreset.size()),
+                                          o.mode, o.opacity, o.tolerance, o.antialias, o.contiguous, o.allLayers);
+                return;
+            }
             bucket_fill_at(*v, qFloor(imagePos.x()), qFloor(imagePos.y()), foreground,
                            o.fill == 1 ? o.pattern : -1, o.mode, o.opacity, o.tolerance,
                            o.antialias, o.contiguous, o.allLayers);
