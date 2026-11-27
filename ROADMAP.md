@@ -158,7 +158,8 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
 - [x] `Ctrl+J` duplicate-group semantics (#590)
 - [x] Smart-object Stack Modes (#591)
 - [x] Pattern fill layers using the open document's embedded patterns (#262)
-- [ ] Pattern preset library and `Edit > Define Pattern` (#262, #599)
+- [x] Pattern preset library import and `Edit > Define Pattern` (#262, #599)
+- [ ] Adobe pattern library export and broader format coverage (#599)
 - [x] Vector-mask path authoring: Current Path from the selected path, the Paths
   panel vector-mask row, and the outlined mask thumbnail (#261)
 - [ ] A Blend-If editor UI (#264)
@@ -433,7 +434,8 @@ gaps are the CS6 Extended 3D object and camera tools.
       `crates/pictura-paint/src/pattern.rs`.
 - [x] The Gradient Editor reachable from the Gradient tool, plus opacity stops
       and a midpoint (#598)
-- [ ] Define Pattern, the `.pat` library, and Scripted Patterns (#599)
+- [x] Define Pattern and approximate Scripted Patterns (#599)
+- [ ] Complete `.pat` library interchange (#599)
 - [x] Color-picker gamut and web alerts, and the picker preference (#600)
 - [ ] Color Libraries (PANTONE) (#600)
 - [ ] The HUD colour picker (#601)
