@@ -781,6 +781,7 @@ free	mask_solo_set	mask_solo_set	api/layers_bridge.h	pictura_app/src/cxxqt_objec
 free	matting_target_ready	matting_target_ready	api/layers_bridge.h	pictura_app/src/cxxqt_object/impl_layers/matting.cxxqt.h
 free	path_add_freeform	path_add_freeform	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_add_freeform_and_save	path_add_freeform_and_save	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
+free	path_add_magnetic	path_add_magnetic	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_append_corner	path_append_corner	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_close	path_close	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_close_and_save	path_close_and_save	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
@@ -837,6 +838,7 @@ free	paths_saved_count	paths_saved_count	api/layers_bridge.h	pictura_app/src/cxx
 free	paths_saved_name	paths_saved_name	api/layers_bridge.h	pictura_app/src/cxxqt_object/path_list.cxxqt.h
 free	paths_set_active	paths_set_active	api/layers_bridge.h	pictura_app/src/cxxqt_object/path_list.cxxqt.h
 free	paths_stroke	paths_stroke	api/layers_bridge.h	pictura_app/src/cxxqt_object/path_list.cxxqt.h
+free	paths_stroke_magnetic	paths_stroke_magnetic	api/layers_bridge.h	pictura_app/src/cxxqt_object/path_list.cxxqt.h
 free	paths_vector_mask_name	paths_vector_mask_name	api/layers_bridge.h	pictura_app/src/cxxqt_object/path_list.cxxqt.h
 free	pattern_thumbnail	pattern_thumbnail	api/layers_bridge.h	pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h
 free	patterns_available	patterns_available	api/layers_bridge.h	pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h
@@ -1007,6 +1009,7 @@ free	last_refusal	last_refusal	api/paint_bridge.h	pictura_app/src/cxxqt_object/p
 free	magic_erase_at	magic_erase_at	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	magnetic_begin	magnetic_begin	api/paint_bridge.h	pictura_app/src/cxxqt_object/magnetic.cxxqt.h
 free	magnetic_end	magnetic_end	api/paint_bridge.h	pictura_app/src/cxxqt_object/magnetic.cxxqt.h
+free	magnetic_pen_begin	magnetic_pen_begin	api/paint_bridge.h	pictura_app/src/cxxqt_object/magnetic.cxxqt.h
 free	magnetic_trace	magnetic_trace	api/paint_bridge.h	pictura_app/src/cxxqt_object/magnetic.cxxqt.h
 free	managed_pattern_count	managed_pattern_count	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	marker_at	marker_at	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
