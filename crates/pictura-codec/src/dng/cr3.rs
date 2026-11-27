@@ -316,6 +316,7 @@ pub(super) fn read_cr3(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
             height: 2,
             colors: pattern(h.cfa, area),
         },
+        fuji_width: None,
         default_crop: DngCrop {
             x: 0.0,
             y: 0.0,

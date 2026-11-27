@@ -180,6 +180,24 @@ fn read_image(bytes: &[u8], linear: bool, budget: &ImageBudget) -> Result<Image,
         });
     }
     let image = pictura_codec::read_raw(bytes, budget).map_err(reason)?;
+    // A mosaic DNG cannot carry a SuperCCD's turned lattice (#1621).
+    if image.fuji_width.is_some() {
+        let camera = pictura_codec::demosaic(&image, pictura_codec::DemosaicMethod::Ahd, budget)
+            .map_err(reason)?;
+        return Ok(Image {
+            width: camera.width,
+            height: camera.height,
+            pixels: camera.rgb,
+            cfa: None,
+            look: RawLook {
+                color: image.color,
+                crop: image.default_crop,
+                orientation: image.orientation,
+            },
+            make: image.make,
+            model: image.model,
+        });
+    }
     Ok(Image {
         width: image.width,
         height: image.height,
@@ -213,6 +231,7 @@ fn full_preview(
                 height: image.height,
                 samples: image.pixels.clone(),
                 cfa: cfa.clone(),
+                fuji_width: None,
                 default_crop: image.look.crop,
                 orientation: image.look.orientation,
                 make: None,

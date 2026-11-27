@@ -292,6 +292,7 @@ pub(super) fn read_cr2(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
             height: 2,
             colors: rggb_from_sensor_corner(area),
         },
+        fuji_width: None,
         default_crop: DngCrop {
             x: 0.0,
             y: 0.0,

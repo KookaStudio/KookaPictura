@@ -377,6 +377,7 @@ pub(super) fn read_arw(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         height: area.height,
         samples,
         cfa,
+        fuji_width: None,
         default_crop: default_crop(&tags, area)?,
         orientation: ifd0.uint(ORIENTATION)?.unwrap_or(1).min(8) as u16,
         color: camera_color(make.as_deref(), model.as_deref(), as_shot_neutral),

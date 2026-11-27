@@ -210,12 +210,16 @@ fn hostile_compressed_rafs_fail_cleanly() {
 
 /// LibRaw's raw plane of a compressed RAF, with the black levels and the
 /// precision the RAF records, through rawpy; `None` when the file is not
-/// compressed.
+/// compressed (a word section never is).
 const LIBRAW_DUMP: &str = r#"
 import rawpy, struct, sys
 b = open(sys.argv[1], 'rb').read()
 so, sl = struct.unpack('>II', b[0x64:0x6c])
 s = b[so:so + sl]
+out = sys.stdout.buffer
+if s[:2] not in (b'II', b'MM'):
+    out.write(struct.pack('<I', 0))
+    sys.exit()
 o = '<' if s[:2] == b'II' else '>'
 def ifd(at):
     out = {}
@@ -228,7 +232,6 @@ def ifd(at):
     return out
 raw = ifd(ifd(struct.unpack(o + 'I', s[4:8])[0])[0xF000][0])
 data = s[raw[0xF007][0]:]
-out = sys.stdout.buffer
 if data[:2] != b'IS':
     out.write(struct.pack('<I', 0))
     sys.exit()

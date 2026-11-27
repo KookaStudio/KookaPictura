@@ -194,8 +194,10 @@ Fujifilm RAF files embed no matrix and rawtoaces-data covers no Fujifilm
 body. By owner decision (#1473) Fujifilm rows are fitted from each body's own
 camera JPEG (the JPEG section the RAF header names) the same way, and placed
 under the two white-balance presets the raw directory records (EXIF lights
-Standard A and D65); the samples are the raw.pixls.us files
-`scripts/camera-jpeg-fits.json` names, not committed.
+Standard A and D65), or, for SuperCCD and older EXR bodies without a raw
+directory (#1621), the directory records' Fine Weather (`0x2100`) and
+Tungsten (`0x2400`) presets; the samples are the raw.pixls.us and
+owner-supplied files `scripts/camera-jpeg-fits.json` names, not committed.
 
 ## Nikon NEF code tables (`crates/pictura-codec/src/dng/nef_decode.rs`)
 
@@ -349,8 +351,36 @@ keeping the smoothest image; the X-Trans phase was checked against the DNG
 Adobe's converter wrote from the same raw.pixls.us X100S file (its CFA
 pattern and samples only, compared in a test), and the Bayer phase by
 correlating with the camera JPEG. No dcraw, LibRaw or rawspeed code is used
-in this container reader; the compressed coding below is a separate, ported
-module.
+in this container reader; the compressed coding and the SuperCCD geometry
+below are separate, ported modules.
+
+For the older sensor sections of plain words (#1621) the reader follows
+LibRaw 0.22.1's observable behaviour, checked word for word against its raw
+plane (through rawpy) on 19 sample files: words in the camera JPEG's Exif
+byte order, both SuperCCD SR frames side by side when the layout's top bit
+is set, black from record `0x4000` per colour and green row, LibRaw's white
+`0x3E00` (4095 for big-endian words). The 2 × 2 layout record's colour
+decode (bytes last first, low two bits the colour) is ours, confirmed
+against LibRaw's raw pattern on every upright sample, as is `0xF006`
+selecting most-significant-bit-first 12-bit packing (the S1 and SL1000).
+
+## Fujifilm SuperCCD geometry (`crates/pictura-codec/src/dng/raf_superccd.rs`, `crates/pictura-codec/src/dng/demosaic/superccd.rs`)
+
+**Ported code, not an independent implementation.** By owner decision
+(#1621) the SuperCCD geometry is ported openly from LibRaw 0.22.1 (Source:
+https://github.com/LibRaw/LibRaw, tag `0.22.1`, commit
+b860248a89d9082b8e0a1e202e516f46af9adb29): the `0x0130` layout bits and
+`0x0121` size of `parse_fuji` (`src/metadata/fuji.cpp`), the active area
+and `fuji_width` grid of `identify` (`src/metadata/identify.cpp`), the
+repack of `raw2image` (`src/preprocessing/raw2image.cpp`) and the rotation
+of `fuji_rotate` (`src/postprocessing/aspect_ratio.cpp`). LibRaw is
+dual-licensed **LGPL-2.1** or **CDDL-1.0**; the port takes the LGPL-2.1 and
+is distributed under **GPL-3.0-or-later** as LGPL-2.1 section 3 permits. The
+files carry LibRaw's copyright notice (LibRaw LLC; dcraw.c, Dave Coffin).
+The grid was checked against LibRaw's own repack of its raw plane within one
+level on 10 SuperCCD files, and the upright rendering against LibRaw's
+(block means correlating at 0.9995 or more in each channel), through rawpy
+(raw.pixls.us and owner files, not committed).
 
 ## Fujifilm compressed coding (`crates/pictura-codec/src/dng/raf_compressed.rs`)
 

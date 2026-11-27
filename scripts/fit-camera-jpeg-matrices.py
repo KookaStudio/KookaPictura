@@ -30,7 +30,10 @@ ISO studio tungsten (code 24). A pair whose lights the colour stage would not
 read back (its as-shot solve, within 2 %) keeps the daylight matrix alone.
 
 A RAF records two presets, under EXIF lights Standard A (code 17) and D65
-(code 21), in its raw directory's `0xF00C`; they make its pair.
+(code 21), in its raw directory's `0xF00C`; they make its pair. A RAF whose
+sensor section is plain words (SuperCCD and older EXR bodies, #1621) has no
+raw directory: its directory records `0x2100` (Fine Weather, code 9) and
+`0x2400` (Tungsten, code 3), green, red, green, blue, make the pair.
 
 Regenerate (samples from https://raw.pixls.us/data/Panasonic/,
 https://raw.pixls.us/data/Canon/ and https://raw.pixls.us/data/Fujifilm/,
@@ -97,8 +100,9 @@ SAME_CAMERA = {
 DAYLIGHT = (20, 9, 1)
 TUNGSTEN = (3, 24)
 TEMPERATURE = {1: 5500.0, 9: 5500.0, 20: 5503.0, 3: 2850.0, 24: 3200.0, 17: 2856.0, 21: 6504.0}
-# A RAF's presets: D65, then Standard A.
-RAF_DAYLIGHT, RAF_TUNGSTEN = (21,), (17,)
+# A RAF's presets: D65, then Standard A; Fine Weather and Tungsten from the
+# directory records of a RAF without a raw directory.
+RAF_DAYLIGHT, RAF_TUNGSTEN = (21, 9), (17, 3)
 
 RAW_MAGIC = b"IIU\0"
 TAG_MAKE, TAG_MODEL = 0x010F, 0x0110
@@ -382,6 +386,8 @@ def cr2_meta(data: bytes):
 
 RAF_MAGIC = b"FUJIFILMCCD-RAW "
 TAG_RAF_RAW_IFD, TAG_RAF_WB_PRESETS = 0xF000, 0xF00C
+# Directory records of (green, red, green, blue) preset levels, by EXIF light.
+RAF_RECORD_PRESETS = {0x2100: 9, 0x2400: 3}
 
 
 def jpeg_exif(jpeg: bytes) -> bytes:
@@ -396,9 +402,22 @@ def jpeg_exif(jpeg: bytes) -> bytes:
     raise ValueError("no Exif segment")
 
 
+def raf_records(data: bytes) -> dict:
+    """The big-endian directory the header names at 0x5C: tag -> value."""
+    start, _ = struct.unpack_from(">II", data, 0x5C)
+    (count,) = struct.unpack_from(">I", data, start)
+    out, at = {}, start + 4
+    for _ in range(count):
+        tag, size = struct.unpack_from(">HH", data, at)
+        out[tag] = data[at + 4 : at + 4 + size]
+        at += 4 + size
+    return out
+
+
 def raf_meta(data: bytes):
     """The big-endian header names the JPEG and sensor sections; the sensor
-    section is a TIFF whose entry 0xF000 points at the raw directory."""
+    section is a TIFF whose entry 0xF000 points at the raw directory, or, in
+    SuperCCD and older EXR bodies, plain words."""
 
     def section(at):
         start, size = struct.unpack_from(">II", data, at)
@@ -408,10 +427,18 @@ def raf_meta(data: bytes):
     exif = jpeg_exif(jpeg)
     ifd0 = ifd_entries(exif, "<" if exif[:2] == b"II" else ">")
     sensor = section(0x64)
+    found = {}
+    if sensor[:2] not in (b"II", b"MM"):
+        records = raf_records(data)
+        for tag, code in RAF_RECORD_PRESETS.items():
+            if len(records.get(tag, b"")) >= 8:
+                g, r, _, b = struct.unpack_from(">4H", records[tag])
+                if g and r and b:
+                    found[code] = [g / r, 1.0, g / b]
+        return ascii_tag(ifd0, TAG_MAKE), ascii_tag(ifd0, TAG_MODEL), jpeg, found
     order = "<" if sensor[:2] == b"II" else ">"
     (raw_at,) = struct.unpack(order + "I", ifd_entries(sensor, order)[TAG_RAF_RAW_IFD][2])
     raw = ifd_at(sensor, order, raw_at)
-    found = {}
     if TAG_RAF_WB_PRESETS in raw:
         levels = raw[TAG_RAF_WB_PRESETS][2]
         words = struct.unpack(order + f"{len(levels) // 4}I", levels)

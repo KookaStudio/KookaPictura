@@ -531,7 +531,13 @@ gaps are the CS6 Extended 3D object and camera tools.
       compressed RAFs of X-Trans and Bayer bodies at 12, 14 and 16 bits
       decode sample for sample as LibRaw does, ported from LibRaw (#1620).
       `crates/pictura-codec/src/dng/raf_compressed.rs`.
-- [ ] Fujifilm SuperCCD and EXR RAF sensors (#1621)
+- [x] **Fujifilm SuperCCD and EXR RAF sensors** — word sensor sections,
+      second directories (primary frame), the EXR layout and SuperCCD's 45°
+      lattice, repacked and turned upright as LibRaw does (ported from
+      LibRaw); 14 more bodies open with camera-JPEG-fitted colour; Save Image
+      writes SuperCCD as linear (#1621). `crates/pictura-codec/src/dng/raf_superccd.rs`,
+      `crates/pictura-codec/src/dng/demosaic/superccd.rs`.
+- [ ] Merge SuperCCD SR frames for highlight range (#1648)
 - [ ] Colour for the remaining Fujifilm RAF bodies (#1622)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Olympus-compressed ORF sensor data, most bodies since 2007 (#1535)
