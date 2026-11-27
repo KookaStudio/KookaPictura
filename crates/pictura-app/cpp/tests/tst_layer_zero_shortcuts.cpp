@@ -80,6 +80,12 @@ void LayerZeroShortcutsTest::init()
 
 void LayerZeroShortcutsTest::cleanup()
 {
+    if (window_) {
+        window_->hide();
+        while (window_->activeDocumentIndex() >= 0) {
+            window_->closeDocument(window_->activeDocumentIndex(), false);
+        }
+    }
     window_.reset();
 }
 
@@ -176,6 +182,7 @@ void LayerZeroShortcutsTest::interruptedSequence()
     QCoreApplication::sendEvent(canvas_, &repeat);
     QTest::keyRelease(canvas_, Qt::Key_0);
     QCOMPARE(row(layer_).opacity, 255);
+    // No signal marks the end of the 500 ms shortcut window.
     QTest::qWait(550);
     QTest::keyClick(canvas_, Qt::Key_0);
     QCOMPARE(row(layer_).opacity, 255);
@@ -268,8 +275,8 @@ void LayerZeroShortcutsTest::modifiedKeys()
     tree_->setFocus();
     canvas_->setFocus();
 
-    window_->setUiScalePercent(125);
-    QCOMPARE(window_->uiScalePercent(), 125);
+    window_->setUiScalePercent(120);
+    QCOMPARE(window_->uiScalePercent(), 120);
     QTest::keyClick(canvas_, Qt::Key_0);
     QTest::keyClick(canvas_, Qt::Key_0, Qt::ControlModifier | Qt::AltModifier);
     QCOMPARE(window_->uiScalePercent(), 100);
@@ -317,6 +324,10 @@ void LayerZeroShortcutsTest::editorInput()
     QCOMPARE(edit->text(), QStringLiteral("00"));
     QCOMPARE(row(layer_).opacity, 255);
     QCOMPARE(view_->history_count(), history);
+
+    QTest::keyClick(edit, Qt::Key_Return);
+    QCOMPARE(row(layer_).opacity, 0);
+    QCOMPARE(view_->history_count(), history + 1);
 }
 
 PICTURA_QT_TEST_MAIN(LayerZeroShortcutsTest)

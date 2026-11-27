@@ -693,7 +693,7 @@ void PicturaMainWindow::installWorkspaceOpenGesture()
 bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
 {
     if (auto* canvas = qobject_cast<ImageView*>(watched);
-        canvas && canvas == imageView() && panels_ && tools_
+        canvas && documents_ && panels_ && tools_ && canvas == imageView()
         && tools_->activeTool() == ToolId::Move) {
         if (auto* panel = panels_->layersPanel();
             panel && panel->filterZeroOpacityShortcut(canvas, event)) {
