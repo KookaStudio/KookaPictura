@@ -346,11 +346,18 @@ impl Ruler {
     /// Included angle and length of the optional second arm.
     pub fn protractor_measurement(&self) -> Option<(f64, f64)> {
         let (at_start, end) = self.protractor?;
-        let (vertex, other) = if at_start { (self.a, self.b) } else { (self.b, self.a) };
+        let (vertex, other) = if at_start {
+            (self.a, self.b)
+        } else {
+            (self.b, self.a)
+        };
         let u = (other.0 - vertex.0, other.1 - vertex.1);
         let v = (end.0 - vertex.0, end.1 - vertex.1);
         let length = v.0.hypot(v.1);
-        let angle = (u.0 * v.1 - u.1 * v.0).abs().atan2(u.0 * v.0 + u.1 * v.1).to_degrees();
+        let angle = (u.0 * v.1 - u.1 * v.0)
+            .abs()
+            .atan2(u.0 * v.0 + u.1 * v.1)
+            .to_degrees();
         Some((angle, length))
     }
 
@@ -496,7 +503,11 @@ mod tests {
     #[test]
     fn protractor_reports_included_angle_and_second_length() {
         for vertex_at_start in [false, true] {
-            let mut r = Ruler { a: (0.0, 0.0), b: (20.0, 0.0), protractor: None };
+            let mut r = Ruler {
+                a: (0.0, 0.0),
+                b: (20.0, 0.0),
+                protractor: None,
+            };
             let x = if vertex_at_start { 0.0 } else { 20.0 };
             r.protractor = Some((vertex_at_start, (x, 10.0)));
             let (angle, distance) = r.protractor_measurement().unwrap();
