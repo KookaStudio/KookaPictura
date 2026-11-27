@@ -810,6 +810,7 @@ free	path_overlay_points	path_overlay_points	api/layers_bridge.h	pictura_app/src
 free	path_point	path_point	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_point_count	path_point_count	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_remove_subpath	path_remove_subpath	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
+free	path_remove_subpaths	path_remove_subpaths	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_replace_target_outline	path_replace_target_outline	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_resume	path_resume	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_selection_target_key	path_selection_target_key	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
