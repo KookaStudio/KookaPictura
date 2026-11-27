@@ -36,9 +36,8 @@ pub(super) fn fills_match(before: &[Vec<Vertex>], after: &[Vec<Vertex>], rule: F
         return true;
     }
     // Both resolutions use the same adapter, even when their bounds differ.
-    let resolve = |which| {
-        FloatOverlay::<Vertex, i64>::from_subj_and_clip(before, after).overlay(which, rule)
-    };
+    let resolve =
+        |which| FloatOverlay::<Vertex, i64>::from_subj_and_clip(before, after).overlay(which, rule);
     let a = resolve(OverlayRule::Subject);
     let b = resolve(OverlayRule::Clip);
     let mut a_holes: Vec<_> = a.iter().map(|shape| shape.len()).collect();
@@ -78,8 +77,7 @@ pub(super) fn fills_match(before: &[Vec<Vertex>], after: &[Vec<Vertex>], rule: F
 }
 
 fn directed(from: &[(Vertex, Vertex)], to: &[(Vertex, Vertex)], budget: &mut usize) -> bool {
-    from.iter()
-        .all(|&(a, b)| certified(a, b, to, 0, budget))
+    from.iter().all(|&(a, b)| certified(a, b, to, 0, budget))
 }
 
 // Distance to one line segment is convex: certifying both endpoints against
@@ -130,7 +128,12 @@ fn contacts(edges: &[(Vertex, Vertex)]) -> usize {
         {
             return false;
         }
-        let (x, y, z, w) = (cross(a, b, c), cross(a, b, d), cross(c, d, a), cross(c, d, b));
+        let (x, y, z, w) = (
+            cross(a, b, c),
+            cross(a, b, d),
+            cross(c, d, a),
+            cross(c, d, b),
+        );
         (x <= 0.0 && y >= 0.0 || y <= 0.0 && x >= 0.0)
             && (z <= 0.0 && w >= 0.0 || w <= 0.0 && z >= 0.0)
     }

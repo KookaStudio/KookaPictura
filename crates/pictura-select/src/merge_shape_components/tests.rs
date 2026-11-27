@@ -62,9 +62,21 @@ fn preserves_nested_ambient_winding_and_parity() {
         pictura_core::shape::paths_coverage(&even_odd, 40, 32),
     );
     let polygons = |paths: &[Subpath]| -> Vec<Vec<Vertex>> {
-        paths.iter().map(|path| path.flatten(CURVE_TOLERANCE).into_iter().map(|(x, y)| [x, y]).collect()).collect()
+        paths
+            .iter()
+            .map(|path| {
+                path.flatten(CURVE_TOLERANCE)
+                    .into_iter()
+                    .map(|(x, y)| [x, y])
+                    .collect()
+            })
+            .collect()
     };
-    assert!(compare::fills_match(&polygons(&input), &polygons(&even_odd), FillRule::EvenOdd));
+    assert!(compare::fills_match(
+        &polygons(&input),
+        &polygons(&even_odd),
+        FillRule::EvenOdd
+    ));
 }
 
 #[test]
@@ -102,22 +114,29 @@ fn preserves_curved_work_path_fill_at_the_coverage_tolerance() {
 
 #[test]
 fn compares_effective_boundaries_and_topology() {
-    let a = vec![vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]],
-                 vec![[5.0, 0.0], [15.0, 0.0], [15.0, 10.0], [5.0, 10.0]]];
+    let a = vec![
+        vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]],
+        vec![[5.0, 0.0], [15.0, 0.0], [15.0, 10.0], [5.0, 10.0]],
+    ];
     let union = vec![vec![[0.0, 0.0], [15.0, 0.0], [15.0, 10.0], [0.0, 10.0]]];
     assert!(compare::fills_match(&a, &union, FillRule::NonZero));
     let shifted = vec![vec![[0.0, 0.0], [15.0, 0.0], [15.0, 10.02], [0.0, 10.02]]];
     assert!(!compare::fills_match(&a, &shifted, FillRule::NonZero));
     let outer = vec![[0.0, 0.0], [20.0, 0.0], [20.0, 20.0], [0.0, 20.0]];
     let hole = vec![[9.0, 9.0], [9.0, 11.0], [11.0, 11.0], [11.0, 9.0]];
-    assert!(!compare::fills_match(&[outer.clone(), hole], &[outer], FillRule::EvenOdd));
+    assert!(!compare::fills_match(
+        &[outer.clone(), hole],
+        &[outer],
+        FillRule::EvenOdd
+    ));
 }
 
 #[test]
 fn accepts_cancelled_work_path_fill() {
     let shape = rect(1.0, 1.0, 12.0, 12.0, false);
     let reversed = rect(1.0, 1.0, 12.0, 12.0, true);
-    let cancelled = merge_shape_components(&[shape.clone(), reversed], VectorFillRule::NonZero, None);
+    let cancelled =
+        merge_shape_components(&[shape.clone(), reversed], VectorFillRule::NonZero, None);
     assert_eq!(cancelled, Some(Vec::new()));
     let cancelled = merge_shape_components(&[shape.clone(), shape], VectorFillRule::EvenOdd, None);
     assert_eq!(cancelled, Some(Vec::new()));

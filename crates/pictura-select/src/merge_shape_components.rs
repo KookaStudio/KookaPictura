@@ -3,8 +3,8 @@
 use i_overlay::core::{fill_rule::FillRule, overlay_rule::OverlayRule};
 use i_overlay::float::overlay::{FloatOverlay, OverlayOptions};
 use pictura_core::{
-    VectorFillRule, VectorSubpath,
     path::{PathPoint, Subpath},
+    VectorFillRule, VectorSubpath,
 };
 
 const MAX_CONTOURS: usize = 128;
@@ -43,11 +43,10 @@ impl Contour {
     }
 
     fn overlaps(&self, other: &Self, rule: FillRule) -> bool {
-        (0..2).all(|axis| {
-            self.min[axis] < other.max[axis] && other.min[axis] < self.max[axis]
-        }) && !FloatOverlay::<Vertex, i64>::from_subj_and_clip(&self.vertices, &other.vertices)
-            .overlay(OverlayRule::Intersect, rule)
-            .is_empty()
+        (0..2).all(|axis| self.min[axis] < other.max[axis] && other.min[axis] < self.max[axis])
+            && !FloatOverlay::<Vertex, i64>::from_subj_and_clip(&self.vertices, &other.vertices)
+                .overlay(OverlayRule::Intersect, rule)
+                .is_empty()
     }
 }
 
@@ -88,7 +87,8 @@ pub fn merge_shape_components(
         } else {
             for point in &subpath.points {
                 handles_left = handles_left.checked_sub(
-                    usize::from(point.in_handle.is_some()) + usize::from(point.out_handle.is_some()),
+                    usize::from(point.in_handle.is_some())
+                        + usize::from(point.out_handle.is_some()),
                 )?;
                 for (x, y) in [Some(point.anchor), point.in_handle, point.out_handle]
                     .into_iter()
@@ -192,7 +192,9 @@ pub fn merge_shape_components(
         subpaths
             .iter()
             .zip(replacements)
-            .flat_map(|(original, replacement)| replacement.unwrap_or_else(|| vec![original.clone()]))
+            .flat_map(|(original, replacement)| {
+                replacement.unwrap_or_else(|| vec![original.clone()])
+            })
             .collect(),
     )
 }
