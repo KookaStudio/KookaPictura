@@ -13,15 +13,15 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
+pub(super) mod clone_overlay;
 pub(super) mod fills;
 mod imp;
-pub(super) mod clone_overlay;
 mod patterns;
 
 use super::eyedropper_sample::sample_argb_scoped;
 use super::qobject::PictureView;
-use imp::*;
 use clone_overlay::*;
+use imp::*;
 use patterns::*;
 
 #[cxx_qt::bridge]
@@ -127,10 +127,21 @@ pub mod ffi {
     #[namespace = "pictura"]
     extern "Rust" {
         #[allow(clippy::too_many_arguments)]
-        fn clone_overlay_source(view: Pin<&mut PictureView>, left: i32, top: i32, width: i32, height: i32,
-                                scope: i32, ignore_adjustments: bool, snapshot: bool,
-                                actual_left: &mut i32, actual_top: &mut i32, actual_step: &mut i32,
-                                image_id: &mut u64, busy: &mut bool) -> QImage;
+        fn clone_overlay_source(
+            view: Pin<&mut PictureView>,
+            left: i32,
+            top: i32,
+            width: i32,
+            height: i32,
+            scope: i32,
+            ignore_adjustments: bool,
+            snapshot: bool,
+            actual_left: &mut i32,
+            actual_top: &mut i32,
+            actual_step: &mut i32,
+            image_id: &mut u64,
+            busy: &mut bool,
+        ) -> QImage;
         fn clone_overlay_cancel(view: Pin<&mut PictureView>);
         fn clone_overlay_test_delay(view: Pin<&mut PictureView>, milliseconds: u64);
 

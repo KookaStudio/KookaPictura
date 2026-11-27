@@ -48,8 +48,14 @@ pub mod ffi {
         ) -> bool;
 
         fn healing_commit_transformed(
-            view: Pin<&mut PictureView>, source_x: i32, source_y: i32,
-            anchor_x: f64, anchor_y: f64, scale_x: f64, scale_y: f64, angle: f64,
+            view: Pin<&mut PictureView>,
+            source_x: i32,
+            source_y: i32,
+            anchor_x: f64,
+            anchor_y: f64,
+            scale_x: f64,
+            scale_y: f64,
+            angle: f64,
         ) -> bool;
 
         /// Drop an active gesture without committing (Escape, tool switch).

@@ -6,9 +6,12 @@
 //! [`clone_region`]: super::clone_region
 
 use super::layer::{heal_layer, HealError};
-use super::{clamped_shift, clone_region, clone_region_transformed, heal_region, proximity, HealMode, Transfer, BORDER};
-use crate::stamp::SourceTransform;
+use super::{
+    clamped_shift, clone_region, clone_region_transformed, heal_region, proximity, HealMode,
+    Transfer, BORDER,
+};
 use crate::spacing::{DabPlacer, SpacingMode};
+use crate::stamp::SourceTransform;
 use crate::stroke::{layer_at, parse_layer_path};
 use crate::tip::tip_coverage;
 use crate::{StrokeConfig, StrokeOutcome};
@@ -167,7 +170,14 @@ impl HealStroke {
                             bottom = bottom.max(sy.ceil() as i32 + 2);
                         }
                     }
-                    PsdRect { left, top, right, bottom }.intersect(self.rect).unwrap_or(region)
+                    PsdRect {
+                        left,
+                        top,
+                        right,
+                        bottom,
+                    }
+                    .intersect(self.rect)
+                    .unwrap_or(region)
                 } else {
                     clamped_shift(region, dx, dy, self.rect)
                 };
@@ -189,11 +199,20 @@ impl HealStroke {
             Some(window),
             move |img, local, cov| match source {
                 Some(offset) => match transform {
-                    Some((anchor, t)) if offset != (0, 0) || !t.is_identity() => clone_region_transformed(
-                        img, local, cov, offset,
-                        (anchor.0 - actual_window.left as f32, anchor.1 - actual_window.top as f32),
-                        t, transfer,
-                    ),
+                    Some((anchor, t)) if offset != (0, 0) || !t.is_identity() => {
+                        clone_region_transformed(
+                            img,
+                            local,
+                            cov,
+                            offset,
+                            (
+                                anchor.0 - actual_window.left as f32,
+                                anchor.1 - actual_window.top as f32,
+                            ),
+                            t,
+                            transfer,
+                        )
+                    }
                     _ => clone_region(img, local, cov, offset, transfer),
                 },
                 None => heal_region(img, local, cov, mode),
