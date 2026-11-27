@@ -1031,8 +1031,8 @@ free	remove_marker	remove_marker	api/paint_bridge.h	pictura_app/src/cxxqt_object
 free	replay_tool_stroke	replay_tool_stroke	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	reset_measurement_scale	reset_measurement_scale	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	ruler_line	ruler_line	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
-free	ruler_protractor	ruler_protractor	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	ruler_measurement	ruler_measurement	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
+free	ruler_protractor	ruler_protractor	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	sample_argb_scoped	sample_argb_scoped	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	scratch_volumes	scratch_volumes	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	set_available_memory_for_test	set_available_memory_for_test	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
@@ -1042,8 +1042,8 @@ free	set_history_states	set_history_states	api/paint_bridge.h	pictura_app/src/cx
 free	set_memory_cgroup_for_test	set_memory_cgroup_for_test	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	set_memory_usage_percent	set_memory_usage_percent	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	set_note_text	set_note_text	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
-free	set_ruler_protractor	set_ruler_protractor	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	set_ruler	set_ruler	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
+free	set_ruler_protractor	set_ruler_protractor	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	set_scratch_available_for_test	set_scratch_available_for_test	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	set_scratch_volumes	set_scratch_volumes	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	stamp_pattern_count	stamp_pattern_count	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
