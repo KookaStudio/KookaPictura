@@ -15,6 +15,8 @@ use std::sync::{
 
 static PREVIEW_WORKER_BUSY: AtomicBool = AtomicBool::new(false);
 
+type PreviewResult = (u64, Option<(Document, Vec<u8>, PsdRect)>);
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Request {
     rect: PsdRect,
@@ -31,8 +33,8 @@ pub(in crate::cxxqt_object) struct ContentAwareState {
     generation: u64,
     request: Option<Request>,
     cancellation: Arc<AtomicBool>,
-    tx: mpsc::Sender<(u64, Option<(Document, Vec<u8>, PsdRect)>)>,
-    rx: mpsc::Receiver<(u64, Option<(Document, Vec<u8>, PsdRect)>)>,
+    tx: mpsc::Sender<PreviewResult>,
+    rx: mpsc::Receiver<PreviewResult>,
     result: Option<Document>,
     pending: bool,
 }
@@ -242,7 +244,6 @@ pub(super) fn content_aware_request(mut view: Pin<&mut PictureView>) {
     state.request = Some(key);
     state.pending = true;
     state.result = None;
-    drop(rust);
     content_aware_launch(view);
 }
 
