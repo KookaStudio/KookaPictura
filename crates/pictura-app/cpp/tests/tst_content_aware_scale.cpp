@@ -48,6 +48,8 @@ void ContentAwareScaleTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_);
+    window_->show();
+    QCoreApplication::processEvents();
 }
 
 void ContentAwareScaleTest::cleanup()
@@ -400,6 +402,7 @@ void ContentAwareScaleTest::supersededPreview()
     QTRY_COMPARE_WITH_TIMEOUT(view->history_count(), history + 1, 10000);
     QVERIFY(!tools->transformPending());
     const QImage committed = view->image();
+    pictura::content_aware_test::holdJobs(*view, false);
     QVERIFY(beginScale());
     QTRY_VERIFY_WITH_TIMEOUT(commit->isEnabled(), 10000);
     pictura::content_aware_test::holdJobs(*view, true);
