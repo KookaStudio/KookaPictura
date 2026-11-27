@@ -5,7 +5,7 @@ Pictura commit: 73f469e1
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
-Coverage includes the #558 HDR merge workflow and the #577 Selective Color channel gating.
+Coverage includes the #558 HDR merge workflow, #577 Selective Color channel gating, and #523 zero opacity and fill shortcuts.
 
 This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
@@ -439,7 +439,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | ID | Feature | S | E | CC | Status | Scope | Evidence | Check | Notes | Tracking |
 |---|---|---|---|---|---|---|---|---|---|---|
-| P-PAN-01 | Layers panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels/layers_panel.cpp | none | — | — |
+| P-PAN-01 | Layers panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels/layers_panel.cpp | none | `00` and `Shift+00` work on the Move canvas and in the Layers list (#523) | — |
 | P-PAN-02 | History panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | — |
 | P-PAN-03 | Channels panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Spot channels, Split/Merge, and Panel Options remain | #513 |
 | P-PAN-04 | Paths panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Make Work Path, clipping-path designation, and thumbnail size remain | #521 |
@@ -530,6 +530,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
 | 2026-11-27 | 73f469e1 | 216/350 (61.7%) | 217/367 (59.1%) | 28.0 | 218/375 (58.1%) |
+| 2026-11-27 | a876cd9fd | 215/350 (61.4%) | 216/367 (58.9%) | 28.0 | 217/375 (57.9%) |
 | 2026-11-27 | e7ca8f53 | 215/350 (61.4%) | 216/367 (58.9%) | 28.0 | 217/375 (57.9%) |
 | 2026-11-27 | 616cce308 | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
 | 2026-11-27 | 934c214cf | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
