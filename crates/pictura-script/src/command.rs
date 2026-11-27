@@ -278,7 +278,7 @@ static NON_RECORDABLE: &[&str] = &[
     "window.panels.layers", "window.panels.navigator", "window.panels.notes",
     "window.panels.paragraph", "window.panels.paragraphStyles", "window.panels.paths",
     "window.panels.patterns", "window.panels.properties", "window.panels.swatches",
-    "window.panels.tools",
+    "window.panels.tool.presets", "window.panels.tools",
     "help.search", "help.system.info", "help.submit.issue", "help.about",
     "help.developer.designSystem", "help.developer.debugToolset",
 ];

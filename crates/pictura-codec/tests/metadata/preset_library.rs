@@ -610,3 +610,55 @@ fn preset_swatches_round_trip_exchange() {
     assert!(encode_swatches(Format::Aco, &invalid).is_err());
     assert!(encode_swatches(Format::Ase, &invalid).is_err());
 }
+
+#[test]
+fn native_tool_preset_preserves_opaque_options() {
+    let mut tool = object(
+        *b"Brsh",
+        vec![
+            (*b"Opct", ActionValue::Integer(37)),
+            (*b"Flw ", ActionValue::Integer(58)),
+        ],
+    );
+    tool.class.id = ActionKey::String(b"move".to_vec());
+    let options = br#"{"move":{"autoSelect":true},"type":{"size":42}}"#.to_vec();
+    let library = Library {
+        kind: Kind::Tools,
+        entries: vec![Preset {
+            name: "Move preset".into(),
+            payload: Payload::Tool(tool),
+            opaque: options.clone(),
+        }],
+    };
+    let bytes = encode_native(&library).unwrap();
+    let decoded = decode(Kind::Tools, Format::Native, &bytes).unwrap().library;
+    assert_eq!(decoded, library);
+    assert_eq!(decoded.entries[0].opaque, options);
+}
+
+#[test]
+fn native_tool_preset_keeps_unknown_opaque_bytes() {
+    let mut tool = object(*b"Brsh", vec![]);
+    tool.class.id = ActionKey::String(b"brush".to_vec());
+    let opaque = vec![0xff, 0x00, 0x7f, b'{'];
+    let library = Library {
+        kind: Kind::Tools,
+        entries: vec![Preset {
+            name: "Opaque".into(),
+            payload: Payload::Tool(tool),
+            opaque: opaque.clone(),
+        }],
+    };
+    let first = encode_native(&library).unwrap();
+    let decoded = decode(Kind::Tools, Format::Native, &first).unwrap().library;
+    assert_eq!(decoded.entries[0].opaque, opaque);
+    let second = encode_native(&decoded).unwrap();
+    assert_eq!(
+        decode(Kind::Tools, Format::Native, &second)
+            .unwrap()
+            .library
+            .entries[0]
+            .opaque,
+        opaque
+    );
+}

@@ -113,7 +113,8 @@ QJsonArray workspacePresets(const QString& name)
                              QStringLiteral("pathsPanel")})}));
     } else if (name == QLatin1String("Painting")) {
         columns.append(presetColumn(iconic, 0, kIconicWidth,
-                                    QJsonArray{presetGroup({QStringLiteral("historyPanel")})}));
+                                    QJsonArray{presetGroup({QStringLiteral("historyPanel")}),
+                                               presetGroup({QStringLiteral("toolPresetsPanel")})}));
         columns.append(presetColumn(
             normal, 1, PanelColumn::defaultNormalWidth(),
             QJsonArray{
@@ -183,7 +184,8 @@ PanelColumn* PanelHost::restoreLegacyDefaultForTest()
             presetGroup({QStringLiteral("actionsPanel")}, {}),
             presetGroup({QStringLiteral("gradientsPanel"), QStringLiteral("patternsPanel"),
                          QStringLiteral("notesPanel"), QStringLiteral("brushPanel"),
-                         QStringLiteral("cloneSourcePanel")},
+                         QStringLiteral("cloneSourcePanel"),
+                         QStringLiteral("toolPresetsPanel")},
                         {}),
             presetGroup({QStringLiteral("characterPanel"), QStringLiteral("paragraphPanel"),
                          QStringLiteral("glyphsPanel"),

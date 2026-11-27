@@ -57,6 +57,7 @@ class PictureView;
 class PlaceholderPanel;
 class PropertiesPanel;
 class SwatchesPanel;
+class ToolPresetsPanel;
 struct SessionState;
 
 // Owns the panel widgets, their groups, the panel columns, the tools column and
@@ -110,6 +111,7 @@ public:
     NavigatorPanel* navigatorPanel() const { return navigatorPanel_; }
     ColorPanel* colorPanel() const { return colorPanel_; }
     SwatchesPanel* swatchesPanel() const { return swatchesPanel_; }
+    ToolPresetsPanel* toolPresetsPanel() const { return toolPresetsPanel_; }
     PlaceholderPanel* stylesPanel() const { return stylesPanel_; }
     InfoPanel* infoPanel() const { return infoPanel_; }
     HistogramPanel* histogramPanel() const { return histogramPanel_; }
@@ -278,6 +280,7 @@ private:
     NavigatorPanel* navigatorPanel_ = nullptr;
     ColorPanel* colorPanel_ = nullptr;
     SwatchesPanel* swatchesPanel_ = nullptr;
+    ToolPresetsPanel* toolPresetsPanel_ = nullptr;
     InfoPanel* infoPanel_ = nullptr;
     HistogramPanel* histogramPanel_ = nullptr;
     PlaceholderPanel* gradientsPanel_ = nullptr;

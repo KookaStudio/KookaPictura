@@ -4,6 +4,16 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Tool Presets panel, #511** (OpenSpec change `tool-presets-panel`;
+  capabilities `ui/tool-presets-panel` added, `ui/preset-manager` and
+  `codec/preset-libraries` modified). `Window > Panels > Tool Presets` opens a
+  dock over the shared Tools list in the Painting workspace. Create captures
+  the active tool and the full `toolOptionsToJson` snapshot; apply switches the
+  tool and patches the options. Native `.kpset` tool rows keep the snapshot in
+  the preserved opaque field; `.tpl` import stays at its Brush/Pencil mapping.
+  The panel offers Current Tool Only, Sort By Tool, Text/Small/Large List,
+  New/Rename/Delete, persisted drag order, and Load/Replace/Reset/Save through
+  the Preset Manager. Every tool's options-bar picker now shares the list.
 - **Olympus-compressed ORF, #1535** (OpenSpec change
   `vendor-raw-orf-compressed`; `codec/vendor-raw-containers` modified).
   `dng/orf_decode.rs` ports LibRaw 0.22.1's `olympus14.cpp` openly (owner

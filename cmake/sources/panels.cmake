@@ -111,4 +111,6 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/spectrum_bar.h
     crates/pictura-app/cpp/panels/swatches_panel.cpp
     crates/pictura-app/cpp/panels/swatches_panel.h
+    crates/pictura-app/cpp/panels/tool_presets_panel.cpp
+    crates/pictura-app/cpp/panels/tool_presets_panel.h
 )

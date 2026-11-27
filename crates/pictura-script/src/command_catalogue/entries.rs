@@ -612,7 +612,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "window.panels.styles", path: &["Window", "Panels", "Styles"], label: "Styles", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "window.panels.swatches", path: &["Window", "Panels", "Swatches"], label: "Swatches", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "window.panels.timeline", path: &["Window", "Panels", "Timeline"], label: "Timeline", shortcut: "", implemented: false, checkable: false },
-    CommandSpec { id: "window.panels.tool.presets", path: &["Window", "Panels", "Tool Presets"], label: "Tool Presets", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "window.panels.tool.presets", path: &["Window", "Panels", "Tool Presets"], label: "Tool Presets", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "window.panels.tools", path: &["Window", "Panels", "Tools"], label: "Tools", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "view.options", path: &["Window", "Options"], label: "Options", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "window.uiSize", path: &["Window", "UI Size"], label: "UI Size: 100%", shortcut: "", implemented: true, checkable: false },

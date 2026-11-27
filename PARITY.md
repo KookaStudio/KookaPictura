@@ -1,7 +1,7 @@
 # Feature parity tracker
 
 Assessed: 2026-11-27
-Pictura commit: e7ca8f53
+Pictura commit: 73f469e1
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -13,12 +13,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 215 | 79 | 52 | 4 | 350 | 61.4% | 8 |
-| CS6 Standard, in scope | 215 | 79 | 46 | 2 | 342 | 62.9% | 8 |
-| CS6 Extended | 216 | 79 | 68 | 4 | 367 | 58.9% | 23 |
-| CS6 Extended, in scope | 216 | 79 | 47 | 2 | 344 | 62.8% | 23 |
-| CC 28.0 | 217 | 81 | 73 | 4 | 375 | 57.9% | 20 |
-| CC 28.0, in scope | 217 | 81 | 55 | 2 | 355 | 61.1% | 20 |
+| CS6 Standard | 216 | 79 | 51 | 4 | 350 | 61.7% | 8 |
+| CS6 Standard, in scope | 216 | 79 | 45 | 2 | 342 | 63.2% | 8 |
+| CS6 Extended | 217 | 79 | 67 | 4 | 367 | 59.1% | 23 |
+| CS6 Extended, in scope | 217 | 79 | 46 | 2 | 344 | 63.1% | 23 |
+| CC 28.0 | 218 | 81 | 72 | 4 | 375 | 58.1% | 20 |
+| CC 28.0, in scope | 218 | 81 | 54 | 2 | 355 | 61.4% | 20 |
 
 ## Baselines
 
@@ -48,7 +48,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
 | Color & bit depth | 16/29 (55.2%) | 16/29 (55.2%) | 16/29 (55.2%) |
 | Automation & extensibility | 3/19 (15.8%) | 3/19 (15.8%) | 3/23 (13.0%) |
-| Shell, panels & preferences | 29/60 (48.3%) | 29/63 (46.0%) | 29/62 (46.8%) |
+| Shell, panels & preferences | 30/60 (50.0%) | 30/63 (47.6%) | 30/62 (48.4%) |
 
 ## Feature rows
 
@@ -460,7 +460,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-PAN-19 | Character Styles panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | #519 |
 | P-PAN-20 | Actions panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | #301 |
 | P-PAN-21 | Layer Comps panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | #265 |
-| P-PAN-22 | Tool Presets panel | Y | Y | Y | Missing | in-scope | — | none | No Tool Presets panel or .tpl libraries | #511 |
+| P-PAN-22 | Tool Presets panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | Loads `.tpl` brush/pencil payloads; saves native `.kpset` | — |
 | P-PAN-23 | Styles panel | Y | Y | Y | Missing | in-scope | — | none | No Styles panel or .asl libraries | #512 |
 | P-PAN-24 | Measurement Log panel | N/A | Y | Y | Missing | in-scope | — | none | edition:Extended-only; Record Measurements and export workflow are absent | #510 |
 | P-PAN-25 | Timeline panel | Y | Y | Y | Missing | non-goal | — | none | Video/Timeline is an intentional non-goal; src:1; src:7 | non-goal:feasibility:73 |
@@ -529,6 +529,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-27 | 73f469e1 | 216/350 (61.7%) | 217/367 (59.1%) | 28.0 | 218/375 (58.1%) |
 | 2026-11-27 | e7ca8f53 | 215/350 (61.4%) | 216/367 (58.9%) | 28.0 | 217/375 (57.9%) |
 | 2026-11-27 | 616cce308 | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
 | 2026-11-27 | 934c214cf | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |

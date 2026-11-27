@@ -10,6 +10,7 @@
 #include "panels/paragraph_panel.h"
 #include "panels/paths_panel.h"
 #include "panels/properties_panel.h"
+#include "panels/tool_presets_panel.h"
 #include "panels/panel_column.h"
 #include "menu_registrar.h"
 #include "api/layers_bridge.h"
@@ -370,6 +371,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     panels_->brushPanel()->setController(tools_);
     panels_->cloneSourcePanel()->setController(tools_);
     panels_->glyphsPanel()->setController(tools_);
+    if (panels_->toolPresetsPanel()) {
+        panels_->toolPresetsPanel()->setController(tools_);
+    }
 
     // The Info panel follows the Ruler tool: its A/L block and W/H readout come
     // from the ruler, and a new measuring line re-reads them.

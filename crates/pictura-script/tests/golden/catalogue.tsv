@@ -607,7 +607,7 @@ window.panels.properties	Window/Panels/Properties	Properties		1	1
 window.panels.styles	Window/Panels/Styles	Styles		0	0
 window.panels.swatches	Window/Panels/Swatches	Swatches		1	1
 window.panels.timeline	Window/Panels/Timeline	Timeline		0	0
-window.panels.tool.presets	Window/Panels/Tool Presets	Tool Presets		0	0
+window.panels.tool.presets	Window/Panels/Tool Presets	Tool Presets		1	1
 window.panels.tools	Window/Panels/Tools	Tools		1	1
 view.options	Window/Options	Options		1	1
 window.uiSize	Window/UI Size	UI Size: 100%		1	0

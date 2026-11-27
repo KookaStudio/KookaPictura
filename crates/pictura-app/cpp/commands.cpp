@@ -694,6 +694,7 @@ const QList<PanelToggle>& panelToggles()
         {command_ids::WindowPanelsActions, "actionsPanel"},
         {command_ids::WindowPanelsBrush, "brushPanel"},
         {command_ids::WindowPanelsCloneSource, "cloneSourcePanel"},
+        {command_ids::WindowPanelsToolPresets, "toolPresetsPanel"},
         {"window.panels.layer.comps", "layerCompsPanel"},
         {command_ids::WindowPanelsCharacter, "characterPanel"},
         {command_ids::WindowPanelsParagraph, "paragraphPanel"},

@@ -40,6 +40,7 @@ pub mod ffi {
         ) -> QString;
         fn preset_make_swatch(name: &QString, argb: u32) -> Vec<u8>;
         fn preset_make_builtin(kind: i32, name: &QString, index: i32) -> Vec<u8>;
+        fn preset_make_tool(name: &QString, tool: &QString, options: &QString) -> Vec<u8>;
 
         /// The catalogue kind of `block` (`"levels"`, `"curves"`, …), or empty.
         fn adjustment_preset_kind(block: &[u8]) -> QString;

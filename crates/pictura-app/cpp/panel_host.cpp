@@ -27,6 +27,7 @@
 #include "panels/placeholder_panel.h"
 #include "panels/properties_panel.h"
 #include "panels/swatches_panel.h"
+#include "panels/tool_presets_panel.h"
 #include "pictura_debug_timing.h"
 #include "session.h"
 #include "type_fonts.h"
@@ -151,11 +152,11 @@ QWidget* PanelHost::workspaceWidget() const
 QList<QWidget*> PanelHost::panelWidgets() const
 {
     return {layersPanel_,   historyPanel_,       navigatorPanel_,     colorPanel_,
-            swatchesPanel_, infoPanel_,          histogramPanel_,     gradientsPanel_,
-            patternsPanel_, notesPanel_,         propertiesPanel_,    adjustmentsPanel_,
-            channelsPanel_, pathsPanel_,         actionsPanel_,       stylesPanel_,
-            brushPanel_,    cloneSourcePanel_,   characterPanel_,     paragraphPanel_,
-            glyphsPanel_,   paragraphStylesPanel_, characterStylesPanel_};
+            swatchesPanel_, toolPresetsPanel_,   infoPanel_,          histogramPanel_,
+            gradientsPanel_, patternsPanel_,     notesPanel_,         propertiesPanel_,
+            adjustmentsPanel_, channelsPanel_,   pathsPanel_,         actionsPanel_,
+            stylesPanel_,   brushPanel_,         cloneSourcePanel_,   characterPanel_,
+            paragraphPanel_, glyphsPanel_,       paragraphStylesPanel_, characterStylesPanel_};
 }
 
 bool PanelHost::registerPanel(QWidget* panel, Qt::DockWidgetArea area)

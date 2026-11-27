@@ -394,8 +394,9 @@ void ActionsPanelTest::pr_panel_set()
     const QStringList names = {
         QStringLiteral("layersPanel"),       QStringLiteral("historyPanel"),
         QStringLiteral("navigatorPanel"),    QStringLiteral("colorPanel"),
-        QStringLiteral("swatchesPanel"),     QStringLiteral("stylesPanel"),
-        QStringLiteral("infoPanel"),         QStringLiteral("histogramPanel"),
+        QStringLiteral("swatchesPanel"),     QStringLiteral("toolPresetsPanel"),
+        QStringLiteral("stylesPanel"),       QStringLiteral("infoPanel"),
+        QStringLiteral("histogramPanel"),
         QStringLiteral("gradientsPanel"),    QStringLiteral("patternsPanel"),
         QStringLiteral("notesPanel"),        QStringLiteral("propertiesPanel"),
         QStringLiteral("adjustmentsPanel"),  QStringLiteral("channelsPanel"),

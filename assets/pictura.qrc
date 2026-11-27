@@ -255,6 +255,7 @@
     <file>icons/window.panels.patterns.svg</file>
     <file>icons/window.panels.properties.svg</file>
     <file>icons/window.panels.swatches.svg</file>
+    <file>icons/window.panels.tool.presets.svg</file>
     <file>icons/window.panels.tools.svg</file>
     <file>cursors/cursor.colorPickerField.svg</file>
     <file>cursors/cursor.moveSelection.svg</file>

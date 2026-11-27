@@ -20,6 +20,7 @@
 
 #include <functional>
 #include "swatches_panel.h"
+#include "tool_presets_panel.h"
 #include "preset_store.h"
 #include <QtCore/QFileInfo>
 
@@ -163,6 +164,37 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Save Swatches For Exchange…")), QStringLiteral("swatches.exchange")),
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Replace Swatches…")), QStringLiteral("swatches.replace")),
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Reset Swatches")), QStringLiteral("swatches.reset")),
+             dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "(libraries list)")), true),
+         }},
+        {QStringLiteral("toolPresetsPanel"),
+         {
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "New Tool Preset…")),
+                 QStringLiteral("toolPresets.new")),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Rename Tool Preset…")),
+                 QStringLiteral("toolPresets.rename")),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Delete Tool Preset")),
+                 QStringLiteral("toolPresets.delete")),
+             chkAction(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Current Tool Only")),
+                       QStringLiteral("toolPresets.currentToolOnly"), true),
+             chkAction(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Sort By Tool")),
+                       QStringLiteral("toolPresets.sortByTool")),
+             sub(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Display")), true),
+             kid(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Text Only")),
+                 QStringLiteral("toolPresets.display.text")),
+             kid(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Small List")),
+                 QStringLiteral("toolPresets.display.small")),
+             kid(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Large List")),
+                 QStringLiteral("toolPresets.display.large")),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Preset Manager…")),
+                 QStringLiteral("toolPresets.manager"), true),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Load Tool Presets…")),
+                 QStringLiteral("toolPresets.load")),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Save Tool Presets…")),
+                 QStringLiteral("toolPresets.save")),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Replace Tool Presets…")),
+                 QStringLiteral("toolPresets.replace")),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Reset Tool Presets")),
+                 QStringLiteral("toolPresets.reset")),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "(libraries list)")), true),
          }},
         {QStringLiteral("stylesPanel"),
@@ -481,10 +513,16 @@ void populatePanelMenu(QMenu* menu, const QString& panelName,
             if (row.action.isEmpty()) {
                 action->setEnabled(false);
                 action->setToolTip(QCoreApplication::translate("PicturaUi", "%1 — not implemented yet").arg(label));
-            } else if (dispatch) {
-                const QString id = row.action;
-                QObject::connect(action, &QAction::triggered, menu,
-                                 [dispatch, id]() { dispatch(id); });
+            } else {
+                if (dispatch) {
+                    const QString id = row.action;
+                    QObject::connect(action, &QAction::triggered, menu,
+                                     [dispatch, id]() { dispatch(id); });
+                }
+                // A live panel-preference child makes the parent submenu live
+                // too; only an all-placeholder submenu stays disabled.
+                submenu->menuAction()->setEnabled(true);
+                submenu->menuAction()->setToolTip(QString());
             }
         } else {
             submenu->menuAction()->setEnabled(true);
@@ -587,6 +625,12 @@ void PanelGroup::runPanelPreference(const QString& actionId)
 {
     if (actionId.startsWith(QStringLiteral("swatches."))) {
         if (auto* panel = qobject_cast<SwatchesPanel*>(tabs_->currentWidget())) {
+            panel->runPresetCommand(actionId);
+        }
+        return;
+    }
+    if (actionId.startsWith(QStringLiteral("toolPresets."))) {
+        if (auto* panel = qobject_cast<ToolPresetsPanel*>(tabs_->currentWidget())) {
             panel->runPresetCommand(actionId);
         }
         return;

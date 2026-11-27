@@ -551,6 +551,16 @@ void PresetManager::runLibraryAction(const QString& action)
         saveSet(QStringLiteral("ase"));
     } else if (action == QStringLiteral("swatches.reset")) {
         resetType();
+    } else if (action == QStringLiteral("toolPresets.load")) {
+        pickImport(false);
+    } else if (action == QStringLiteral("toolPresets.replace")) {
+        pickImport(true);
+    } else if (action == QStringLiteral("toolPresets.save")) {
+        saveSet();
+    } else if (action == QStringLiteral("toolPresets.reset")) {
+        resetType();
+    } else if (action == QStringLiteral("toolPresets.manager")) {
+        return;
     } else if (action.startsWith(QStringLiteral("append:"))) {
         importFile(action.mid(7), false);
     } else if (action.startsWith(QStringLiteral("replace:"))) {
