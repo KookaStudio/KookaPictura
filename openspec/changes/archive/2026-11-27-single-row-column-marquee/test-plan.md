@@ -16,3 +16,8 @@
 | slm_refine | Create a selection with each tool and activate Refine Edge from its options bar. | The shared Refine Edge action opens. | `tst_single_line_marquee::refineEdge` |
 | slm_move | Drag inside an existing selection with each tool. | Existing selection moves. | `tst_single_line_marquee::moveSelection` |
 | slm_context | Open canvas context menu with each tool and a selection. | Selection menu actions are available. | `tst_single_line_marquee::contextMenu` |
+| slm_drag_row | Press and move a row, then release beyond the lower edge. | The guide tracks each position and clamps. Only release applies the final band; Undo restores the prior mask. | `tst_single_line_marquee::dragRow` |
+| slm_drag_column | Press and move a column, then release beyond the left edge. | The guide tracks each position and clamps. Only release applies the final band; Undo restores the prior mask. | `tst_single_line_marquee::dragColumn` |
+| slm_drag_combine | Preview several bands in each combine mode using an existing selection. | Earlier previews never affect the next one or the final mask; a larger feathered Add/Subtract preview matches the committed mask, including contour boundaries. | `tst_single_line_marquee::dragCombine`, `tst_single_line_marquee::dragCombineLargeFeather` |
+| slm_drag_escape | Move each band, press Escape, and release. | Preview disappears. Coverage and history are exactly as they were before press. | `tst_single_line_marquee::dragEscape` |
+| slm_drag_target | During a band gesture, change focus, tool, or document, then release. | The old preview disappears and neither document receives a selection edit. | `tst_single_line_marquee::dragTargetLoss` |

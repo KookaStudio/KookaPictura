@@ -6,6 +6,7 @@
 
 #include <QtCore/QtMath>
 
+#include <algorithm>
 #include <cstdint>
 
 namespace pictura::selection_api {
@@ -96,11 +97,9 @@ SelectionBounds bounds(const PictureView& view)
                            int(extents[3]), true};
 }
 
-SelectionContour contour(const PictureView& view)
+static QList<QPolygonF> decodeContour(const ::rust::Vec<int32_t>& extents)
 {
-    const ::rust::Vec<int32_t> extents = view.selection_contour_extents();
-    SelectionContour out;
-    out.revision = view.selection_revision();
+    QList<QPolygonF> out;
     size_t i = 0;
     while (i < extents.size()) {
         const int count = int(extents[i++]);
@@ -117,10 +116,58 @@ SelectionContour contour(const PictureView& view)
             i += 2;
         }
         if (loop.size() >= 2) {
-            out.loops.append(loop);
+            out.append(loop);
         }
     }
     return out;
+}
+
+SelectionContour contour(const PictureView& view)
+{
+    return {decodeContour(view.selection_contour_extents()), view.selection_revision()};
+}
+
+static QPainterPath contourPath(const QList<QPolygonF>& loops)
+{
+    QPainterPath path;
+    for (const QPolygonF& loop : loops) {
+        path.addPolygon(loop);
+        path.closeSubpath();
+    }
+    return path;
+}
+
+QPainterPath committedContourPath(const PictureView& view)
+{
+    return contourPath(contour(view).loops);
+}
+
+QList<QPolygonF> rectPreviewContour(const PictureView& view, const QRect& rect,
+                                   const QString& mode, double feather,
+                                   const QPainterPath& committed)
+{
+    if (feather <= 0 && mode == QStringLiteral("new")) {
+        return {QPolygonF(QRectF(rect))};
+    }
+    const auto preview = selection_rect_preview_contour(
+        view, rect.x(), rect.y(), rect.width(), rect.height(), mode, feather);
+    const auto loops = decodeContour(preview.contour);
+    if (preview.width <= 0 || preview.height <= 0 || committed.isEmpty()) {
+        return loops;
+    }
+    QPainterPath window;
+    window.addRect(QRectF(preview.left, preview.top, preview.width, preview.height));
+    return committed.subtracted(window).united(contourPath(loops)).toSubpathPolygons();
+}
+
+QRect singleLineBand(const QSize& size, const QPointF& pos, bool row)
+{
+    if (size.isEmpty()) {
+        return {};
+    }
+    const int limit = row ? size.height() : size.width();
+    const int index = qFloor(std::clamp(row ? pos.y() : pos.x(), 0.0, double(limit - 1)));
+    return row ? QRect(0, index, size.width(), 1) : QRect(index, 0, 1, size.height());
 }
 
 } // namespace pictura::selection_api

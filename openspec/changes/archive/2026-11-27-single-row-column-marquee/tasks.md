@@ -15,3 +15,9 @@
 
 - [x] 3.1 Review and update ROADMAP.md and PARITY.md for changed feature coverage.
 - [x] 3.2 Build the completed implementation, run the planned Qt suite and applicable repository gates, and resolve any failures.
+
+## 4. Live tracking follow-up
+
+- [x] 4.1 Implement read-only live band previews, release, and cancellation without changing the selection-move gesture.
+- [x] 4.2 Add the drag and cancellation Qt scenarios.
+- [ ] 4.3 Build and run the focused Qt suites and repository gates for the follow-up.

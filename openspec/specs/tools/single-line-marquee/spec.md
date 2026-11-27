@@ -31,6 +31,29 @@ A click inside the image with Single Row Marquee SHALL select the clicked pixel'
 - **WHEN** New mode clicks inside an existing selection and then Undo and Redo are invoked
 - **THEN** the click replaces the selection with the band, Undo restores the prior selection, and Redo restores the band
 
+### Requirement: Live band placement
+A band-placement gesture SHALL preview the full one-pixel band on press and follow the relevant document coordinate as the pointer moves. After a press in bounds, motion and release SHALL clamp that coordinate to the document. The preview SHALL show the result of applying the press-time mode and feather against the unchanged pre-gesture selection. The geometric band guide SHALL remain visible when the resulting contour differs or is empty. On release the tool SHALL apply the final band as a single undoable change. Escape, loss of canvas focus, and a tool or document switch SHALL discard the preview and ignore the cancelled gesture's release without changing selection or history.
+
+#### Scenario: Track a row and commit the release coordinate [slm_drag_row]
+- **WHEN** a row gesture moves across the image and releases beyond its lower edge
+- **THEN** the band follows the row, clamps to the last row, and release records one selection change
+
+#### Scenario: Track a column and commit the release coordinate [slm_drag_column]
+- **WHEN** a column gesture moves across the image and releases beyond its left edge
+- **THEN** the band follows the column, clamps to the first column, and release records one selection change
+
+#### Scenario: Combine previews use the starting selection [slm_drag_combine]
+- **WHEN** Add, Subtract or Intersect previews move between bands
+- **THEN** the displayed result at each position uses the original selection and release applies only the final band
+
+#### Scenario: Cancel a band with Escape [slm_drag_escape]
+- **WHEN** either tool previews a band, the user presses Escape, and the pointer is released
+- **THEN** the preview is cleared, the exact original mask and undo position are retained, and the release does nothing
+
+#### Scenario: Cancel when the gesture loses its target [slm_drag_target]
+- **WHEN** a held band loses canvas focus or the active tool or document changes
+- **THEN** the preview is discarded and a later release cannot commit it
+
 ### Requirement: Single-line options and combination
 Both tools SHALL offer New, Add, Subtract and Intersect modes and Feather from 0 to 250 pixels. They SHALL apply feather to the hard band before combining it with the existing selection using the existing selection combine rules. Shift, Alt and Shift+Alt at the click SHALL choose Add, Subtract and Intersect respectively when a selection exists. Neither tool SHALL expose Style or Anti-alias. Both SHALL offer Refine Edge with the same availability and action as other marquee tools. If a nonempty resulting selection has no pixel more than 50% selected, the application SHALL show the warning “No pixels are more than 50% selected” and retain the selection and its undo history.
 

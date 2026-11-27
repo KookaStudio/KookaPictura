@@ -719,7 +719,15 @@ void ImageView::paintEvent(QPaintEvent* event)
         painter.drawPolygon(overlayPolygon_);
     }
 
-    if (selectionEdgesVisible_ && !selectionContours_.isEmpty()) {
+    if (!selectionBandGuide_.isEmpty()) {
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(Qt::white, 0));
+        painter.drawPolygon(selectionBandGuide_);
+        painter.setPen(QPen(Qt::black, 0, Qt::DotLine));
+        painter.drawPolygon(selectionBandGuide_);
+    }
+
+    if (!previewReplacesSelection_ && selectionEdgesVisible_ && !selectionContours_.isEmpty()) {
         // Marching ants: a solid white base under an animated black dashed pen,
         // so the edge reads against both light and dark pixels. Width 0 = a
         // cosmetic 1-px line independent of the pan/zoom transform.
@@ -873,6 +881,14 @@ void ImageView::wheelEvent(QWheelEvent* event)
     event->accept();
 }
 
+bool ImageView::event(QEvent* event)
+{
+    if (event->type() == QEvent::FocusOut || event->type() == QEvent::WindowDeactivate) {
+        emit pointerGestureFocusLost();
+    }
+    return QWidget::event(event);
+}
+
 void ImageView::mousePressEvent(QMouseEvent* event)
 {
     const FrameViewportTiming timing(*this);
@@ -1002,7 +1018,10 @@ void ImageView::mouseReleaseEvent(QMouseEvent* event)
             unsetCursor();
         }
     }
+    nonLeftReleaseWhileLeftHeld_ = event->button() != Qt::LeftButton
+        && event->buttons().testFlag(Qt::LeftButton);
     emit mouseReleased(widgetToImage(event->position()));
+    nonLeftReleaseWhileLeftHeld_ = false;
     QWidget::mouseReleaseEvent(event);
 }
 

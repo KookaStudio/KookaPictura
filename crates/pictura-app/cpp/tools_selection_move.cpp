@@ -9,12 +9,58 @@
 #include "selection_drag.h"
 #include "tool_handler.h"
 
+#include "api/selection_api.h"
 #include "api/selection_bridge.h"
 
 #include <QtGui/QDrag>
 #include <QtWidgets/QApplication>
 
 namespace pictura {
+
+namespace {
+
+bool isSingleLineMarquee(ToolId id)
+{
+    return id == ToolId::SingleRowMarquee || id == ToolId::SingleColumnMarquee;
+}
+
+} // namespace
+
+bool ToolController::ignoreSingleLineRelease() const
+{
+    return canvas_ && canvas_->nonLeftReleaseWhileLeftHeld() && isSingleLineMarquee(active_);
+}
+
+bool ToolController::cancelSingleLineMarquee()
+{
+    if (!isSingleLineMarquee(active_)) {
+        return false;
+    }
+    if (movingSelection_ && !contentMove_) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            handler->onEscape();
+        }
+        dragging_ = false;
+        ignoreReleaseUntilPress();
+        cancelSelectionMove(boundView_);
+        return true;
+    }
+    if (ToolHandler* handler = registry_.forTool(active_)) {
+        return handler->onEscape();
+    }
+    return false;
+}
+
+bool ToolController::handleEscape()
+{
+    if (isSingleLineMarquee(active_)) {
+        return cancelSingleLineMarquee();
+    }
+    if (ToolHandler* handler = registry_.forTool(active_)) {
+        return handler->onEscape();
+    }
+    return false;
+}
 
 bool ToolController::isSelectionTool(ToolId id)
 {
@@ -41,6 +87,11 @@ bool ToolController::maybeBeginSelectionMove(PictureView* v, const QPointF& imag
     dragging_ = true;
     dragCommitted_ = false;
     selectionMoveAnchor_ = imagePos;
+    if (isSingleLineMarquee(active_)) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            handler->onPress(*this, imagePos, Qt::NoModifier);
+        }
+    }
     refreshCursor();
     return true;
 }
@@ -75,8 +126,16 @@ void ToolController::beginContentMove(PictureView* v, const QPointF& imagePos, b
     refreshCursor();
 }
 
-void ToolController::cancelSelectionMove()
+void ToolController::cancelSelectionMove(PictureView* target)
 {
+    if (movingSelection_ && !contentMove_ && isSingleLineMarquee(active_)) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            handler->onEscape();
+        }
+        if (canvas_) {
+            canvas_->clearSelectionPreview();
+        }
+    }
     contentMove_ = false;
     contentDuplicate_ = false;
     if (contentPreviewActive_ && canvas_) {
@@ -90,7 +149,7 @@ void ToolController::cancelSelectionMove()
     if (canvas_) {
         canvas_->setSelectionContourOffset(QPointF());
     }
-    PictureView* v = view();
+    PictureView* v = target ? target : view();
     if (v) {
         pictura::cancel_selection_move(*v);
         emit selectionMovePreviewed();
@@ -124,6 +183,15 @@ void ToolController::dragSelectionMove(const QPointF& imagePos)
     }
     const int dx = qRound(imagePos.x() - selectionMoveAnchor_.x());
     const int dy = qRound(imagePos.y() - selectionMoveAnchor_.y());
+    if (!contentMove_ && canvas_ && isSingleLineMarquee(active_)
+        && selectionMoveDragged_) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            if (handler->onEscape()) {
+                ignoreRelease_ = false;
+                dragging_ = true;
+            }
+        }
+    }
     if (pictura::preview_selection_move(*v, dx, dy) && canvas_) {
         canvas_->setSelectionContourOffset(QPointF(dx, dy));
         emit selectionMovePreviewed();
@@ -140,7 +208,9 @@ void ToolController::dragSelectionToDocument()
     if (!v || !canvas) {
         return;
     }
-    cancelSelectionMove();
+    if (!cancelSingleLineMarquee()) {
+        cancelSelectionMove();
+    }
     dragging_ = false;
     auto* drag = new QDrag(canvas);
     drag->setMimeData(makeSelectionDragMime(v));
@@ -154,7 +224,9 @@ bool ToolController::prepareSelectionDocumentDragForTest()
     if (!movingSelection_ || contentMove_) {
         return false;
     }
-    cancelSelectionMove();
+    if (!cancelSingleLineMarquee()) {
+        cancelSelectionMove();
+    }
     dragging_ = false;
     return true;
 }
@@ -165,14 +237,22 @@ void ToolController::releaseSelectionMove(const QPointF& imagePos)
         return;
     }
     movingSelection_ = false;
+    const int dx = qRound(imagePos.x() - selectionMoveAnchor_.x());
+    const int dy = qRound(imagePos.y() - selectionMoveAnchor_.y());
+    const bool lineClick = !contentMove_ && isSingleLineMarquee(active_)
+        && dx == 0 && dy == 0 && !selectionMoveDragged_;
+    if (!contentMove_ && isSingleLineMarquee(active_) && !lineClick) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            handler->onEscape();
+            ignoreRelease_ = false;
+        }
+    }
     // The commit retraces the moved mask; a refused or zero move shows the
     // origin contour again.
     if (canvas_) {
         canvas_->setSelectionContourOffset(QPointF());
     }
     PictureView* v = view();
-    const int dx = qRound(imagePos.x() - selectionMoveAnchor_.x());
-    const int dy = qRound(imagePos.y() - selectionMoveAnchor_.y());
     if (contentMove_) {
         contentMove_ = false;
         if (v && (dx != 0 || dy != 0)) {
@@ -208,13 +288,9 @@ void ToolController::releaseSelectionMove(const QPointF& imagePos)
         pictura::cancel_selection_move(*v);
         emit selectionMovePreviewed();
     }
-    const bool lineClick = v && dx == 0 && dy == 0 && !selectionMoveDragged_
-        && (active_ == ToolId::SingleRowMarquee || active_ == ToolId::SingleColumnMarquee);
-    if (lineClick) {
+    if (lineClick && v) {
         if (ToolHandler* handler = registry_.forTool(active_)) {
-            const QPointF anchor = selectionMoveAnchor_;
-            handler->onPress(*this, anchor, Qt::NoModifier);
-            handler->onRelease(*this, anchor, Qt::NoModifier);
+            handler->onRelease(*this, selectionMoveAnchor_, Qt::NoModifier);
         }
     }
     refreshCursor();

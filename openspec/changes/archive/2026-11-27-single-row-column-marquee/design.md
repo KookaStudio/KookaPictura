@@ -26,3 +26,7 @@ The current registry creates rectangle and ellipse handlers in `tools.cpp`; thei
 ## Migration Plan
 
 No data migration is required. Roll back by removing the tool registrations and UI entries with the implementation.
+
+## Live tracking follow-up
+
+The handler locks the press-time target, selection revision, mode and feather. Read-only preview builds the same rectangular mask as release and combines it with the starting selection. Add and Subtract reuse the cached committed contour outside the feather reach and combine mask coverage only inside that region. The canvas shows the resulting contour and a geometric band guide when needed. Release calls the existing selection commit once. Cancellation only discards view state. An inside-selection press retains selection-move arbitration and clears its band guide when movement takes over.

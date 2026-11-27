@@ -8,7 +8,7 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use pictura_select::clip_selection_shape_to_canvas;
 use pictura_select::geometry::{marquee_rect, within_radius, MarqueeStyle};
-use pictura_select::Selection;
+use pictura_select::{CombineMode, Selection};
 
 pub(super) fn begin_selection_move(view: Pin<&mut PictureView>) -> bool {
     view.begin_selection_move()
@@ -279,6 +279,79 @@ pub(super) fn load_selection_target(
 
 pub(super) fn selection_mask_targets(view: &PictureView) -> QStringList {
     view.selection_mask_targets()
+}
+
+pub(super) fn selection_rect_preview_contour(
+    view: &PictureView,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    mode: &QString,
+    feather: f64,
+) -> ffi::SelectionRectPreview {
+    let mut preview = ffi::SelectionRectPreview {
+        left: 0,
+        top: 0,
+        width: 0,
+        height: 0,
+        contour: Vec::new(),
+    };
+    let Some((shape, boxed)) = view.rect_selection_shape(x, y, w, h, feather) else {
+        return preview;
+    };
+    let Some(bounds) = boxed.map(|b| b.zero_outside).filter(|b| !b.is_empty()) else {
+        return preview;
+    };
+    let mode = combine_mode_from(&mode.to_string());
+    let previous = view.rust().session.selection.as_ref();
+    let (loops, dx, dy) = match (mode, previous) {
+        (CombineMode::New, _) | (CombineMode::Add, None) => {
+            (pictura_select::contour_within(&shape, 128, bounds), 0, 0)
+        }
+        (_, Some(previous)) => {
+            let mut result = selection_window(previous, bounds);
+            result.combine_with(&selection_window(&shape, bounds), mode);
+            if matches!(mode, CombineMode::Add | CombineMode::Subtract) {
+                // Outside the feather reach the old contour is unchanged.
+                preview.left = bounds.left;
+                preview.top = bounds.top;
+                preview.width = bounds.right - bounds.left;
+                preview.height = bounds.bottom - bounds.top;
+            }
+            (
+                pictura_select::contour(&result, 128),
+                bounds.left,
+                bounds.top,
+            )
+        }
+        (_, None) => return preview,
+    };
+    for poly in loops {
+        preview.contour.push(poly.len() as i32);
+        for [x, y] in poly {
+            preview.contour.extend([x + dx, y + dy]);
+        }
+    }
+    preview
+}
+
+fn selection_window(selection: &Selection, bounds: pictura_core::PsdRect) -> Selection {
+    let xs = bounds.left as usize..bounds.right as usize;
+    let ys = bounds.top as usize..bounds.bottom as usize;
+    let mut data = Vec::with_capacity(xs.len() * ys.len());
+    for y in ys.clone() {
+        if let Some(row) = selection.data.row_span(y, xs.clone(), selection.width as usize) {
+            data.extend_from_slice(&row);
+        } else {
+            data.resize(data.len() + xs.len(), 0);
+        }
+    }
+    Selection {
+        width: xs.len() as u32,
+        height: ys.len() as u32,
+        data: data.into(),
+    }
 }
 
 pub(super) fn selection_below_half(view: &PictureView) -> bool {

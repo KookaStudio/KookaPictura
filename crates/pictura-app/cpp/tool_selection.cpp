@@ -5,6 +5,7 @@
 #include "selection_geometry.h"
 #include "tools.h"
 
+#include "api/selection_api.h"
 #include "api/selection_bridge.h"
 #include "api/view_bridge.h"
 
@@ -188,33 +189,89 @@ public:
     bool onPress(ToolServices& ctx, const QPointF& pos, Qt::KeyboardModifiers mods) override
     {
         PictureView* view = ctx.view();
-        if (!view || !view->has_document()) return true;
-        const int x = qFloor(pos.x());
-        const int y = qFloor(pos.y());
-        if (x < 0 || y < 0 || x >= view->document_width() || y >= view->document_height()) return true;
-        anchor_ = QPoint(x, y);
-        ctx.setDragMode(ctx.resolveSelectionMode(mods, view->has_selection()));
+        if (!view || !view->has_document()) {
+            return true;
+        }
+        size_ = QSize(view->document_width(), view->document_height());
+        if (!QRectF(QPointF(), QSizeF(size_)).contains(pos)
+            || pos.x() >= size_.width() || pos.y() >= size_.height()) {
+            return true;
+        }
+        target_ = view;
+        revision_ = view->selection_revision();
+        mode_ = ctx.resolveSelectionMode(mods, view->has_selection());
+        feather_ = selection_->feather();
+        if (mode_ == SelectionMode::Add || mode_ == SelectionMode::Subtract) {
+            committedContour_ = selection_api::committedContourPath(*view);
+        }
+        gesture_ = &ctx;
         ctx.setDragging(true);
         ctx.setDragCommitted(false);
+        onMove(ctx, pos, mods);
         return true;
     }
 
-    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& pos, Qt::KeyboardModifiers) override
     {
-        if (!ctx.dragging()) return;
-        ctx.setDragging(false);
-        PictureView* view = ctx.view();
-        if (!view) return;
-        const int x = row_ ? 0 : anchor_.x();
-        const int y = row_ ? anchor_.y() : 0;
-        const int w = row_ ? view->document_width() : 1;
-        const int h = row_ ? 1 : view->document_height();
-        if (view->select_rect(x, y, w, h, selectionModeString(ctx.dragMode()), selection_->feather())) {
+        if (!gesture_) {
+            return;
+        }
+        if (!targetCurrent(ctx)) {
+            onEscape();
+            return;
+        }
+        const QRect band = selection_api::singleLineBand(size_, pos, row_);
+        if (band == previewBand_) {
+            return;
+        }
+        previewBand_ = band;
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->setSelectionResultPreview(
+                selection_api::rectPreviewContour(
+                    *target_, band, selectionModeString(mode_), feather_, committedContour_),
+                band);
+        }
+    }
+
+    void onRelease(ToolServices& ctx, const QPointF& pos, Qt::KeyboardModifiers) override
+    {
+        if (!gesture_) {
+            return;
+        }
+        if (!targetCurrent(ctx)) {
+            onEscape();
+            return;
+        }
+        PictureView* view = target_;
+        const QRect band = selection_api::singleLineBand(size_, pos, row_);
+        clearGesture();
+        if (view->select_rect(band.x(), band.y(), band.width(), band.height(),
+                              selectionModeString(mode_), feather_)) {
             ctx.emitSelectionCommitted();
             if (selection_below_half(*view)) {
                 QMessageBox::warning(ctx.canvas(), QObject::tr("Warning"),
                                      QObject::tr("No pixels are more than 50% selected"));
             }
+        }
+    }
+
+    bool onEscape() override
+    {
+        if (!gesture_) {
+            return false;
+        }
+        gesture_->ignoreReleaseUntilPress();
+        clearGesture();
+        return true;
+    }
+
+    void onDeactivate(ToolServices&) override { onEscape(); }
+    void onSessionCancelled(ToolServices&) override { onEscape(); }
+
+    void onDocumentRefreshed(ToolServices& ctx) override
+    {
+        if (gesture_ && !targetCurrent(ctx)) {
+            onEscape();
         }
     }
 
@@ -225,9 +282,35 @@ public:
     }
 
 private:
+    bool targetCurrent(const ToolServices& ctx) const
+    {
+        PictureView* view = ctx.view();
+        return view && view == target_ && view->selection_revision() == revision_
+            && QSize(view->document_width(), view->document_height()) == size_;
+    }
+
+    void clearGesture()
+    {
+        if (ImageView* canvas = gesture_->canvas()) {
+            canvas->clearSelectionPreview();
+        }
+        gesture_->setDragging(false);
+        gesture_ = nullptr;
+        target_ = nullptr;
+        previewBand_ = {};
+        committedContour_ = {};
+    }
+
     bool row_;
-    QPoint anchor_;
     std::shared_ptr<SelectionOptions> selection_;
+    ToolServices* gesture_ = nullptr;
+    PictureView* target_ = nullptr;
+    quint64 revision_ = 0;
+    QSize size_;
+    QRect previewBand_;
+    QPainterPath committedContour_;
+    SelectionMode mode_ = SelectionMode::New;
+    double feather_ = 0.0;
 };
 
 // Freehand Lasso: the mask grows with each move until release.
