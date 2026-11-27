@@ -23,6 +23,21 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QToolButton>
 
+namespace {
+
+template <class Dialog>
+Dialog* visibleDialog()
+{
+    for (auto* widget : QApplication::topLevelWidgets()) {
+        if (auto* dialog = qobject_cast<Dialog*>(widget); dialog && dialog->isVisible()) {
+            return dialog;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
 class PatternAuthoringTest : public QObject {
     Q_OBJECT
 private slots:
@@ -62,7 +77,7 @@ void PatternAuthoringTest::defineAndReuse()
     const int before = f.view->history_index();
     bool named = false;
     QTimer::singleShot(0, [&] {
-        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        auto* dialog = visibleDialog<QInputDialog>();
         if (!dialog || dialog->objectName() != QStringLiteral("definePatternDialog")) return;
         named = true;
         dialog->setTextValue(QStringLiteral("Asymmetric tile"));
@@ -100,7 +115,7 @@ void PatternAuthoringTest::consumerReuse()
     QVERIFY(f.ok());
     QVERIFY(f.view->select_rect(0, 0, 2, 2, QStringLiteral("new"), 0.0));
     QTimer::singleShot(0, [] {
-        if (auto* input = qobject_cast<QInputDialog*>(QApplication::activeModalWidget())) {
+        if (auto* input = visibleDialog<QInputDialog>()) {
             input->setTextValue(QStringLiteral("Consumer tile"));
             input->accept();
         }
@@ -176,11 +191,10 @@ void PatternAuthoringTest::invalidAndCancel()
         QTimer timer;
         timer.setSingleShot(true);
         QObject::connect(&timer, &QTimer::timeout, [&] {
-            auto* modal = QApplication::activeModalWidget();
-            if (auto* input = qobject_cast<QInputDialog*>(modal)) {
+            if (auto* input = visibleDialog<QInputDialog>()) {
                 nameOffered = true;
                 input->reject();
-            } else if (auto* warning = qobject_cast<QMessageBox*>(modal)) {
+            } else if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
                 warning->accept();
             }
         });
@@ -201,7 +215,7 @@ void PatternAuthoringTest::invalidAndCancel()
     const int before = f.view->history_index();
     bool opened = false;
     QTimer::singleShot(0, [&] {
-        auto* input = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        auto* input = visibleDialog<QInputDialog>();
         if (!input) return;
         opened = true;
         input->reject();
@@ -233,7 +247,7 @@ void PatternAuthoringTest::defineFailure()
     bool opened = false;
     bool warned = false;
     QTimer::singleShot(0, [&] {
-        auto* input = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        auto* input = visibleDialog<QInputDialog>();
         if (!input) return;
         opened = true;
         input->setTextValue(QStringLiteral("Cannot save"));
@@ -259,7 +273,7 @@ void PatternAuthoringTest::defineFailure()
         bool changed = false;
         bool staleWarning = false;
         QTimer::singleShot(0, [&] {
-            auto* input = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+            auto* input = visibleDialog<QInputDialog>();
             if (!input) return;
             if (changeDocument) {
                 changed = window->newDocument(QStringLiteral("Other"), 8, 8,
@@ -308,7 +322,7 @@ bool chooseFill(pictura::PicturaMainWindow& window, const QString& name, int scr
 {
     bool configured = false;
     QTimer::singleShot(0, [&] {
-        auto* dialog = qobject_cast<pictura::FillDialog*>(QApplication::activeModalWidget());
+        auto* dialog = visibleDialog<pictura::FillDialog>();
         if (!dialog) return;
         auto* contents = dialog->findChild<QComboBox*>(QStringLiteral("fillContents"));
         auto* scripted = dialog->findChild<QCheckBox*>(QStringLiteral("fillScriptedPatterns"));
@@ -352,7 +366,7 @@ void PatternAuthoringTest::fillPreset()
     QVERIFY(f.ok());
     QVERIFY(f.view->select_rect(0, 0, 2, 2, QStringLiteral("new"), 0.0));
     QTimer::singleShot(0, [] {
-        if (auto* input = qobject_cast<QInputDialog*>(QApplication::activeModalWidget())) {
+        if (auto* input = visibleDialog<QInputDialog>()) {
             input->setTextValue(QStringLiteral("Four colors"));
             input->accept();
         }
@@ -449,7 +463,7 @@ void PatternAuthoringTest::emptyList()
     const int before = f.view->history_index();
     bool inspected = false;
     QTimer::singleShot(0, [&] {
-        auto* dialog = qobject_cast<pictura::FillDialog*>(QApplication::activeModalWidget());
+        auto* dialog = visibleDialog<pictura::FillDialog>();
         if (!dialog) return;
         auto* contents = dialog->findChild<QComboBox*>(QStringLiteral("fillContents"));
         if (contents) {
@@ -518,7 +532,7 @@ void PatternAuthoringTest::scriptEdit()
     const int before = f.view->history_index();
     bool configured = false;
     QTimer::singleShot(0, [&] {
-        auto* dialog = qobject_cast<pictura::FillDialog*>(QApplication::activeModalWidget());
+        auto* dialog = visibleDialog<pictura::FillDialog>();
         if (!dialog) return;
         auto* contents = dialog->findChild<QComboBox*>(QStringLiteral("fillContents"));
         auto* scripted = dialog->findChild<QCheckBox*>(QStringLiteral("fillScriptedPatterns"));
@@ -564,7 +578,7 @@ void PatternAuthoringTest::scriptCancel()
     const int before = f.view->history_index();
     bool configured = false;
     QTimer::singleShot(0, [&] {
-        auto* dialog = qobject_cast<pictura::FillDialog*>(QApplication::activeModalWidget());
+        auto* dialog = visibleDialog<pictura::FillDialog>();
         if (!dialog) return;
         auto* contents = dialog->findChild<QComboBox*>(QStringLiteral("fillContents"));
         auto* scripted = dialog->findChild<QCheckBox*>(QStringLiteral("fillScriptedPatterns"));
@@ -661,7 +675,7 @@ void PatternAuthoringTest::captureMemoryAndStaleEdit()
     bool edited = false;
     bool warned = false;
     QTimer::singleShot(0, [&] {
-        auto* input = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        auto* input = visibleDialog<QInputDialog>();
         if (!input) return;
         edited = pictura::edit_fill(*f.view, 0xffff0000u, -1, QStringLiteral("normal"), 100, false);
         QTimer::singleShot(0, [&] {
