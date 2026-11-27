@@ -658,7 +658,10 @@ fn ensure_shape_pattern(doc: &mut pictura_core::Document, payload: &str) -> bool
     let Some(params) = pattern_from_payload(payload) else {
         return false;
     };
+    // Legacy references can be unresolved and still use the renderer's fallback.
+    let has_snapshot = payload.split('|').nth(5).is_some();
     super::super::impl_layers::ensure_payload_pattern(doc, &params.pattern_id, payload)
+        || !has_snapshot
 }
 
 /// Apply `edit` to the active shape layer; when it changed something,
