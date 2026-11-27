@@ -5,7 +5,7 @@ Pictura commit: ec3346bcd
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
-Coverage includes the #558 HDR merge workflow, #577 Selective Color channel gating, and #523 numeric opacity and fill shortcuts.
+Coverage includes the #558 HDR merge workflow, #577 Selective Color channel gating, #523 numeric opacity and fill shortcuts, and #536 Eyedropper modifier gestures.
 
 This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
@@ -171,8 +171,8 @@ Source list: CS6 toolbox tools (73 catalogue entries) plus named brush-engine, b
 | P-TOOL-10 | Perspective Crop | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-11 | Slice | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Slice style and modifiers, Divide/Combine/Duplicate, and the Slice Options dialog remain | TOOL-19 |
 | P-TOOL-12 | Slice Select | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Slice style and modifiers, Divide/Combine/Duplicate, and the Slice Options dialog remain | TOOL-19 |
-| P-TOOL-13 | Eyedropper | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Modifiers and Shift-click sampler remain | TOOL-12 |
-| P-TOOL-14 | Color Sampler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Modifiers and Shift-click sampler remain | TOOL-12 |
+| P-TOOL-13 | Eyedropper | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/tool_eyedropper.cpp; crates/pictura-app/cpp/tools.cpp | none | Background and temporary sampling and Shift-click sampler implemented; screen-wide sampling remains | TOOL-12 |
+| P-TOOL-14 | Color Sampler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/tool_eyedropper.cpp; crates/pictura-app/cpp/tool_annotations.cpp | none | Shift-click placement implemented; sampler persistence and readout sample size remain | #516 |
 | P-TOOL-15 | Ruler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Arbitrary rotation prefills from the ruler. Protractor and direct Straighten remain | TOOL-11 |
 | P-TOOL-16 | Note | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-17 | Count (Extended) | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
