@@ -51,7 +51,7 @@ pub(in crate::document_ops::layer_ops) fn minimum_vertical_seam(
             let base = (r - l).abs();
             let mut best = f64::INFINITY;
             let mut best_x = x;
-            for px in left..=right {
+            for (px, &prior) in previous.iter().enumerate().take(right + 1).skip(left) {
                 let extra = if px < x {
                     (above - l).abs()
                 } else if px > x {
@@ -59,7 +59,7 @@ pub(in crate::document_ops::layer_ops) fn minimum_vertical_seam(
                 } else {
                     0.0
                 };
-                let candidate = previous[px] + base + extra;
+                let candidate = prior + base + extra;
                 if candidate < best {
                     best = candidate;
                     best_x = px;
