@@ -364,3 +364,108 @@ fn as_shot_record_keeps_as_shot_balance() {
         Some(pending.source.as_shot.temperature.round())
     );
 }
+
+/// `settings` with its Exposure set to `stops`.
+fn with_exposure(
+    settings: &pictura_core::PicturaRawSettings,
+    stops: f64,
+) -> pictura_core::PicturaRawSettings {
+    let mut s = settings.clone();
+    s.basic.exposure = Some(stops);
+    s
+}
+
+fn mean(rgb: &[u16]) -> f64 {
+    rgb.iter().map(|&v| f64::from(v)).sum::<f64>() / rgb.len() as f64
+}
+
+// raw_open_exposure_linear
+#[test]
+fn exposure_joins_the_baseline_before_the_clip() {
+    let dir = temp_dir();
+    let path = write(&dir, "shot.dng", &fixture_dng(16, 12, true, None));
+    let pending = pending(&path);
+    let source = &pending.source;
+    let seed = pending.seed.clone();
+    let develop = |settings: &pictura_core::PicturaRawSettings| {
+        develop_pixels(
+            source.camera.clone(),
+            &source.look,
+            source.as_shot,
+            settings,
+        )
+        .unwrap()
+    };
+    for stops in [1.0, -1.0] {
+        let mut look = source.look.clone();
+        look.color.baseline_exposure += stops;
+        let codec = pictura_codec::develop_raw(
+            source.camera.clone(),
+            &look,
+            pictura_codec::WhiteBalance {
+                temperature: seed.basic.temperature.unwrap(),
+                tint: seed.basic.tint.unwrap(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            develop(&with_exposure(&seed, stops)).rgb,
+            codec.rgb,
+            "{stops}"
+        );
+    }
+    assert!(mean(&develop(&with_exposure(&seed, 1.0)).rgb) > mean(&develop(&seed).rgb));
+}
+
+// raw_open_exposure_recovers
+#[test]
+fn negative_exposure_recovers_clipped_highlights() {
+    let dir = temp_dir();
+    let path = write(&dir, "shot.dng", &fixture_dng(16, 12, true, None));
+    let pending = pending(&path);
+    let mut look = pending.source.look.clone();
+    look.color.as_shot_neutral = Some([1.0, 1.0, 1.0]);
+    look.color.baseline_exposure = 2.0;
+    look.crop = pictura_codec::DngCrop {
+        x: 0.0,
+        y: 0.0,
+        width: 16.0,
+        height: 12.0,
+    };
+    look.orientation = 1;
+    let as_shot = pictura_codec::as_shot_transform(&look.color)
+        .unwrap()
+        .white_balance;
+    let mut settings = pending.seed.clone();
+    settings.basic.temperature = Some(as_shot.temperature);
+    settings.basic.tint = Some(as_shot.tint);
+    // Left half linear 0.3, right half 0.4: both above white at +2 stops.
+    let (w, h) = (16, 12);
+    let camera = pictura_codec::CameraRgb {
+        width: w,
+        height: h,
+        rgb: (0..w * h)
+            .flat_map(|i| [if i % w < w / 2 { 19661u16 } else { 26214 }; 3])
+            .collect(),
+    };
+    let patches = |stops| {
+        let out = develop_pixels(
+            camera.clone(),
+            &look,
+            as_shot,
+            &with_exposure(&settings, stops),
+        )
+        .unwrap();
+        let px = |x: usize| out.rgb[(h / 2 * w + x) * 3..][..3].to_vec();
+        (px(2), px(w - 3))
+    };
+    let (dim, bright) = patches(0.0);
+    assert_eq!(dim, vec![65535; 3]);
+    assert_eq!(bright, vec![65535; 3]);
+    let (dim, bright) = patches(-2.0);
+    assert!(bright.iter().all(|&v| v < 65535), "{bright:?}");
+    assert!(
+        dim.iter().zip(&bright).all(|(d, b)| d < b),
+        "{dim:?} {bright:?}"
+    );
+}

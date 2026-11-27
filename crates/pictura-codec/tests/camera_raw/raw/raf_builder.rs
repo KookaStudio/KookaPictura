@@ -55,8 +55,15 @@ pub struct Raf {
     /// A raw directory in the sensor section, else plain words in the
     /// camera JPEG's byte order (`big_endian`).
     pub sensor_tiff: bool,
-    /// Word sections only: a second frame stored after each primary row.
+    /// Word sections only: a second frame stored after each primary row,
+    /// which `0x80` then points into (the F700).
     pub second_samples: Option<Vec<u16>>,
+    /// Word sections only: a second frame in a section of its own after
+    /// the others, which `0x80` points at (the S3 Pro and S5 Pro).
+    pub second_section: Option<Vec<u16>>,
+    /// The second directory's records in place of `extra`; `None` repeats
+    /// `extra`.
+    pub second_extra: Option<Vec<(u16, Vec<u8>)>>,
     /// Further directory records, written after the others.
     pub extra: Vec<(u16, Vec<u8>)>,
 }
@@ -105,6 +112,8 @@ impl Raf {
             exposure_bias: Some((-72, 100)),
             sensor_tiff: true,
             second_samples: None,
+            second_section: None,
+            second_extra: None,
             extra: Vec::new(),
         }
     }
@@ -365,7 +374,7 @@ fn jpeg(exif: Exif, be: bool) -> Vec<u8> {
     out
 }
 
-fn records(r: &Raf) -> Vec<u8> {
+fn records(r: &Raf, extra: &[(u16, Vec<u8>)]) -> Vec<u8> {
     let pair = |a: u16, b: u16| [a.to_be_bytes(), b.to_be_bytes()].concat();
     let mut list: Vec<(u16, Vec<u8>)> = vec![(0x0100, pair(r.height as u16, r.width as u16))];
     if let Some([top, left, h, w]) = r.crop {
@@ -379,7 +388,7 @@ fn records(r: &Raf) -> Vec<u8> {
     if let Some((num, den)) = r.exposure_bias {
         list.push((0x9650, [num.to_be_bytes(), den.to_be_bytes()].concat()));
     }
-    list.extend(r.extra.iter().cloned());
+    list.extend(extra.iter().cloned());
     let mut out = (list.len() as u32).to_be_bytes().to_vec();
     for (tag, value) in list {
         out.extend(tag.to_be_bytes());
@@ -397,21 +406,51 @@ pub fn raf(r: &Raf) -> Vec<u8> {
     out.extend(name);
     out.extend(b"0100");
     out.resize(0x94, 0);
-    let mut sections = Vec::new();
-    for body in [
-        r.exif.map(|e| jpeg(e, r.big_endian)).unwrap_or_default(),
-        records(r),
-        sensor_section(r),
-    ] {
-        sections.push((out.len() as u32, body.len() as u32));
-        out.extend(body);
-    }
-    for (i, (at, len)) in sections.into_iter().enumerate() {
-        patch32(&mut out, 0x54 + 8 * i, at, true);
-        patch32(&mut out, 0x58 + 8 * i, len, true);
-    }
+    // JPEG, directory, then the second directory, so the sensor data (and
+    // a second frame's own section) end the file.
+    let jpeg_at = out.len();
+    out.extend(r.exif.map(|e| jpeg(e, r.big_endian)).unwrap_or_default());
+    let dir_at = out.len();
+    out.extend(records(r, &r.extra));
+    let second_dir_at = out.len();
     if r.second_frame {
-        patch32(&mut out, 0x78, 0x100, true);
+        out.extend(records(r, r.second_extra.as_deref().unwrap_or(&r.extra)));
+    }
+    let sensor_at = out.len();
+    out.extend(sensor_section(r));
+    let second_at = out.len();
+    if let Some(samples) = r.second_section.as_ref().filter(|_| r.second_frame) {
+        for &v in samples {
+            put16(&mut out, v, r.big_endian);
+        }
+    }
+    let end = out.len();
+    let mut header = |at: usize, (start, stop): (usize, usize)| {
+        patch32(&mut out, at, start as u32, true);
+        patch32(&mut out, at + 4, (stop - start) as u32, true);
+    };
+    header(0x54, (jpeg_at, dir_at));
+    header(0x5C, (dir_at, second_dir_at));
+    header(0x64, (sensor_at, second_at));
+    if r.second_frame {
+        header(0x78, (second_dir_at, sensor_at));
+        if r.second_section.is_some() {
+            header(0x80, (second_at, end));
+        } else if r.second_samples.is_some() && !r.sensor_tiff {
+            let at = sensor_at + 2 * r.width;
+            header(0x80, (at, at + 2 * r.width * r.height));
+        }
     }
     out
+}
+
+/// `bytes` with the second frame's offset (`0x80`) cleared, so an SR file
+/// reads its primary frame alone, as LibRaw does by default. A header too
+/// short to hold `0x80` (the camera JPEG starts before it) is left alone.
+pub fn primary_only(mut bytes: Vec<u8>) -> Vec<u8> {
+    let be32 = |b: &[u8], at: usize| u32::from_be_bytes(b[at..at + 4].try_into().unwrap());
+    if bytes.len() >= 0x88 && be32(&bytes, 0x54) >= 0x88 {
+        bytes[0x80..0x84].fill(0);
+    }
+    bytes
 }

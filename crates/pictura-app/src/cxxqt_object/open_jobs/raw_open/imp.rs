@@ -207,14 +207,27 @@ pub(super) fn split_white_balance(
 }
 
 /// Develop `camera` with `settings`: the colour stage at the settings' white
-/// balance, then the Pictura Raw controls at 16 bits.
+/// balance, the Exposure joining `BaselineExposure` in linear light so a
+/// negative one recovers what the baseline would clip (#1648), then the
+/// other Pictura Raw controls at 16 bits.
 pub(super) fn develop_pixels(
     camera: CameraRgb,
     look: &RawLook,
     as_shot: WhiteBalance,
     settings: &PicturaRawSettings,
 ) -> Result<DevelopedRgb, String> {
-    let (white_balance, rest) = split_white_balance(settings, as_shot);
+    let (white_balance, mut rest) = split_white_balance(settings, as_shot);
+    let exposure = rest.basic.exposure.take().filter(|v| v.is_finite());
+    let exposed;
+    let look = match exposure {
+        Some(stops) if stops != 0.0 => {
+            let mut l = look.clone();
+            l.color.baseline_exposure += stops;
+            exposed = l;
+            &exposed
+        }
+        _ => look,
+    };
     let mut developed = pictura_codec::develop_raw(camera, look, white_balance).map_err(reason)?;
     developed.rgb = pictura_render::render_pictura_raw_rgb16(
         developed.width,

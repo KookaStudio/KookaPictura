@@ -19,7 +19,7 @@ mod ljpeg_encode;
 mod raf_builder;
 
 use builder::noise_plane;
-use raf_builder::{raf, Raf};
+use raf_builder::{primary_only, raf, Raf};
 
 const WHITE: f64 = 15872.0;
 const STEP: f64 = std::f64::consts::FRAC_1_SQRT_2;
@@ -383,7 +383,9 @@ fn superccd_rafs_match_libraw_when_present() {
         let name = path.display();
         let (width, height) = (word(&b, 1) as usize, word(&b, 2) as usize);
         let want = words16(&b[12..]);
-        let image = read(&std::fs::read(&path).unwrap()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        // LibRaw reads an SR body's primary frame alone.
+        let image = read(&primary_only(std::fs::read(&path).unwrap()))
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!((image.width, image.height), (width, height), "{name}");
         let differ = image
             .samples
@@ -552,7 +554,9 @@ fn superccd_renders_match_libraw_when_present() {
             .iter()
             .map(|v| f64::from_le_bytes(*v))
             .collect();
-        let image = read(&std::fs::read(&path).unwrap()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        // LibRaw reads an SR body's primary frame alone.
+        let image = read(&primary_only(std::fs::read(&path).unwrap()))
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
         let rgb = demosaic(&image, DemosaicMethod::Ahd, &budget).expect("demosaic");
         let mut worst = 1.0f64;
         for c in 0..3 {
