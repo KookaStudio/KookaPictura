@@ -310,6 +310,7 @@ void CloneSourceOverlayTest::autoHide()
     OverlayFixture t;
     QVERIFY(t.ready());
     t.arm(pictura::ToolId::CloneStamp);
+    t.f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(4);
     t.hide->setChecked(true);
     const QColor hover = t.pixel(QPointF(44, 26));
     t.f.canvas->mousePressed(QPointF(40, 20), Qt::LeftButton, 0);
