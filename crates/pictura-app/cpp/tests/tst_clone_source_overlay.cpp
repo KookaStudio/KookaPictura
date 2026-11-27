@@ -47,17 +47,17 @@ void CloneSourceOverlayTest::slotsKeepSources()
     paint_fixture::Fixture f(*frame, image, QStringLiteral("clone_overlay_slots"));
     QVERIFY(f.ok());
     frame->setActiveTool(pictura::ToolId::CloneStamp);
-    auto* slots = f.tools->optionsFor<pictura::CloneSourceOptions>(pictura::ToolId::CloneStamp);
-    QVERIFY(slots);
-    slots->setSlot(1);
+    auto* sourceSlots = f.tools->optionsFor<pictura::CloneSourceOptions>(pictura::ToolId::CloneStamp);
+    QVERIFY(sourceSlots);
+    sourceSlots->setSlot(1);
     f.drag({QPointF(10, 10)}, Qt::AltModifier);
-    QVERIFY(slots->active().hasSource);
-    slots->setSlot(0);
+    QVERIFY(sourceSlots->active().hasSource);
+    sourceSlots->setSlot(0);
     const int before = f.view->history_index();
     f.drag({QPointF(30, 30)});
     QCOMPARE(f.view->history_index(), before);
-    slots->setSlot(1);
-    QCOMPARE(slots->active().source, QPoint(10, 10));
+    sourceSlots->setSlot(1);
+    QCOMPARE(sourceSlots->active().source, QPoint(10, 10));
 }
 
 void CloneSourceOverlayTest::flipAndOffset()
@@ -75,10 +75,10 @@ void CloneSourceOverlayTest::flipAndOffset()
     QVERIFY(f.ok());
     const paint_fixture::BrushState brush(f.tools);
     frame->setActiveTool(pictura::ToolId::CloneStamp);
-    auto* slots = f.tools->optionsFor<pictura::CloneSourceOptions>(pictura::ToolId::CloneStamp);
-    QVERIFY(slots);
-    slots->setSlot(0);
-    slots->setActive(pictura::CloneSource{});
+    auto* sourceSlots = f.tools->optionsFor<pictura::CloneSourceOptions>(pictura::ToolId::CloneStamp);
+    QVERIFY(sourceSlots);
+    sourceSlots->setSlot(0);
+    sourceSlots->setActive(pictura::CloneSource{});
     f.drag({QPointF(5, 10)}, Qt::AltModifier);
     auto* flip = frame->findChild<QToolButton*>(QStringLiteral("cloneSourceFlipH"));
     auto* offset = frame->findChild<pictura::NumericField*>(QStringLiteral("cloneSourceOffsetX"));
@@ -102,8 +102,8 @@ void CloneSourceOverlayTest::controlsAndSlots()
     QVERIFY(f.ok());
     auto* panel = frame->findChild<pictura::CloneSourcePanel*>();
     QVERIFY(panel);
-    auto* slots = f.tools->optionsFor<pictura::CloneSourceOptions>(pictura::ToolId::CloneStamp);
-    QVERIFY(slots);
+    auto* sourceSlots = f.tools->optionsFor<pictura::CloneSourceOptions>(pictura::ToolId::CloneStamp);
+    QVERIFY(sourceSlots);
     auto* show = panel->findChild<QCheckBox*>(QStringLiteral("cloneSourceShowOverlay"));
     auto* hide = panel->findChild<QCheckBox*>(QStringLiteral("cloneSourceAutoHide"));
     auto* clip = panel->findChild<QCheckBox*>(QStringLiteral("cloneSourceClipped"));
@@ -120,10 +120,10 @@ void CloneSourceOverlayTest::controlsAndSlots()
     invert->setChecked(true);
     opacity->setValue(37);
     mode->setCurrentIndex(3);
-    slots->setSlot(1);
+    sourceSlots->setSlot(1);
     QVERIFY(!show->isChecked());
     QCOMPARE(opacity->value(), 100.0);
-    slots->setSlot(0);
+    sourceSlots->setSlot(0);
     QVERIFY(show->isChecked() && hide->isChecked() && clip->isChecked() && invert->isChecked());
     QCOMPARE(opacity->value(), 37.0);
     QCOMPARE(mode->currentIndex(), 3);
@@ -147,14 +147,14 @@ struct OverlayFixture {
     std::unique_ptr<pictura::PicturaMainWindow> frame = pictura::test::makeMainWindow();
     paint_fixture::Fixture f;
     pictura::CloneSourcePanel* panel;
-    pictura::CloneSourceOptions* slots;
+    pictura::CloneSourceOptions* sourceSlots;
     QCheckBox *show, *hide, *clip, *invert;
     QComboBox* mode;
     pictura::NumericField* opacity;
     explicit OverlayFixture(const QImage& image = overlaySeed())
         : f(*frame, image, QStringLiteral("clone_overlay_canvas"))
         , panel(frame->findChild<pictura::CloneSourcePanel*>())
-        , slots(f.tools->optionsFor<pictura::CloneSourceOptions>(pictura::ToolId::CloneStamp))
+        , sourceSlots(f.tools->optionsFor<pictura::CloneSourceOptions>(pictura::ToolId::CloneStamp))
         , show(panel->findChild<QCheckBox*>(QStringLiteral("cloneSourceShowOverlay")))
         , hide(panel->findChild<QCheckBox*>(QStringLiteral("cloneSourceAutoHide")))
         , clip(panel->findChild<QCheckBox*>(QStringLiteral("cloneSourceClipped")))
@@ -165,12 +165,12 @@ struct OverlayFixture {
         frame->show();
         QApplication::processEvents();
     }
-    bool ready() const { return f.ok() && panel && slots && show && hide && clip && invert && mode && opacity; }
+    bool ready() const { return f.ok() && panel && sourceSlots && show && hide && clip && invert && mode && opacity; }
     void arm(pictura::ToolId tool)
     {
         frame->setActiveTool(tool);
-        slots->setSlot(0);
-        slots->setActive(pictura::CloneSource{});
+        sourceSlots->setSlot(0);
+        sourceSlots->setActive(pictura::CloneSource{});
         f.drag({QPointF(12, 20)}, Qt::AltModifier);
         show->setChecked(true);
         move(QPointF(40, 20));
@@ -237,9 +237,9 @@ void CloneSourceOverlayTest::healingTransformedSampling()
         if (!t.ready()) return {};
         t.arm(pictura::ToolId::HealingBrush);
         t.f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
-        auto slot = t.slots->active();
+        auto slot = t.sourceSlots->active();
         slot.flipH = flip;
-        t.slots->setActive(slot);
+        t.sourceSlots->setActive(slot);
         t.move(QPointF(40, 20));
         const QColor preview = t.pixel(QPointF(42, 20));
         t.f.drag({QPointF(40, 20), QPointF(44, 20)});
@@ -261,15 +261,15 @@ void CloneSourceOverlayTest::healingSourceCancelled()
     OverlayFixture t;
     QVERIFY(t.ready());
     t.arm(pictura::ToolId::HealingBrush);
-    QVERIFY(t.slots->active().healingSourceValid);
+    QVERIFY(t.sourceSlots->active().healingSourceValid);
     t.f.tools->onSessionCancelled();
-    QVERIFY(!t.slots->active().healingSourceValid);
-    QVERIFY(t.slots->active().hasSource);
+    QVERIFY(!t.sourceSlots->active().healingSourceValid);
+    QVERIFY(t.sourceSlots->active().hasSource);
     const int before = t.f.view->history_index();
     t.f.drag({QPointF(40, 20)});
     QCOMPARE(t.f.view->history_index(), before);
     t.f.drag({QPointF(12, 20)}, Qt::AltModifier);
-    QVERIFY(t.slots->active().healingSourceValid);
+    QVERIFY(t.sourceSlots->active().healingSourceValid);
 }
 
 void CloneSourceOverlayTest::previewEligibility()
@@ -287,7 +287,7 @@ void CloneSourceOverlayTest::previewEligibility()
     const QColor inactive = t.pixel(QPointF(42, 20));
     QVERIFY(visible != inactive);
     t.frame->setActiveTool(pictura::ToolId::CloneStamp);
-    t.slots->setSlot(1);
+    t.sourceSlots->setSlot(1);
     t.move(QPointF(40, 20));
     QCOMPARE(t.pixel(QPointF(42, 20)), inactive);
 }
@@ -414,8 +414,8 @@ void CloneSourceOverlayTest::sourceStaysSnapshot()
     OverlayFixture t(seed);
     QVERIFY(t.ready());
     t.frame->setActiveTool(pictura::ToolId::CloneStamp);
-    t.slots->setSlot(0);
-    t.slots->setActive(pictura::CloneSource{});
+    t.sourceSlots->setSlot(0);
+    t.sourceSlots->setActive(pictura::CloneSource{});
     t.f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(6);
     t.f.drag({QPointF(12, 20)}, Qt::AltModifier);
     t.show->setChecked(true);
