@@ -467,6 +467,7 @@ public:
     // when the key was taken.
     bool handleCropKey(int key, bool shift);
     bool handleDeletePoint();
+    bool mergeShapeComponents();
 
     // Free Transform session. `beginFreeTransform` starts a session on `path`
     // and shows its overlay; commit/cancel end it. While a session is active

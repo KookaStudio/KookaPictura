@@ -195,6 +195,9 @@ pub mod ffi {
             name: &QString,
         ) -> bool;
 
+        /// Normalize the target's overlapping contours, recording one history state on change.
+        fn path_merge_shape_components(view: Pin<&mut PictureView>) -> bool;
+
         /// The targeted path's subpaths in the flat anchor/handle form; empty when there is no target.
         fn path_target_outline(view: &PictureView) -> Vec<f64>;
 

@@ -2,6 +2,8 @@
 // Part of OptionsBar; split from options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+
+#include "api/layers_bridge.h"
 #include <QtCore/QCoreApplication>
 
 #include "panels/numeric_field.h"
@@ -10,6 +12,7 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QToolButton>
 
@@ -19,7 +22,7 @@ namespace pictura {
 // Auto Add/Delete (on) and Rubber Band (off; CS6 keeps it in a pop-up); the
 // Freeform Pen adds Curve Fit (2 px). The Path Selection bar: Show Bounding
 // Box (off).
-// ponytail: no path operations or the Freeform Pen's Magnetic option.
+// ponytail: the Freeform Pen's Magnetic option is not implemented here.
 QWidget* OptionsBar::buildPenPage(ToolId id)
 {
     auto* page = new QWidget(stack_);
@@ -53,6 +56,27 @@ QWidget* OptionsBar::buildPenPage(ToolId id)
         }
     }
     if (id == ToolId::PathSelection) {
+        auto* operations = new QToolButton(page);
+        operations->setObjectName(QStringLiteral("optionsPathOperations"));
+        operations->setText(QCoreApplication::translate("PicturaUi", "Path Operations"));
+        operations->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        operations->setPopupMode(QToolButton::InstantPopup);
+        auto* menu = new QMenu(operations);
+        auto* merge = menu->addAction(
+            QCoreApplication::translate("PicturaUi", "Merge Shape Components"));
+        merge->setObjectName(QStringLiteral("optionsMergeShapeComponents"));
+        connect(menu, &QMenu::aboutToShow, page, [this, merge]() {
+            const auto* view = controller_ ? controller_->view() : nullptr;
+            merge->setEnabled(view && path_subpath_count(*view) >= 2);
+        });
+        connect(merge, &QAction::triggered, page, [this]() {
+            if (controller_) {
+                controller_->mergeShapeComponents();
+            }
+        });
+        operations->setMenu(menu);
+        layout->addWidget(operations);
+
         auto* box = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Bounding Box"), page);
         box->setObjectName(QStringLiteral("optionsPathShowBoundingBox"));
         box->setChecked(initial.showBoundingBox);

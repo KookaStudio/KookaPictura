@@ -97,6 +97,7 @@ public:
     virtual bool onFinishPath() { return false; }
     virtual bool onEscape() { return false; }
     virtual bool onDeletePoint() { return false; }
+    virtual bool onMergeShapeComponents() { return false; }
     // True while a click-driven gesture is open (a live polygonal/magnetic lasso
     // outline), so presses inside a live selection extend it instead of starting
     // a selection move.

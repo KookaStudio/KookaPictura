@@ -10,7 +10,7 @@
 // regular path (Photoshop CC's prompt); moving the whole shape keeps it live.
 //
 // ponytail: no segment drags, marquee, Shift-click multi-selection, arrow
-// nudges, path operations, alignment, or Constrain Path Dragging; the
+// nudges, alignment, or Constrain Path Dragging; the
 // selection lives in the tool and is dropped on a tool switch.
 
 #include "tool_handler.h"
@@ -78,7 +78,7 @@ public:
     {
         PictureView* v = ctx.view();
         if (v && v->has_document()) {
-            path_set_layer_target(*v, true);
+            path_set_layer_target(*v, paths_active(*v) == -2);
         }
         if (!v || !v->has_document() || selected_ >= path_subpath_count(*v)) {
             clearSelection();
@@ -98,7 +98,7 @@ public:
         if (!v || !v->has_document()) {
             return true;
         }
-        path_set_layer_target(*v, true);
+        path_set_layer_target(*v, paths_active(*v) == -2);
         path_gesture_begin(*v);
         pressView_ = v;
         press_ = last_ = imagePos;
@@ -182,6 +182,17 @@ public:
         }
         reset();
         refreshOverlay(ctx);
+    }
+
+    bool onMergeShapeComponents() override
+    {
+        PictureView* v = ctx_ ? ctx_->view() : nullptr;
+        if (!v || gesture_ != Gesture::None || pressView_ || !path_merge_shape_components(*v)) {
+            return false;
+        }
+        clearSelection();
+        refreshOverlay(*ctx_);
+        return true;
     }
 
     // Delete / Backspace removes a component selected whole.
@@ -284,7 +295,7 @@ private:
             canvas->setPathOverlay({});
             return;
         }
-        path_set_layer_target(*v, true);
+        path_set_layer_target(*v, paths_active(*v) == -2);
         // A shape layer's outline always shows its anchors, as CC draws it.
         const int pointsOf = selected_ >= 0 ? selected_ : (path_target_is_layer(*v) ? -1 : -2);
         ImageView::PathOverlay overlay = workPathOverlay(*v, pointsOf);
@@ -317,6 +328,16 @@ private:
 };
 
 } // namespace
+
+bool ToolController::mergeShapeComponents()
+{
+    if (active_ == ToolId::PathSelection && !transformSessionActive() && !sliceEditingBlocked()) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            return handler->onMergeShapeComponents();
+        }
+    }
+    return false;
+}
 
 std::unique_ptr<ToolHandler> makePathSelectionToolHandler(ToolId id,
                                                           std::shared_ptr<PenGroup> pen)

@@ -22,6 +22,9 @@ mod blur;
 mod clip;
 pub use clip::clip_selection_shape_to_canvas;
 
+mod merge_shape_components;
+pub use merge_shape_components::{mask_fills_match, merge_shape_components};
+
 mod magnetic;
 pub use magnetic::{EdgeMap, EdgePeak, OwnedTileFetch};
 

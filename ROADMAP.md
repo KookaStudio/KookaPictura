@@ -210,8 +210,8 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] Transform ▸ Scale, Rotate and Again, the exact rotations, and flips (#529).
   `crates/pictura-script/src/command_catalogue/entries.rs`
 - [ ] The Transform Path and Transform Points submenus (#530)
-- [ ] Magnetic Pen (#531), and Merge Shape Components — path boolean
-      operations (#532)
+- [ ] Magnetic Pen (#531)
+- [x] Merge Shape Components normalizes overlapping contours in the active path (#532)
 - [x] Hand and Zoom multi-window options: Scroll All Windows, Zoom All
       Windows, Resize Windows To Fit, and the Zoom Resizes Windows preference
       (#500)
