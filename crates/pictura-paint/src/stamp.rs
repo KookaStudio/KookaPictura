@@ -74,6 +74,13 @@ impl SourceTransform {
 }
 
 impl StampSource {
+    pub fn shared_image(&self) -> Option<Arc<RgbaImage>> {
+        match &self.kind {
+            SourceKind::Image { image, .. } => Some(Arc::clone(image)),
+            SourceKind::Pattern { .. } => None,
+        }
+    }
+
     pub fn new(image: impl Into<Arc<RgbaImage>>, offset: (i32, i32)) -> StampSource {
         StampSource {
             kind: SourceKind::Image {

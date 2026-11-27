@@ -691,6 +691,7 @@ void ImageView::paintEvent(QPaintEvent* event)
             moveAbove_);
         painter.restore();
     }
+    paintCloneOverlay(painter);
     paintFilterPreview(painter);
     paintMaskOverlay(painter);
     paintRefinePreview(painter);

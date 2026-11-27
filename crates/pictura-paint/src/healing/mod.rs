@@ -367,6 +367,34 @@ pub fn clone_region(
     region.intersect(img.rect())
 }
 
+/// Heal from a transformed clone source using the stamp sampler's mapping.
+pub(crate) fn clone_region_transformed(
+    img: &mut RgbaImage,
+    region: PsdRect,
+    coverage: &[f32],
+    offset: (i32, i32),
+    anchor: (f32, f32),
+    transform: crate::stamp::SourceTransform,
+    transfer: Transfer,
+) -> Option<PsdRect> {
+    let work = Work::new(img.rect(), region, coverage, 0)?;
+    let dest = work.read(img, (0, 0));
+    let source = crate::stamp::StampSource::transformed(img.clone(), offset, anchor, transform);
+    let mut src = Vec::with_capacity(work.w * work.h);
+    for y in work.rect.top..work.rect.bottom {
+        for x in work.rect.left..work.rect.right {
+            let pixel = source.at(x, y).map(|p| [p.r, p.g, p.b, p.a]);
+            src.push(pixel.unwrap_or_else(|| img.get(x, y)).map(f32::from));
+        }
+    }
+    let mut out = poisson_fill(&dest, &src, &work.hole, work.w, work.h);
+    if transfer == Transfer::TextureOnly {
+        keep_destination_colour(&mut out, &dest, &work.hole);
+    }
+    work.write_back(img, &dest, &out);
+    region.intersect(img.rect())
+}
+
 /// Relaxation on the Poisson equation: each unknown moves past the mean of its
 /// neighbours plus the mean source difference to them, which carries the
 /// source's detail over while `dest` around the hole stays the boundary.

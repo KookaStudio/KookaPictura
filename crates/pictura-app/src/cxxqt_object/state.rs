@@ -224,6 +224,7 @@ pub struct PictureViewRust {
     pub(super) canvas_proxy: Option<CanvasProxy>,
     /// Filter work running on worker threads (`filter_tools::jobs`).
     pub(super) filter_jobs: super::filter_tools::jobs::FilterJobs,
+    pub(super) clone_overlay_jobs: super::paint_tools::clone_overlay::OverlayJobs,
     /// The Auto-Blend Layers worker (`auto_blend`).
     pub(super) auto_blend: super::auto_blend::AutoBlendJob,
     /// The Auto-Align Layers worker (`auto_align`).
@@ -370,6 +371,7 @@ impl Default for PictureViewRust {
             ruler: None,
             canvas_proxy: None,
             filter_jobs: Default::default(),
+            clone_overlay_jobs: Default::default(),
             auto_blend: Default::default(),
             auto_align: Default::default(),
             last_filter: None,

@@ -113,12 +113,15 @@ private:
 class HealingBrushToolHandler : public ToolHandler {
 public:
     HealingBrushToolHandler(std::shared_ptr<PaintOptions> paint,
-                            std::shared_ptr<HealingGroup> healing)
+                            std::shared_ptr<HealingGroup> healing,
+                            std::shared_ptr<CloneSourceOptions> clone)
         : paint_(std::move(paint))
         , healing_(std::move(healing))
+        , clone_(std::move(clone))
     {
         addOptions(paint_.get());
         addOptions(healing_.get());
+        addOptions(clone_.get());
     }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
@@ -128,19 +131,26 @@ public:
             return true;
         }
         if (mods.testFlag(Qt::AltModifier)) {
-            source_ = QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
-            hasSource_ = true;
-            hasOffset_ = false;
+            CloneSource slot = clone_->active();
+            slot.source = QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
+            slot.hasSource = true;
+            slot.healingSourceValid = true;
+            slot.hasOffset = false;
+            clone_->setActive(slot);
             return true;
         }
-        if (!hasSource_) {
+        CloneSource slot = clone_->active();
+        if (!slot.hasSource || !slot.healingSourceValid) {
             ctx.refused(QObject::tr("Healing Brush: Alt-click to set a sample point first."));
             return true;
         }
-        if (!healing_->get().aligned || !hasOffset_) {
-            offset_ = source_ - QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
-            hasOffset_ = true;
+        if (!healing_->get().aligned || !slot.hasOffset) {
+            slot.anchor = QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
+            slot.offset = slot.source - slot.anchor;
+            slot.hasOffset = true;
+            clone_->setActive(slot);
         }
+        strokeSource_ = slot;
         if (!healing_begin(*v, paint_->size(), paint_->hardness())) {
             refuseHeal(ctx, v);
             return true;
@@ -172,7 +182,12 @@ public:
             return;
         }
         // ponytail: Sampled source only; Pattern is not wired yet.
-        if (!healing_commit(*v, 0, true, offset_.x(), offset_.y(), false)) {
+        const CloneSource& slot = strokeSource_;
+        const double sx = slot.width / 100.0 * (slot.flipH ? -1.0 : 1.0);
+        const double sy = slot.height / 100.0 * (slot.flipV ? -1.0 : 1.0);
+        if (!healing_commit_transformed(*v, slot.offset.x(), slot.offset.y(),
+                                        slot.anchor.x() + 0.5, slot.anchor.y() + 0.5,
+                                        sx, sy, slot.angle)) {
             healing_cancel(*v);
         }
     }
@@ -189,17 +204,14 @@ public:
         if (PictureView* v = ctx.view()) {
             healing_cancel(*v);
         }
-        hasSource_ = false;
-        hasOffset_ = false;
+        clone_->invalidateHealingSources();
     }
 
 private:
-    QPoint source_;
-    QPoint offset_;
-    bool hasSource_ = false;
-    bool hasOffset_ = false;
+    CloneSource strokeSource_;
     std::shared_ptr<PaintOptions> paint_;
     std::shared_ptr<HealingGroup> healing_;
+    std::shared_ptr<CloneSourceOptions> clone_;
 };
 
 } // namespace
@@ -211,9 +223,10 @@ std::unique_ptr<ToolHandler> makeSpotHealingToolHandler(std::shared_ptr<PaintOpt
 }
 
 std::unique_ptr<ToolHandler> makeHealingToolHandler(std::shared_ptr<PaintOptions> paint,
-                                                    std::shared_ptr<HealingGroup> healing)
+                                                    std::shared_ptr<HealingGroup> healing,
+                                                    std::shared_ptr<CloneSourceOptions> clone)
 {
-    return std::make_unique<HealingBrushToolHandler>(std::move(paint), std::move(healing));
+    return std::make_unique<HealingBrushToolHandler>(std::move(paint), std::move(healing), std::move(clone));
 }
 
 } // namespace pictura

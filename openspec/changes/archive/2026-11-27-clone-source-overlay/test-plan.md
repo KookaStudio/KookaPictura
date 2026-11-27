@@ -1,0 +1,16 @@
+# Test plan
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| Slots keep their own sources | Sample slot 2, select empty slot 1, stroke | Refused; no history | `tst_clone_source_overlay::slotsKeepSources` |
+| Flip and offset through the panel | Flip horizontal; paint 35 px from source | Mirrored mark and X offset 35 | `tst_clone_source_overlay::flipAndOffset` |
+| Overlay controls and slot settings | Change all controls, switch slots and back | Values retained per slot; pixels and history unchanged | `tst_clone_source_overlay::controlsAndSlots` |
+| Preview follows each tool and source mapping | Sample and move both tools; test aligned offset and transform | Preview matches sampled pixels; no pixel or history mutation | `tst_clone_source_overlay::previewMapping`, `tst_clone_source_overlay::sourceStaysSnapshot`, `tst_clone_source_overlay::asynchronousSourceInvalidation`, `pictura-app::source_cache_reuses_only_the_same_source_and_covered_region`, `pictura-app::grayscale_layer_populates_every_color_channel`, `pictura-app::profiled_snapshot_uses_the_document_display_transform`, `pictura-app::cancelling_jobs_marks_running_work_and_discards_cached_result` |
+| Non-aligned mapping across strokes | For both tools, paint an aligned stroke, switch alignment, hover before and move during a subsequent non-aligned stroke | Hover reanchors to the source; the stroke preview follows its new offset, not the old one | `tst_clone_source_overlay::nonAlignedMapping` |
+| Healing Brush samples a transformed source | Paint a deterministic asymmetric source with a non-identity transform and compare sampling with the preview | Healed output reflects the transformed source and the preview uses the same mapping | `tst_clone_source_overlay::healingTransformedSampling`, `pictura-paint::transformed_healing_matches_explicitly_mirrored_source`, `pictura-paint::transformed_healing_uses_destination_when_source_is_outside_layer` |
+| Missing source and tool changes | Test empty slot, leave canvas, switch tool | No preview | `tst_clone_source_overlay::previewEligibility`, `tst_clone_source_overlay::healingSourceCancelled` |
+| Auto Hide during painting | Enable Auto Hide; press, release and cancel strokes | Hidden while pressed, returns afterward | `tst_clone_source_overlay::autoHide` |
+| Clip to the brush footprint | Toggle clipping with a small brush | Preview restricted to footprint only when enabled | `tst_clone_source_overlay::brushClipping`, `tst_clone_source_overlay::rotatedBrushClipping` |
+| Opacity and blend modes | Render known source/destination colors in four modes and at zero opacity | Correct channel results and zero-opacity identity | `tst_clone_source_overlay::blendAndOpacity` |
+| Transparent source appearance | Render fully transparent and partially transparent source pixels over known colors, with inversion and reduced opacity | Transparent pixels leave the backdrop unchanged; partial alpha is preserved through inversion and opacity compositing | `tst_clone_source_overlay::sourceAlpha` |
+| Gray alignment preview | Show matching opaque pixels at 50%, inverted, unclipped, Normal | Neutral gray within rounding | `tst_clone_source_overlay::grayAlignment` |

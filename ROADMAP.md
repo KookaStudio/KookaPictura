@@ -219,7 +219,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       View and Flick Panning (#534)
 - [ ] Ruler protractor and Straighten from the ruler (#535); eyedropper
       modifiers and Shift-click sampler (#536)
-- [ ] Clone Source overlay controls (#537)
+- [x] Clone Source overlay controls (#537)
 - [ ] Healing Mode, Source and Sample, Sample All Layers, and depth and mode
       handling (#538)
 - [ ] Merged and composite History Brush sources, and Edit ▸ Fill ▸ History

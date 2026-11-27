@@ -13,12 +13,14 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
+pub(super) mod clone_overlay;
 pub(super) mod fills;
 mod imp;
 mod patterns;
 
 use super::eyedropper_sample::sample_argb_scoped;
 use super::qobject::PictureView;
+use clone_overlay::*;
 use imp::*;
 use patterns::*;
 
@@ -114,6 +116,8 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -122,6 +126,25 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        #[allow(clippy::too_many_arguments)]
+        fn clone_overlay_source(
+            view: Pin<&mut PictureView>,
+            left: i32,
+            top: i32,
+            width: i32,
+            height: i32,
+            scope: i32,
+            ignore_adjustments: bool,
+            snapshot: bool,
+            actual_left: &mut i32,
+            actual_top: &mut i32,
+            actual_step: &mut i32,
+            image_id: &mut u64,
+            busy: &mut bool,
+        ) -> QImage;
+        fn clone_overlay_cancel(view: Pin<&mut PictureView>);
+        fn clone_overlay_test_delay(view: Pin<&mut PictureView>, milliseconds: u64);
+
         /// Begin a Color Replacement stroke on the active pixel layer, painting
         /// `foreground` (`0xAARRGGBB`); `background` is the Background Swatch
         /// reference. `mode` 0 Normal … 24 Luminosity (23 Color), `sampling`

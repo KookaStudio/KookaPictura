@@ -155,6 +155,7 @@ set(PICTURA_QT_TEST_DRIVER_paint
     tst_fill_tools
     tst_eraser_tools
     tst_retouch_tools
+    tst_clone_source_overlay
     tst_stamp_hold
     tst_brush_airbrush
     tst_brush_dynamics
