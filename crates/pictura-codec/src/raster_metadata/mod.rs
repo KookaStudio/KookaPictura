@@ -150,6 +150,22 @@ fn valid_xmp(bytes: &[u8]) -> bool {
         && std::str::from_utf8(bytes).is_ok_and(crate::xmp::is_well_formed)
 }
 
+/// Effective photographic exposure, relative to ISO 100, from JPEG or TIFF.
+pub fn raster_ev100(bytes: &[u8]) -> Option<f64> {
+    let tiff = if bytes.starts_with(&[0xff, 0xd8]) {
+        jpeg::resources(bytes)?.exif?
+    } else {
+        bytes
+    };
+    let exif = crate::parse_exif(tiff);
+    let read = |tag| exif.get(tag)?.as_f64().filter(|&number| number > 0.0);
+    let aperture = read(0x829d)?;
+    let duration = read(0x829a)?;
+    let iso = read(0x8827)?;
+    let ev100 = (aperture * aperture / duration * (100.0 / iso)).log2();
+    ev100.is_finite().then_some(ev100)
+}
+
 /// JPEG/TIFF Photoshop resources with the standard container XMP packet in
 /// resource 1060. The imported pixels have their own profile policy, so an ICC
 /// resource in the Photoshop block is left out. Unparsed bytes stay at the end.
@@ -183,6 +199,40 @@ pub fn raster_image_resources(bytes: &[u8]) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bracket_ev100_reads_shutter_aperture_and_iso() {
+        let mut tiff = b"II\x2a\x00\x08\x00\x00\x00".to_vec();
+        tiff.extend_from_slice(&1u16.to_le_bytes());
+        tiff.extend_from_slice(&0x8769u16.to_le_bytes());
+        tiff.extend_from_slice(&4u16.to_le_bytes());
+        tiff.extend_from_slice(&1u32.to_le_bytes());
+        tiff.extend_from_slice(&26u32.to_le_bytes());
+        tiff.extend_from_slice(&0u32.to_le_bytes());
+        tiff.extend_from_slice(&3u16.to_le_bytes());
+        for (tag, format, value) in [(0x829a_u16, 5u16, 68u32), (0x829d, 5, 76), (0x8827, 3, 200)] {
+            tiff.extend_from_slice(&tag.to_le_bytes());
+            tiff.extend_from_slice(&format.to_le_bytes());
+            tiff.extend_from_slice(&1u32.to_le_bytes());
+            tiff.extend_from_slice(&value.to_le_bytes());
+        }
+        tiff.extend_from_slice(&0u32.to_le_bytes());
+        for number in [1u32, 8, 4, 1] {
+            tiff.extend_from_slice(&number.to_le_bytes());
+        }
+        assert_eq!(raster_ev100(&tiff), Some(6.0));
+
+        let jpeg = jpeg::embed(
+            b"\xff\xd8\xff\xd9",
+            &RasterMetadata {
+                exif: Some(tiff.clone()),
+                ..RasterMetadata::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(raster_ev100(&jpeg), Some(6.0));
+        assert_eq!(raster_ev100(&tiff[..68]), None);
+    }
 
     #[test]
     fn standard_raster_xmp_round_trips() {

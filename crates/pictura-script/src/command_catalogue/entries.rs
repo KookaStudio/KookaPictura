@@ -31,7 +31,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "file.automate.contact.sheet.ii", path: &["File", "Automate", "Contact Sheet II"], label: "Contact Sheet II", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.automate.create.droplet", path: &["File", "Automate", "Create Droplet…"], label: "Create Droplet…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.automate.crop.and.straighten.photos", path: &["File", "Automate", "Crop And Straighten Photos"], label: "Crop And Straighten Photos", shortcut: "", implemented: false, checkable: false },
-    CommandSpec { id: "file.automate.merge.to.hdr.pro", path: &["File", "Automate", "Merge To HDR Pro…"], label: "Merge To HDR Pro…", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "file.automate.merge.to.hdr.pro", path: &["File", "Automate", "Merge To HDR Pro…"], label: "Merge To HDR Pro…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.automate.pdf.presentation", path: &["File", "Automate", "PDF Presentation"], label: "PDF Presentation", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.automate.photomerge", path: &["File", "Automate", "Photomerge…"], label: "Photomerge…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.automate.picture.package", path: &["File", "Automate", "Picture Package"], label: "Picture Package", shortcut: "", implemented: false, checkable: false },

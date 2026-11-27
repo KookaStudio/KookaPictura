@@ -51,6 +51,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/jpeg_options_dialog.cpp
     crates/pictura-app/cpp/jpeg_options_dialog.h
     crates/pictura-app/cpp/load_layers_dialog.cpp
+    crates/pictura-app/cpp/merge_to_hdr_dialog.cpp
+    crates/pictura-app/cpp/merge_to_hdr_dialog.h
     crates/pictura-app/cpp/load_layers_dialog.h
     crates/pictura-app/cpp/statistics_dialog.cpp
     crates/pictura-app/cpp/statistics_dialog.h

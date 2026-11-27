@@ -66,6 +66,7 @@ public:
     void moveSelected(int input, int output);
 
     void buildLut(uint8_t lut[256]) const;
+    const float (&normalizedSamples() const)[256] { return curve_; }
 
     QSize sizeHint() const override;
 

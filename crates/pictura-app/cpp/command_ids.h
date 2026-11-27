@@ -24,6 +24,7 @@ inline constexpr char FileScriptsLayerCompsToPdf[] = "file.scripts.layer.comps.t
 inline constexpr char FileScriptsLoadFilesIntoStack[] = "file.scripts.load.files.into.stack";
 inline constexpr char FileScriptsStatistics[] = "file.scripts.statistics";
 inline constexpr char FileAutomateBatch[] = "file.automate.batch";
+inline constexpr char FileAutomateMergeToHdrPro[] = "file.automate.merge.to.hdr.pro";
 inline constexpr char FileClose[] = "file.close";
 inline constexpr char FileCloseAll[] = "file.closeAll";
 inline constexpr char FileExit[] = "file.exit";

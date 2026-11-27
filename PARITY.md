@@ -1,22 +1,24 @@
 # Feature parity tracker
 
 Assessed: 2026-11-27
-Pictura commit: 47d505216
+Pictura commit: 616cce308
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
-This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The current assessment includes the #577 worktree changes relative to the listed commit. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
+Coverage includes the #558 HDR merge workflow and the #577 Selective Color channel gating.
+
+This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
 ## Headline
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 214 | 79 | 52 | 4 | 349 | 61.3% | 8 |
-| CS6 Standard, in scope | 214 | 79 | 46 | 2 | 341 | 62.8% | 8 |
-| CS6 Extended | 215 | 79 | 68 | 4 | 366 | 58.7% | 23 |
-| CS6 Extended, in scope | 215 | 79 | 47 | 2 | 343 | 62.7% | 23 |
-| CC 28.0 | 216 | 81 | 73 | 4 | 374 | 57.8% | 20 |
-| CC 28.0, in scope | 216 | 81 | 55 | 2 | 354 | 61.0% | 20 |
+| CS6 Standard | 214 | 80 | 52 | 4 | 350 | 61.1% | 8 |
+| CS6 Standard, in scope | 214 | 80 | 46 | 2 | 342 | 62.6% | 8 |
+| CS6 Extended | 215 | 80 | 68 | 4 | 367 | 58.6% | 23 |
+| CS6 Extended, in scope | 215 | 80 | 47 | 2 | 344 | 62.5% | 23 |
+| CC 28.0 | 216 | 82 | 73 | 4 | 375 | 57.6% | 20 |
+| CC 28.0, in scope | 216 | 82 | 55 | 2 | 355 | 60.8% | 20 |
 
 ## Baselines
 
@@ -45,7 +47,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Adjustments & filters | 32/55 (58.2%) | 32/55 (58.2%) | 32/64 (50.0%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
 | Color & bit depth | 16/29 (55.2%) | 16/29 (55.2%) | 16/29 (55.2%) |
-| Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
+| Automation & extensibility | 3/19 (15.8%) | 3/19 (15.8%) | 3/23 (13.0%) |
 | Shell, panels & preferences | 28/60 (46.7%) | 28/63 (44.4%) | 28/62 (45.2%) |
 
 ## Feature rows
@@ -429,6 +431,7 @@ Source list: File > Automate, Scripts, Actions, and plug-in capabilities.
 | P-AUT-20 | Cloud Documents | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
 | P-AUT-21 | Share for Review | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
 | P-AUT-22 | UXP plug-ins | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe ecosystem | non-goal:feasibility:76 |
+| P-AUT-23 | Merge To HDR Pro | Y | Y | Y | Partial | in-scope | crates/pictura-core/src/hdr_merge.rs; crates/pictura-app/cpp/merge_to_hdr_dialog.cpp | none | Approximate CPU merge with full-screen preview, source toggles, editable tone curves, and 32-bit float output; native-depth inputs, persisted white point, and Adobe settings interchange remain | #558 |
 
 ### Shell, panels & preferences
 
@@ -479,7 +482,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-SHELL-02 | Menu customization and enablement matrix | Y | Y | Y | Missing | in-scope | — | none | Edit > Menus, Show All Menu Items, and the enablement matrix remain | UI-5 |
 | P-SHELL-03 | Type menu | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/menu_type.cpp | none | Work path, convert to shape, find/replace, and the option rows ship; Google Fonts (#1442) and Check Spelling (#1443) stay open | #502 |
 | P-SHELL-04 | View menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_view.cpp | none | Show/Extras, grid, pixel grid, layer edges, target path, lock/clear slices, 200%, and print size ship; Gamut Warning, Pixel Aspect Ratio, and Snap To (#305) remain | #503 |
-| P-SHELL-05 | File menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_commands.cpp | none | Open As, File > Browse, and Statistics ship; the remaining Automate and Scripts leaves stay with #558, #617, #619, #620, and #630 | #504 |
+| P-SHELL-05 | File menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_commands.cpp | none | Open As, File > Browse, and Statistics ship; the remaining Automate and Scripts leaves stay with #617, #619, #620, and #630 | #504 |
 | P-SHELL-06 | Status bar readouts and options | Y | Y | Y | Missing | in-scope | — | none | Status bar readouts and options popup remain | UI-1 |
 | P-SHELL-07 | Active layer name in the title bar | Y | Y | Y | Missing | in-scope | — | none | Not shown | UI-2 |
 | P-SHELL-08 | Window Arrange: Float, Tile, Cascade, Match, New Window | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #500 |
@@ -526,8 +529,12 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-27 | 616cce308 | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
+| 2026-11-27 | 934c214cf | 214/350 (61.1%) | 215/367 (58.6%) | 28.0 | 216/375 (57.6%) |
 | 2026-11-27 | 47d505216 | 214/349 (61.3%) | 215/366 (58.7%) | 28.0 | 216/374 (57.8%) |
+| 2026-11-27 | 260196c74 | 213/350 (60.9%) | 214/367 (58.3%) | 28.0 | 215/375 (57.3%) |
 | 2026-11-27 | 4a1fc6771 | 213/349 (61.0%) | 214/366 (58.5%) | 28.0 | 215/374 (57.5%) |
+| 2026-11-26 | cbfd55795 | 212/350 (60.6%) | 213/367 (58.0%) | 28.0 | 214/375 (57.1%) |
 | 2026-11-26 | 68a47c69 | 212/349 (60.7%) | 213/366 (58.2%) | 28.0 | 214/374 (57.2%) |
 | 2026-11-26 | 141c21da | 210/349 (60.2%) | 211/366 (57.7%) | 28.0 | 212/374 (56.7%) |
 | 2026-11-26 | 1fd5bcad6 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |

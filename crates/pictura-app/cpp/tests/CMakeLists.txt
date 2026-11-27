@@ -105,6 +105,7 @@ set(PICTURA_QT_TEST_DRIVER_io
     tst_export_layers
     tst_file_export_tools
     tst_load_files_into_stack
+    tst_merge_to_hdr
     tst_statistics
     tst_webp
     tst_save_options

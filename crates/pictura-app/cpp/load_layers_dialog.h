@@ -18,8 +18,10 @@ class LoadLayersDialog : public QDialog {
     Q_OBJECT
 
 public:
+    enum class Purpose { Stack, HdrBracket };
+
     LoadLayersDialog(const QStringList& openPaths, const QString& startFolder,
-                     QWidget* parent = nullptr);
+                     QWidget* parent = nullptr, Purpose purpose = Purpose::Stack);
 
     QStringList paths() const;
     bool alignImages() const;
@@ -37,6 +39,8 @@ private:
     void refreshMode();
     void refreshButtons();
 
+    QString title_;
+    Purpose purpose_;
     QStringList openPaths_;
     QString startFolder_;
     QComboBox* use_ = nullptr;
@@ -48,5 +52,7 @@ private:
     QCheckBox* smartObject_ = nullptr;
     QPushButton* ok_ = nullptr;
 };
+
+bool isHdrBracketFile(const QString& path);
 
 } // namespace pictura

@@ -205,7 +205,7 @@ pub use profile_probe::{
     probe_tiff_profile, ProfileProbe,
 };
 pub use raster_metadata::{
-    embed_raster_metadata, raster_image_resources, raster_metadata, RasterMetadata,
+    embed_raster_metadata, raster_ev100, raster_image_resources, raster_metadata, RasterMetadata,
     JPEG_XMP_MAX_BYTES,
 };
 pub use read::{

@@ -30,7 +30,7 @@ QHBoxLayout* labeledRow(const QString& text, QWidget* control)
 
 } // namespace
 
-HdrToningControls::HdrToningControls(QWidget* parent)
+HdrToningControls::HdrToningControls(QWidget* parent, QWidget* advancedPage)
     : QWidget(parent)
 {
     auto* outer = new QVBoxLayout(this);
@@ -125,7 +125,13 @@ HdrToningControls::HdrToningControls(QWidget* parent)
     advancedLayout->addLayout(makeIntRow(QStringLiteral("Saturation:"),
                                          QStringLiteral("hdrSaturation"), -100, 100, 20,
                                          saturation_));
-    outer->addWidget(advanced);
+    if (advancedPage) {
+        auto* layout = new QVBoxLayout(advancedPage);
+        layout->addWidget(advanced);
+        layout->addStretch();
+    } else {
+        outer->addWidget(advanced);
+    }
 }
 
 HdrToningControls::Values HdrToningControls::values() const

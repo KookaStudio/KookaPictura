@@ -24,6 +24,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("FileScriptsLoadFilesIntoStack", "file.scripts.load.files.into.stack"),
     ("FileScriptsStatistics", "file.scripts.statistics"),
     ("FileAutomateBatch", "file.automate.batch"),
+    ("FileAutomateMergeToHdrPro", "file.automate.merge.to.hdr.pro"),
     ("FileClose", "file.close"),
     ("FileCloseAll", "file.closeAll"),
     ("FileExit", "file.exit"),
