@@ -18,6 +18,7 @@
 
 #include <QtGui/QAction>
 #include <QtGui/QColor>
+#include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
 #include <QtCore/QVector>
 
@@ -62,6 +63,9 @@ private slots:
     void gradientEditorCancelKeepsTheGradient();
     void gradientEditorKeepsLocationsStrict();
     void gradientEditorHidesNoiseAndSmoothness();
+    void advancedBlendingPreview();
+    void advancedBlendingFlags();
+    void advancedBlendingRoundTrip();
     void channelIncludeChangesTheCompositeAndCancelRestores();
     void channelRowFollowsTheDocumentMode();
     void gradientEditorPresetStaysOpaque();
@@ -809,6 +813,59 @@ void LayerStyleTest::gradientEditorHidesNoiseAndSmoothness()
     dialog.reject();
 }
 
+void LayerStyleTest::advancedBlendingPreview()
+{
+    const QString path = QStringLiteral("1");
+    const QStringList keys {QStringLiteral("blending.transparencyShapes"),
+                            QStringLiteral("blending.layerMaskHidesEffects"),
+                            QStringLiteral("blending.vectorMaskHidesEffects")};
+    for (int i = 0; i < keys.size(); ++i) {
+        setupSquare();
+        if (i == 0) {
+            QVERIFY(pictura::layer_style_set(*view_, path, QStringLiteral("colorOverlay.on"), 1.0));
+        } else {
+            if (i == 1) {
+                QVERIFY(view_->select_rect(0, 0, 40, 15, QStringLiteral("new"), 0.0));
+                QVERIFY(pictura::layer_mask_add_path(*view_, path, QStringLiteral("reveal-selection")));
+                view_->deselect();
+            } else {
+                const QList<QPointF> corners {QPointF(0, 0), QPointF(40, 0),
+                                              QPointF(40, 15), QPointF(0, 15)};
+                for (const QPointF& point : corners) {
+                    pictura::path_append_corner(*view_, point.x(), point.y(), false);
+                    pictura::path_commit_anchor(*view_);
+                }
+                pictura::path_close(*view_);
+                QVERIFY(pictura::paths_set_active(*view_, -1));
+                QVERIFY(pictura::vector_mask_add_path(*view_, path, QStringLiteral("current-path")));
+            }
+            pictura::layer_style_set(*view_, path, QStringLiteral("dropShadow.useGlobalLight"), 0.0);
+            pictura::layer_style_set(*view_, path, QStringLiteral("dropShadow.angle"), 90.0);
+            pictura::layer_style_set(*view_, path, QStringLiteral("dropShadow.distance"), 3.0);
+            pictura::layer_style_set(*view_, path, QStringLiteral("dropShadow.size"), 0.0);
+            pictura::layer_style_set(*view_, path, QStringLiteral("dropShadow.opacity"), 100.0);
+            QVERIFY(pictura::layer_style_set(*view_, path, QStringLiteral("dropShadow.on"), 1.0));
+        }
+        pictura::layer_style_commit(*view_, QStringLiteral("Setup"));
+        const int states = view_->history_count();
+        const int x = i == 0 ? 5 : 12;
+        const int y = i == 0 ? 5 : 16;
+        const QRgb before = at(x, y);
+        pictura::LayerStyleDialog dialog(view_, path, QString());
+        auto* box = dialog.findChild<QCheckBox*>(keys.at(i));
+        QVERIFY(box);
+        const bool original = box->isChecked();
+        box->setChecked(!original);
+        QCOMPARE(pictura::layer_style_value(*view_, path, keys.at(i)), original ? 0.0 : 1.0);
+        QVERIFY2(at(x, y) != before, qPrintable(keys.at(i)));
+        dialog.reject();
+        QCOMPARE(pictura::layer_style_value(*view_, path, keys.at(i)), original ? 1.0 : 0.0);
+        QCOMPARE(at(x, y), before);
+        QCOMPARE(view_->history_count(), states);
+        cleanup();
+    }
+}
+
 void LayerStyleTest::channelIncludeChangesTheCompositeAndCancelRestores()
 {
     setupSquare();
@@ -895,6 +952,75 @@ void LayerStyleTest::copyEnabledForChannelOnlyStyle()
     window_->registry()->refresh();
     QVERIFY(copy->isEnabled());
     QVERIFY(!clear->isEnabled());
+}
+
+void LayerStyleTest::advancedBlendingFlags()
+{
+    setupSquare();
+    const QStringList keys = {QStringLiteral("blending.transparencyShapes"),
+                              QStringLiteral("blending.layerMaskHidesEffects"),
+                              QStringLiteral("blending.vectorMaskHidesEffects")};
+    const int before = view_->history_count();
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"), QString());
+    QList<QCheckBox*> boxes;
+    for (const auto& key : keys) {
+        auto* box = dialog.findChild<QCheckBox*>(key);
+        QVERIFY(box);
+        boxes.append(box);
+    }
+    QVERIFY(boxes[0]->isChecked());
+    QVERIFY(!boxes[1]->isChecked());
+    QVERIFY(!boxes[2]->isChecked());
+    dialog.show();
+    QCoreApplication::processEvents();
+    QVERIFY(boxes[0]->geometry().top() < boxes[1]->geometry().top());
+    QVERIFY(boxes[1]->geometry().top() < boxes[2]->geometry().top());
+    for (auto* box : boxes) box->toggle();
+    dialog.accept();
+    QCOMPARE(view_->history_count(), before + 1);
+    {
+        pictura::LayerStyleDialog reopened(view_, QStringLiteral("1"), QString());
+        for (int i = 0; i < keys.size(); ++i)
+            QCOMPARE(reopened.findChild<QCheckBox*>(keys[i])->isChecked(), i != 0);
+        reopened.reject();
+    }
+    QVERIFY(view_->undo());
+    for (int i = 0; i < keys.size(); ++i)
+        QCOMPARE(pictura::layer_style_value(*view_, QStringLiteral("1"), keys[i]), i == 0 ? 1.0 : 0.0);
+}
+
+void LayerStyleTest::advancedBlendingRoundTrip()
+{
+    setupSquare();
+    const QStringList keys = {QStringLiteral("blending.transparencyShapes"),
+                              QStringLiteral("blending.layerMaskHidesEffects"),
+                              QStringLiteral("blending.vectorMaskHidesEffects")};
+    {
+        pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"), QString());
+        for (const auto& key : keys) {
+            auto* box = dialog.findChild<QCheckBox*>(key);
+            QVERIFY(box);
+            box->toggle();
+        }
+        dialog.accept();
+    }
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    for (const auto& suffix : {QStringLiteral("psd"), QStringLiteral("psb")}) {
+        const QString path = dir.filePath(QStringLiteral("flags.") + suffix);
+        QVERIFY(view_->save(path));
+        QVERIFY(window_->openDocumentAtPath(path));
+        auto* reopened = window_->activeView();
+        QVERIFY(reopened);
+        pictura::LayerStyleDialog dialog(reopened, QStringLiteral("1"), QString());
+        for (int i = 0; i < keys.size(); ++i) {
+            auto* box = dialog.findChild<QCheckBox*>(keys[i]);
+            QVERIFY(box);
+            QCOMPARE(box->isChecked(), i != 0);
+        }
+        dialog.reject();
+        window_->closeDocument(window_->activeDocumentIndex(), false);
+    }
 }
 
 PICTURA_QT_TEST_MAIN(LayerStyleTest)

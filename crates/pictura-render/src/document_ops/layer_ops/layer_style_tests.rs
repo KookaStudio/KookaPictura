@@ -292,6 +292,25 @@ fn blending_options_write_the_layer_record() {
 }
 
 #[test]
+fn advanced_blending_flag_values() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    for (key, initial) in [
+        ("blending.transparencyShapes", 1.0),
+        ("blending.layerMaskHidesEffects", 0.0),
+        ("blending.vectorMaskHidesEffects", 0.0),
+    ] {
+        assert_eq!(layer_style_value(layer, key), Some(initial));
+        assert!(set_layer_style_value(layer, key, 1.0 - initial));
+        assert_eq!(layer_style_value(layer, key), Some(1.0 - initial));
+        assert!(!set_layer_style_value(layer, key, 1.0 - initial));
+    }
+    assert!(!layer.transparency_shapes);
+    assert!(layer.layer_mask_hides_effects);
+    assert!(layer.vector_mask_hides_effects);
+}
+
+#[test]
 fn layer_style_copy_paste_preserves_advanced_blending() {
     let mut d = doc();
     let source = square(&mut d);
