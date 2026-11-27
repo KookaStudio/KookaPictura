@@ -1,22 +1,22 @@
 # Feature parity tracker
 
 Assessed: 2026-11-27
-Pictura commit: 4a1fc6771
+Pictura commit: 47d505216
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
-This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
+This tracker measures feature coverage against a frozen Photoshop baseline. It does not claim behavioural or pixel parity. The current assessment includes the #577 worktree changes relative to the listed commit. The canonical gap register remains [docs/dev/doc-code-parity-gaps.md](docs/dev/doc-code-parity-gaps.md); this tracker aggregates it rather than replacing it.
 
 ## Headline
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 213 | 78 | 54 | 4 | 349 | 61.0% | 8 |
-| CS6 Standard, in scope | 213 | 78 | 48 | 2 | 341 | 62.5% | 8 |
-| CS6 Extended | 214 | 78 | 70 | 4 | 366 | 58.5% | 23 |
-| CS6 Extended, in scope | 214 | 78 | 49 | 2 | 343 | 62.4% | 23 |
-| CC 28.0 | 215 | 80 | 75 | 4 | 374 | 57.5% | 20 |
-| CC 28.0, in scope | 215 | 80 | 57 | 2 | 354 | 60.7% | 20 |
+| CS6 Standard | 214 | 77 | 54 | 4 | 349 | 61.3% | 8 |
+| CS6 Standard, in scope | 214 | 77 | 48 | 2 | 341 | 62.8% | 8 |
+| CS6 Extended | 215 | 77 | 70 | 4 | 366 | 58.7% | 23 |
+| CS6 Extended, in scope | 215 | 77 | 49 | 2 | 343 | 62.7% | 23 |
+| CC 28.0 | 216 | 79 | 75 | 4 | 374 | 57.8% | 20 |
+| CC 28.0, in scope | 216 | 79 | 57 | 2 | 354 | 61.0% | 20 |
 
 ## Baselines
 
@@ -42,7 +42,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Layers & compositing | 31/38 (81.6%) | 31/39 (79.5%) | 31/39 (79.5%) |
 | Tools & painting | 41/70 (58.6%) | 42/81 (51.9%) | 42/71 (59.2%) |
 | Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
-| Adjustments & filters | 31/55 (56.4%) | 31/55 (56.4%) | 31/64 (48.4%) |
+| Adjustments & filters | 32/55 (58.2%) | 32/55 (58.2%) | 32/64 (50.0%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
 | Color & bit depth | 16/29 (55.2%) | 16/29 (55.2%) | 16/29 (55.2%) |
 | Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
@@ -289,7 +289,7 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | P-IMG-13 | Posterize | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
 | P-IMG-14 | Threshold | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/panels/adjustment_controls.cpp | none | Histogram samples large inputs and approximates specialized clipping and knockout cases | #563 |
 | P-IMG-15 | Gradient Map | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Dither and CS6 print-toning presets remain | #574 |
-| P-IMG-16 | Selective Colour | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Composite-channel-only gate and preset whitelist remain | #577 |
+| P-IMG-16 | Selective Colour | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/menu_adjust.cpp | none | Composite-channel gate and preset whitelist. Family weighting is modelled. | #577 |
 | P-IMG-17 | Shadows/Highlights | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Local-surround operator and eight controls remain | #562 |
 | P-IMG-18 | HDR Toning | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Local Adaptation Toning Curve and Corner remain | #557 |
 | P-IMG-19 | Desaturate | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
@@ -526,6 +526,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-27 | 47d505216 | 214/349 (61.3%) | 215/366 (58.7%) | 28.0 | 216/374 (57.8%) |
 | 2026-11-27 | 4a1fc6771 | 213/349 (61.0%) | 214/366 (58.5%) | 28.0 | 215/374 (57.5%) |
 | 2026-11-26 | 68a47c69 | 212/349 (60.7%) | 213/366 (58.2%) | 28.0 | 214/374 (57.2%) |
 | 2026-11-26 | 141c21da | 210/349 (60.2%) | 211/366 (57.7%) | 28.0 | 212/374 (56.7%) |

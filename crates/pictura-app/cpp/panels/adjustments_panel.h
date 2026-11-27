@@ -9,6 +9,7 @@ class QToolButton;
 
 namespace pictura {
 
+class ChannelsPanel;
 class PictureView;
 struct AdjustmentKind;
 
@@ -23,6 +24,8 @@ public:
 
     // A null view disables the grid (no document open).
     void setView(PictureView* view);
+    void setChannelsPanel(ChannelsPanel* channels);
+    void updateSelectiveColorAvailability();
     // Refresh the document-dependent entries without changing the view.
     void refresh();
 
@@ -40,6 +43,8 @@ private:
     QToolButton* makeButton(const AdjustmentKind& entry);
 
     PictureView* view_ = nullptr;
+    ChannelsPanel* channels_ = nullptr;
+    QToolButton* selectiveColorButton_ = nullptr;
     const PictureView* patternView_ = nullptr;
     quint64 patternGeneration_ = ~quint64(0);
     QVector<QToolButton*> buttons_;

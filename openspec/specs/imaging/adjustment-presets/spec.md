@@ -90,6 +90,12 @@ block.
 - **WHEN** a saved Levels preset is chosen in the Levels dialog's Preset menu
 - **THEN** the dialog's fields and preview show the saved values
 
+#### Scenario: Selective Color round-trips a saved preset [selective_color_preset_round_trip]
+
+- **WHEN** a user saves a Selective Color adjustment with a non-default method and per-family values through the Properties panel
+- **THEN** choosing that preset through the Properties menu restores those settings
+- **AND** choosing the same preset in the Selective Color dialog applies those settings to its scratch block
+
 ### Requirement: Built-in presets
 
 The built-in preset lists SHALL use only established sources: the Levels,

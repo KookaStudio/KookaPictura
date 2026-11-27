@@ -5,6 +5,8 @@
 // menu itself is in layers_panel_menu.cpp).
 
 #include "layers_panel.h"
+#include "adjustment_catalogue.h"
+#include "channels_panel.h"
 #include "commands.h"
 
 #include "dialogs.h"
@@ -29,11 +31,46 @@
 
 namespace pictura {
 
+void LayersPanel::setChannelsPanel(ChannelsPanel* channels)
+{
+    channels_ = channels;
+    updateSelectiveColorAvailability();
+}
+
+void LayersPanel::updateSelectiveColorAvailability()
+{
+    if (selectiveColorAction_) {
+        selectiveColorAction_->setEnabled(canCreateAdjustment(QStringLiteral("selective-color")));
+    }
+}
+
+bool LayersPanel::canCreateAdjustment(const QString& kind) const
+{
+    return view_ && (!adjustmentRequiresCompositeChannel(kind) || !channels_
+                     || channels_->isCompositeChannelActive(view_));
+}
+
+void LayersPanel::addAdjustmentMenuAction(QMenu* menu, const AdjustmentKind& entry)
+{
+    QAction* action =
+        menu->addAction(entry.layerEllipsis ? entry.title + QStringLiteral("…") : entry.title);
+    const QString kind = entry.kind;
+    if (adjustmentRequiresCompositeChannel(kind)) {
+        selectiveColorAction_ = action;
+    }
+    connect(action, &QAction::triggered, this, [this, kind] {
+        if (canCreateAdjustment(kind)) {
+            view_->add_adjustment(kind);
+        }
+    });
+}
+
 void LayersPanel::syncStripButtons()
 {
     if (!maskButton_ || !deleteButton_) {
         return;
     }
+    updateSelectiveColorAvailability();
     const bool hasDocument = view_ != nullptr;
     // A pending transform disables the action strip until it is resolved; the
     // layer list itself stays selectable.

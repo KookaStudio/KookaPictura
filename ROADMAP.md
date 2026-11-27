@@ -338,8 +338,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] The Match Color on-canvas eyedropper and live Info feedback (#575)
 - [x] Adjustment presets for Levels, Curves, Photo Filter, Selective Color and
       Vibrance (#576)
-- [ ] The Selective Color composite-channel-only gate, and the preset
-      whitelist (#577)
+- [x] The Selective Color composite-channel-only gate and preset whitelist (#577)
 - [x] Brightness/Contrast Auto, and the shared adjustment Auto buttons (#578)
 
 ## Filters
