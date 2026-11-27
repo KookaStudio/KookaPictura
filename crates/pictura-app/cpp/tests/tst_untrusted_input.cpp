@@ -139,6 +139,9 @@ private slots:
     void controlTokenFileIsOwnerOnly();
     void controlTokenFileNeverFollowsAPlantedLink();
     void qtDecodeRefusesSizesOverTheBudget();
+    void qtDecodeRefusesShortInput();
+    void qtDecodePinsKnownSignatures();
+    void qtDecodeStillProbesUnknownSignatures();
     void thumbnailUnpackRejectsHostileSizes();
     void controlRefusesAmbiguousDocumentPaths();
     void controlRefusesASaveOverASymlink();
@@ -254,6 +257,39 @@ void UntrustedInputTest::qtDecodeRefusesSizesOverTheBudget()
     QVERIFY(buffer.open(QIODevice::WriteOnly));
     QVERIFY(small.save(&buffer, "PNG"));
     QCOMPARE(decodedWidth(encoded), 3);
+}
+
+// An empty file reached every installed plugin's probe and kimg_exr read its
+// magic bytes past the end of the device (#1650).
+void UntrustedInputTest::qtDecodeRefusesShortInput()
+{
+    QCOMPARE(decodedWidth(QByteArray()), 0);
+    QCOMPARE(decodedWidth(QByteArray("\xff\xd8\xff", 3)), 0);
+    QCOMPARE(decodedWidth(pngImage(1, 1).left(15)), 0);
+}
+
+void UntrustedInputTest::qtDecodePinsKnownSignatures()
+{
+    QCOMPARE(pictura::qtFormatForSignature(pngImage(1, 1)), QByteArray("png"));
+    QCOMPARE(pictura::qtFormatForSignature(QByteArray("\xff\xd8\xff\xe0", 4)),
+             QByteArray("jpeg"));
+    QCOMPARE(pictura::qtFormatForSignature("GIF87a"), QByteArray("gif"));
+    QCOMPARE(pictura::qtFormatForSignature("GIF89a"), QByteArray("gif"));
+    QCOMPARE(pictura::qtFormatForSignature("BM"), QByteArray("bmp"));
+    QCOMPARE(pictura::qtFormatForSignature(QByteArray("II\x2a\x00", 4)), QByteArray("tiff"));
+    QCOMPARE(pictura::qtFormatForSignature(QByteArray("MM\x00\x2a", 4)), QByteArray("tiff"));
+
+    QCOMPARE(decodedWidth(pngImage(5, 1)), 5);
+    const QByteArray garbage = QByteArray("\x89PNG\r\n\x1a\n", 8) + QByteArray(24, '\x5a');
+    QCOMPARE(decodedWidth(garbage), 0);
+}
+
+void UntrustedInputTest::qtDecodeStillProbesUnknownSignatures()
+{
+    const QByteArray pbm("P1\n4 2\n1 0 1 0\n0 1 0 1\n");
+    QVERIFY(pbm.size() >= 16);
+    QVERIFY(pictura::qtFormatForSignature(pbm).isEmpty());
+    QCOMPARE(decodedWidth(pbm), 4);
 }
 
 // `w * h * 4` overflowed and the QImage was built from a short buffer (#844 M8).
