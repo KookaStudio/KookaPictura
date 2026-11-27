@@ -56,7 +56,7 @@ pub mod ffi {
         /// Delete the saved `name`; false when it was absent.
         fn adjustment_preset_delete(kind: &QString, name: &QString) -> bool;
 
-        /// Whether `kind` is in the CS6 save whitelist.
+        /// Whether the Properties panel offers to save presets for `kind`.
         fn adjustment_preset_can_save(kind: &QString) -> bool;
 
         /// Whether `kind`'s Properties page carries the Preset menu.

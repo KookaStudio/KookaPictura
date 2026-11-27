@@ -1,14 +1,16 @@
 use super::*;
 
 use super::super::adjustment_edit::{format_points, page_rows, parse_points};
+use super::super::helpers::{active_pixel_layer, mask_editing};
 use super::super::helpers_composite::{level_display_image, sample_planar_argb};
 use super::super::impl_filters::{apply_op_active_region, cancel_filter_preview, ActiveOp};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
-use pictura_core::{AdjustmentData, PsdRect};
+use pictura_core::{AdjustmentData, ColorMode, Layer, PsdRect};
 use pictura_render::Adjustment;
+use pictura_select::Selection;
 
 pub(super) fn to_block(data: Option<AdjustmentData>) -> Vec<u8> {
     data.map(|d| {
@@ -132,6 +134,94 @@ pub(super) fn image_adjust_clipping_source(
         pictura_codec::buffer_to_srgb(doc, &chunk).into_owned()
     });
     level_display_image(&frame)
+}
+
+pub(super) fn image_adjustment_vibrance_auto(view: &PictureView) -> i32 {
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return 0;
+    };
+    if doc.document_color_mode() != ColorMode::Rgb || mask_editing(rust) {
+        return 0;
+    }
+    let Some(layer) = active_pixel_layer(doc, rust.layer_target.single()) else {
+        return 0;
+    };
+    vibrance_auto_amount(layer, rust.session.selection.as_ref())
+}
+
+fn vibrance_auto_amount(layer: &Layer, selection: Option<&Selection>) -> i32 {
+    const SAMPLE_SIDE: i64 = 128;
+    const TARGET_SATURATION: f64 = 0.50;
+    const MAX_VIBRANCE: f64 = 35.0;
+
+    let rect = match selection {
+        Some(selection) => selection
+            .bounds()
+            .and_then(|rect| layer.rect.intersect(rect)),
+        None => (!layer.rect.is_empty()).then_some(layer.rect),
+    };
+    let Some(rect) = rect else {
+        return 0;
+    };
+    let coverage = selection.map(Selection::coverage);
+    let plane = |id| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
+    let (Some(red), Some(green), Some(blue)) = (plane(0), plane(1), plane(2)) else {
+        return 0;
+    };
+    let alpha = plane(-1);
+    let stride = layer.rect.width() as usize;
+    let width = i64::from(rect.width());
+    let height = i64::from(rect.height());
+    let cols = width.min(SAMPLE_SIDE);
+    let rows = height.min(SAMPLE_SIDE);
+    let mut weighted_saturation = 0.0;
+    let mut total_weight = 0.0;
+    for row in 0..rows {
+        let y = rect.top + (((2 * row + 1) * height) / (2 * rows)) as i32;
+        for col in 0..cols {
+            let x = rect.left + (((2 * col + 1) * width) / (2 * cols)) as i32;
+            let index = (i64::from(y) - i64::from(layer.rect.top)) as usize * stride
+                + (i64::from(x) - i64::from(layer.rect.left)) as usize;
+            let selected = coverage.as_ref().map_or(255, |mask| mask.sample(x, y));
+            let opacity = alpha.map_or(255, |plane| plane.sample(index).unwrap_or(0));
+            let weight = f64::from(selected) * f64::from(opacity);
+            if weight == 0.0 {
+                continue;
+            }
+            let (Some(r), Some(g), Some(b)) =
+                (red.sample(index), green.sample(index), blue.sample(index))
+            else {
+                continue;
+            };
+            let low = r.min(g).min(b);
+            let high = r.max(g).max(b);
+            let chroma = high - low;
+            if chroma < 4 {
+                continue;
+            }
+            let hsl_denominator = 255.0 - (f64::from(high) + f64::from(low) - 255.0).abs();
+            weighted_saturation += weight * f64::from(chroma) / hsl_denominator;
+            total_weight += weight;
+        }
+    }
+    if total_weight == 0.0 {
+        return 0;
+    }
+    let mean = weighted_saturation / total_weight;
+    if mean >= TARGET_SATURATION {
+        return 0;
+    }
+    // Fit the existing Vibrance operator's nominal gain before its hue weighting.
+    (100.0 * (TARGET_SATURATION - mean) / (1.0 - mean))
+        .round()
+        .min(MAX_VIBRANCE) as i32
 }
 
 pub(super) fn image_adjustment_curve(block: &[u8], channel: i32) -> QString {
@@ -271,6 +361,63 @@ mod tests {
         assert!(from_block(b"thr").is_none());
         assert_eq!(rgb(0x12_34_56), [0x12, 0x34, 0x56]);
         assert!(direct("equalize").is_some() && direct("match-color").is_none());
+    }
+
+    fn vibrance_sample_layer(vivid_alpha: u8) -> pictura_core::Layer {
+        let mut layer = pictura_core::Layer::default();
+        layer.rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 1,
+            right: 2,
+        };
+        layer.set_channels(
+            [
+                (0, [105, 5]),
+                (1, [125, 240]),
+                (2, [135, 5]),
+                (-1, [255, vivid_alpha]),
+            ]
+            .into_iter()
+            .map(|(id, data)| pictura_core::Channel {
+                id,
+                data: data.to_vec().into(),
+            })
+            .collect(),
+        );
+        layer
+    }
+
+    fn vibrance_sample_selection(vivid_coverage: u8) -> pictura_select::Selection {
+        let channel = pictura_core::Channel {
+            id: -1,
+            data: vec![255, vivid_coverage].into(),
+        };
+        pictura_select::Selection::from_channel(&channel, 2, 1).unwrap()
+    }
+
+    #[test]
+    fn vibrance_auto_excludes_transparent_and_unselected() {
+        let opaque = vibrance_sample_layer(255);
+        let transparent = vibrance_sample_layer(0);
+        let muted_only = vibrance_sample_selection(0);
+        assert_eq!(vibrance_auto_amount(&opaque, None), 0);
+        assert_eq!(vibrance_auto_amount(&transparent, None), 35);
+        assert_eq!(vibrance_auto_amount(&opaque, Some(&muted_only)), 35);
+    }
+
+    #[test]
+    fn vibrance_auto_weights_alpha_and_selection() {
+        let opaque = vibrance_sample_layer(255);
+        let translucent = vibrance_sample_layer(64);
+        let feathered = vibrance_sample_selection(64);
+        let alpha_amount = vibrance_auto_amount(&translucent, None);
+        assert!((1..35).contains(&alpha_amount));
+        assert_eq!(
+            vibrance_auto_amount(&opaque, Some(&feathered)),
+            alpha_amount
+        );
+        assert!(vibrance_auto_amount(&translucent, Some(&feathered)) > alpha_amount);
     }
 
     #[test]

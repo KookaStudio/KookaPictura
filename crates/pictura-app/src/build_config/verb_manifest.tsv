@@ -479,6 +479,7 @@ free	image_adjustment_page	image_adjustment_page	api/filters_bridge.h	pictura_ap
 free	image_adjustment_set	image_adjustment_set	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
 free	image_adjustment_set_curve	image_adjustment_set_curve	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
 free	image_adjustment_threshold_histogram	image_adjustment_threshold_histogram	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
+free	image_adjustment_vibrance_auto	image_adjustment_vibrance_auto	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust.cxxqt.h
 free	image_apply_image_apply	image_apply_image_apply	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_apply_image.cxxqt.h
 free	image_apply_image_preview	image_apply_image_preview	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_apply_image.cxxqt.h
 free	image_match_color_apply	image_match_color_apply	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_match_color.cxxqt.h

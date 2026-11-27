@@ -122,7 +122,13 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     setObjectName(QStringLiteral("adjustmentDialog"));
     setWindowTitle(title_);
     setUpPreviewTimers();
-    takeHistograms();
+    if (adjustmentPresetKind(block_) == QLatin1String("vibrance")) {
+        if (view_) {
+            vibranceAutoAmount_ = image_adjustment_vibrance_auto(*view_);
+        }
+    } else {
+        takeHistograms();
+    }
     // Show the opening block at once, as the generic page does: Black & White
     // and Photo Filter are not the identity at their defaults.
     preview();
@@ -633,7 +639,7 @@ std::unique_ptr<AdjustmentDialog> makeAdjustmentDialog(const QString& kind, Pict
             QVector<SliderDialog::Row>{
                 {QStringLiteral("Vibrance:"), QStringLiteral("vibrance")},
                 {QStringLiteral("Saturation:"), QStringLiteral("saturation")}},
-            QStringList{}, parent);
+            QStringList{QStringLiteral("Auto")}, parent);
     } else if (kind == QLatin1String("exposure")) {
         dialog = std::make_unique<ExposureDialog>(view, block, visible, parent);
     } else if (kind == QLatin1String("hue-saturation")) {

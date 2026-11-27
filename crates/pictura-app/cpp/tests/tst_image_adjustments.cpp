@@ -141,6 +141,11 @@ private slots:
     void autoIsANoOpOnAFlatImage();
     void levelsEditsEachChannelAndPresets();
     void exposureAndVibranceUseTheWideLayouts();
+    void vibranceAutoUsesOpeningRaster();
+    void vibranceAutoIgnoresOpeningPreview();
+    void vibranceAutoReplacesHigherValue();
+    void vibranceAutoUsesSelection();
+    void vibranceAutoSkipsGrayAndVivid();
     void hueSaturationEditsEachRangeAndPresets();
     void colorBalanceEditsEachTone();
     void colorBalanceReadoutFollowsModeAndTone();
@@ -519,9 +524,12 @@ void ImageAdjustmentsTest::exposureAndVibranceUseTheWideLayouts()
     auto* saturation = qobject_cast<QSpinBox*>(vibrance->controlForTest(QStringLiteral("saturation")));
     QVERIFY(saturation && vibrance->findChild<QSlider*>(QStringLiteral("vibranceSlider")));
     QVERIFY(vibrance->minimumWidth() >= 420);
-    QVERIFY(!vibrance->findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto")));
+    auto* autoButton = vibrance->findChild<QPushButton*>(QStringLiteral("adjustmentButtonAuto"));
+    QVERIFY(autoButton && autoButton->isEnabled());
     vibrance->reject();
 }
+
+#include "tst_image_adjustments_vibrance_cases.cpp"
 
 // Hue/Saturation: a colour range edits its own record (Reds lightness -100
 // blacks a red pixel and leaves a blue one), Master keeps its values, and a
