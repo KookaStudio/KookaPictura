@@ -8,6 +8,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/canvas_ruler.h
     crates/pictura-app/cpp/canvas_scrollbars.cpp
     crates/pictura-app/cpp/canvas_scrollbars.h
+    crates/pictura-app/cpp/image_view_clone_overlay.cpp
     crates/pictura-app/cpp/image_view.cpp
     crates/pictura-app/cpp/image_view.h
     crates/pictura-app/cpp/image_view_annotations.cpp

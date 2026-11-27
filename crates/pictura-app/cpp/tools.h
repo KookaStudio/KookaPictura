@@ -28,6 +28,7 @@
 #include <utility>
 
 class QMenu;
+class QTimer;
 
 namespace pictura {
 
@@ -217,6 +218,7 @@ public:
     explicit ToolController(QObject* parent = nullptr);
 
     ToolId activeTool() const { return active_; }
+    bool cloneOverlayPendingForTest() const;
     void setActiveTool(ToolId id);
 
     // A modal tool session's history changed; the frame re-evaluates the
@@ -638,6 +640,7 @@ signals:
 
 private:
     void applyToolPolicy();
+    void refreshCloneOverlay();
     static bool isSelectionTool(ToolId id);
     // The selection tools that also offer a canvas menu (the seven ids; the
     // marquee handler serves rectangular and elliptical).
@@ -685,6 +688,12 @@ private:
 
     ToolRegistry registry_;
     ImageView* canvas_ = nullptr;
+    QPointF clonePointer_;
+    bool clonePointerValid_ = false;
+    QTimer* cloneOverlayTimer_ = nullptr;
+    QImage cloneOverlayImage_;
+    QImage cloneOverlayInverted_;
+    quint64 cloneOverlayImageId_ = 0;
     // The view that owns `canvas_`. A tab switch makes `view()` the incoming
     // one before `unbindCanvas` runs, so the outgoing owner is remembered.
     PictureView* boundView_ = nullptr;

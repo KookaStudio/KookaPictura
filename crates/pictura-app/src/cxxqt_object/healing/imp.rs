@@ -104,6 +104,29 @@ pub(super) fn healing_commit(
     true
 }
 
+pub(super) fn healing_commit_transformed(
+    mut view: Pin<&mut PictureView>, source_x: i32, source_y: i32,
+    anchor_x: f64, anchor_y: f64, scale_x: f64, scale_y: f64, angle: f64,
+) -> bool {
+    if scale_x == 0.0 || scale_y == 0.0 { return false; }
+    let outcome = {
+        let Some(stroke) = view.as_mut().rust_mut().session.live.take_heal_stroke() else { return false; };
+        let mut rust = view.as_mut().rust_mut();
+        let Some(doc) = rust.session.doc.as_mut() else { return false; };
+        let transform = pictura_paint::stamp::SourceTransform {
+            scale_x: scale_x as f32, scale_y: scale_y as f32, angle_deg: angle as f32,
+        };
+        match stroke.commit_transformed(doc, HealMode::default(), Some((source_x, source_y)),
+            Transfer::Full, Some(((anchor_x as f32, anchor_y as f32), transform))) {
+            Ok(Some(outcome)) => outcome,
+            _ => return false,
+        }
+    };
+    view.as_mut().rust_mut().session.doc.set(Some(outcome.document));
+    view.as_mut().edit("Healing Brush", |_| Edit::regions(vec![outcome.dirty], true));
+    true
+}
+
 pub(super) fn healing_cancel(mut view: Pin<&mut PictureView>) {
     view.as_mut().rust_mut().session.live.clear_heal_stroke();
 }

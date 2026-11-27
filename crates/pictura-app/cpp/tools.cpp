@@ -11,6 +11,7 @@
 #include <QtCore/QDebug>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QPoint>
+#include <QtCore/QTimer>
 #include <QtGui/QCursor>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QPainterPath>
@@ -108,7 +109,8 @@ std::unique_ptr<ToolHandler> makeCountToolHandler();
 std::unique_ptr<ToolHandler> makeSpotHealingToolHandler(std::shared_ptr<PaintOptions> paint,
                                                         std::shared_ptr<HealingGroup> healing);
 std::unique_ptr<ToolHandler> makeHealingToolHandler(std::shared_ptr<PaintOptions> paint,
-                                                    std::shared_ptr<HealingGroup> healing);
+                                                    std::shared_ptr<HealingGroup> healing,
+                                                    std::shared_ptr<CloneSourceOptions> clone);
 std::unique_ptr<ToolHandler> makePatchToolHandler(std::shared_ptr<PaintOptions> paint,
                                                   std::shared_ptr<PatchGroup> patch);
 std::unique_ptr<ToolHandler> makeContentAwareMoveToolHandler(
@@ -151,6 +153,9 @@ std::unique_ptr<ToolHandler> makeTypeToolHandler(ToolId id, std::shared_ptr<Type
 ToolController::ToolController(QObject* parent)
     : QObject(parent)
 {
+    cloneOverlayTimer_ = new QTimer(this);
+    cloneOverlayTimer_->setInterval(16);
+    connect(cloneOverlayTimer_, &QTimer::timeout, this, &ToolController::refreshCloneOverlay);
     // The family option groups. Each handler holds the shared_ptr for its
     // family; the raw pointers below are the controller's non-owning references
     // for signal wiring and its own reads.
@@ -203,8 +208,8 @@ ToolController::ToolController(QObject* parent)
 
     // Wire the groups to the controller's signals and handler hooks, so every
     // consumer keeps following an option change.
-    paint->sizeChanged = [this](int size) { emit brushSizeChanged(size); };
-    paint->tipChanged = [this]() { emit brushTipChanged(); };
+    paint->sizeChanged = [this](int size) { emit brushSizeChanged(size); refreshCloneOverlay(); };
+    paint->tipChanged = [this]() { emit brushTipChanged(); refreshCloneOverlay(); };
     paint->paintSettingsChanged = [this]() { emit paintSettingsChanged(); };
     selection->magneticWidthChanged = [this](int width) { emit magneticWidthChanged(width); };
     crop->optionsChanged = [this]() {
@@ -246,7 +251,7 @@ ToolController::ToolController(QObject* parent)
         }
         emit shapeOptionsChanged();
     };
-    clone->changed = [this]() { emit cloneSourceChanged(); };
+    clone->changed = [this]() { emit cloneSourceChanged(); refreshCloneOverlay(); };
     move->changed = [this]() {
         emit moveOptionsChanged();
         syncTransformControls();
@@ -260,7 +265,8 @@ ToolController::ToolController(QObject* parent)
     mixer->changed = [this]() { emit mixerReservoirChanged(mixer_->get().reservoir); };
     // `Shift+Alt+P` flips a stamp's Airbrush flag outside its options bar, which
     // then re-reads the toggle.
-    stamp->changed = [this]() { emit stampOptionsChanged(); };
+    stamp->changed = [this]() { emit stampOptionsChanged(); refreshCloneOverlay(); };
+    healing->changed = [this]() { refreshCloneOverlay(); };
     // The Eraser's Block mode draws a square cursor instead of the brush-size
     // circle, so a Mode change re-applies the outline.
     eraser->changed = [this]() { refreshBrushOutline(); };
@@ -291,7 +297,7 @@ ToolController::ToolController(QObject* parent)
     registry_.registerTool(ToolId::Count, makeCountToolHandler());
     registry_.registerTool(ToolId::SpotHealingBrush,
                            makeSpotHealingToolHandler(paint, healing));
-    registry_.registerTool(ToolId::HealingBrush, makeHealingToolHandler(paint, healing));
+    registry_.registerTool(ToolId::HealingBrush, makeHealingToolHandler(paint, healing, clone));
     registry_.registerTool(ToolId::Patch, makePatchToolHandler(paint, patch));
     registry_.registerTool(ToolId::ContentAwareMove,
                            makeContentAwareMoveToolHandler(contentAware));
@@ -392,6 +398,7 @@ void ToolController::setActiveTool(ToolId id)
         canvas_->clearSelectionPreview();
     }
     applyToolPolicy();
+    refreshCloneOverlay();
     emit activeToolChanged(id);
 }
 
@@ -464,6 +471,7 @@ void ToolController::onSessionCancelled()
     cancelSingleLineMarquee();
     resetTransformUi();
     registry_.forEach([this](ToolHandler& handler) { handler.onSessionCancelled(*this); });
+    refreshCloneOverlay();
 }
 
 void ToolController::applyCropOptions(bool classic, bool deletePixels, double ratio, int grid)
@@ -635,6 +643,7 @@ void ToolController::bindCanvas(ImageView* canvas)
             h->onDocumentRefreshed(*this);
         }
         refreshAnnotations();
+        refreshCloneOverlay();
         // Every refresh reaches here: keep the Move tool's controls box on the
         // active layer (or rebuild it after a content change).
         syncTransformControls();
@@ -655,6 +664,19 @@ void ToolController::bindCanvas(ImageView* canvas)
     connect(canvas_, &ImageView::modifierKeyChanged, this, &ToolController::handleModifiers);
     connect(canvas_, &ImageView::mouseReleased, this, &ToolController::handleReleased);
     connect(canvas_, &ImageView::pointerGestureFocusLost, this, &ToolController::cancelSingleLineMarquee);
+    connect(canvas_, &ImageView::mouseMoved, this, [this](const QPointF& p) {
+        clonePointer_ = p; clonePointerValid_ = true; refreshCloneOverlay();
+    });
+    connect(canvas_, &ImageView::mousePressed, this, [this](const QPointF& p, int, int) {
+        clonePointer_ = p; clonePointerValid_ = true; refreshCloneOverlay();
+    });
+    connect(canvas_, &ImageView::mouseReleased, this, [this](const QPointF& p) {
+        clonePointer_ = p; clonePointerValid_ = true; refreshCloneOverlay();
+    });
+    connect(canvas_, &ImageView::mouseLeft, this, [this] {
+        clonePointerValid_ = false; refreshCloneOverlay();
+    });
+    connect(canvas_, &ImageView::viewChanged, this, [this] { refreshCloneOverlay(); });
     connect(canvas_, &ImageView::transformCommitRequested, this,
             &ToolController::commitFreeTransform);
     connect(canvas_, &ImageView::transformCancelRequested, this,
@@ -740,6 +762,11 @@ void ToolController::unbindCanvas()
     }
     cancelSingleLineMarquee();
     disconnect(canvas_, nullptr, this, nullptr);
+    cloneOverlayTimer_->stop();
+    if (boundView_) clone_overlay_cancel(*boundView_);
+    cloneOverlayImage_ = {};
+    cloneOverlayInverted_ = {};
+    cloneOverlayImageId_ = 0;
     // A floating or tiled canvas stays visible once it is no longer active; it
     // must not keep the blank cursor a brush ring stood in for.
     canvas_->unsetCursor();
@@ -768,6 +795,8 @@ void ToolController::unbindCanvas()
     canvas_->clearSelectionPreview();
     canvas_->clearBrushOutline();
     canvas_->clearSamplingRing();
+    canvas_->clearCloneOverlay();
+    clonePointerValid_ = false;
     canvas_ = nullptr;
     PictureView* v = view();
     if (v && v->is_painting()) {

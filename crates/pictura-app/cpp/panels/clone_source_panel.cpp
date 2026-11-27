@@ -145,30 +145,29 @@ CloneSourcePanel::CloneSourcePanel(QWidget* parent)
     layout->addWidget(separator(this));
 
     auto* overlay = new QGridLayout();
-    const QString notYet = tr("Source overlay: not implemented yet");
-    auto overlayCheck = [&](const QString& text, bool on, int row, int col) {
+    auto overlayCheck = [&](const QString& text, const QString& name, int row, int col) {
         auto* check = new QCheckBox(text, this);
-        check->setChecked(on);
-        check->setEnabled(false);
-        check->setToolTip(notYet);
+        check->setObjectName(name);
         overlay->addWidget(check, row, col);
+        return check;
     };
-    overlayCheck(tr("Show Overlay"), false, 0, 0);
-    overlayCheck(tr("Clipped"), false, 0, 1);
-    auto* opacity = new NumericField(tr("Opacity:"), field(0, 100, 0, QStringLiteral("%"),
-                                                           QStringLiteral("cloneSourceOverlayOpacity")),
-                                     this);
-    opacity->setValue(100);
-    opacity->setEnabled(false);
-    opacity->setToolTip(notYet);
-    overlay->addWidget(opacity, 1, 0);
-    overlayCheck(tr("Auto Hide"), false, 1, 1);
-    auto* mode = new QComboBox(this);
-    mode->addItems({tr("Normal"), tr("Darken"), tr("Lighten"), tr("Difference")});
-    mode->setEnabled(false);
-    mode->setToolTip(notYet);
-    overlay->addWidget(mode, 2, 0);
-    overlayCheck(tr("Invert"), false, 2, 1);
+    overlayShow_ = overlayCheck(tr("Show Overlay"), QStringLiteral("cloneSourceShowOverlay"), 0, 0);
+    overlayClipped_ = overlayCheck(tr("Clipped"), QStringLiteral("cloneSourceClipped"), 0, 1);
+    overlayOpacity_ = new NumericField(tr("Opacity:"), field(0, 100, 0, QStringLiteral("%"),
+                                     QStringLiteral("cloneSourceOverlayOpacity")), this);
+    overlay->addWidget(overlayOpacity_, 1, 0);
+    overlayAutoHide_ = overlayCheck(tr("Auto Hide"), QStringLiteral("cloneSourceAutoHide"), 1, 1);
+    overlayMode_ = new QComboBox(this);
+    overlayMode_->setObjectName(QStringLiteral("cloneSourceOverlayMode"));
+    overlayMode_->addItems({tr("Normal"), tr("Darken"), tr("Lighten"), tr("Difference")});
+    overlay->addWidget(overlayMode_, 2, 0);
+    overlayInvert_ = overlayCheck(tr("Invert"), QStringLiteral("cloneSourceInvert"), 2, 1);
+    connect(overlayShow_, &QCheckBox::toggled, this, [this](bool v) { editSlot([v](CloneSource& s) { s.overlayShow = v; }); });
+    connect(overlayAutoHide_, &QCheckBox::toggled, this, [this](bool v) { editSlot([v](CloneSource& s) { s.overlayAutoHide = v; }); });
+    connect(overlayClipped_, &QCheckBox::toggled, this, [this](bool v) { editSlot([v](CloneSource& s) { s.overlayClipped = v; }); });
+    connect(overlayInvert_, &QCheckBox::toggled, this, [this](bool v) { editSlot([v](CloneSource& s) { s.overlayInvert = v; }); });
+    connect(overlayOpacity_, &NumericField::valueChanged, this, [this](double v) { editSlot([v](CloneSource& s) { s.overlayOpacity = qRound(v); }); });
+    connect(overlayMode_, &QComboBox::currentIndexChanged, this, [this](int v) { editSlot([v](CloneSource& s) { s.overlayMode = v; }); });
     layout->addLayout(overlay);
     layout->addStretch(1);
 
@@ -250,6 +249,14 @@ void CloneSourcePanel::refresh()
         return;
     }
     const CloneSource s = clone_->active();
+    const QSignalBlocker bShow(overlayShow_), bHide(overlayAutoHide_), bClip(overlayClipped_);
+    const QSignalBlocker bInvert(overlayInvert_), bOpacity(overlayOpacity_), bMode(overlayMode_);
+    overlayShow_->setChecked(s.overlayShow);
+    overlayAutoHide_->setChecked(s.overlayAutoHide);
+    overlayClipped_->setChecked(s.overlayClipped);
+    overlayInvert_->setChecked(s.overlayInvert);
+    overlayOpacity_->setValue(s.overlayOpacity);
+    overlayMode_->setCurrentIndex(s.overlayMode);
     for (int i = 0; i < int(slots_.size()); ++i) {
         slots_[i]->setChecked(i == clone_->slot());
     }

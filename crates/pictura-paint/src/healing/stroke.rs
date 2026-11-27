@@ -6,7 +6,8 @@
 //! [`clone_region`]: super::clone_region
 
 use super::layer::{heal_layer, HealError};
-use super::{clamped_shift, clone_region, heal_region, proximity, HealMode, Transfer, BORDER};
+use super::{clamped_shift, clone_region, clone_region_transformed, heal_region, proximity, HealMode, Transfer, BORDER};
+use crate::stamp::SourceTransform;
 use crate::spacing::{DabPlacer, SpacingMode};
 use crate::stroke::{layer_at, parse_layer_path};
 use crate::tip::tip_coverage;
@@ -128,6 +129,17 @@ impl HealStroke {
         source: Option<(i32, i32)>,
         transfer: Transfer,
     ) -> Result<Option<StrokeOutcome>, HealError> {
+        self.commit_transformed(doc, mode, source, transfer, None)
+    }
+
+    pub fn commit_transformed(
+        self,
+        doc: &mut Document,
+        mode: HealMode,
+        source: Option<(i32, i32)>,
+        transfer: Transfer,
+        transform: Option<((f32, f32), SourceTransform)>,
+    ) -> Result<Option<StrokeOutcome>, HealError> {
         if !self.painted {
             return Ok(None);
         }
@@ -136,7 +148,29 @@ impl HealStroke {
         let coverage = slice(&self.coverage, self.rect, dirty);
         let window = match source {
             Some((dx, dy)) => {
-                let source = clamped_shift(region, dx, dy, self.rect);
+                let source = if let Some((anchor, t)) = transform {
+                    let mut left = i32::MAX;
+                    let mut top = i32::MAX;
+                    let mut right = i32::MIN;
+                    let mut bottom = i32::MIN;
+                    let (sin, cos) = t.angle_deg.to_radians().sin_cos();
+                    let work = region.grow(BORDER + 2);
+                    for x in [work.left, work.right] {
+                        for y in [work.top, work.bottom] {
+                            let px = x as f32 - anchor.0;
+                            let py = y as f32 - anchor.1;
+                            let sx = anchor.0 + dx as f32 + (px * cos - py * sin) / t.scale_x;
+                            let sy = anchor.1 + dy as f32 + (px * sin + py * cos) / t.scale_y;
+                            left = left.min(sx.floor() as i32 - 2);
+                            top = top.min(sy.floor() as i32 - 2);
+                            right = right.max(sx.ceil() as i32 + 2);
+                            bottom = bottom.max(sy.ceil() as i32 + 2);
+                        }
+                    }
+                    PsdRect { left, top, right, bottom }.intersect(self.rect).unwrap_or(region)
+                } else {
+                    clamped_shift(region, dx, dy, self.rect)
+                };
                 region.union(source).grow(BORDER)
             }
             None => match mode {
@@ -145,6 +179,7 @@ impl HealStroke {
                 HealMode::ContentAware => region.grow(BORDER),
             },
         };
+        let actual_window = window.intersect(self.rect).unwrap_or(self.rect);
         let path = self.path;
         let changed = heal_layer(
             doc,
@@ -153,7 +188,14 @@ impl HealStroke {
             &coverage,
             Some(window),
             move |img, local, cov| match source {
-                Some(offset) => clone_region(img, local, cov, offset, transfer),
+                Some(offset) => match transform {
+                    Some((anchor, t)) if offset != (0, 0) || !t.is_identity() => clone_region_transformed(
+                        img, local, cov, offset,
+                        (anchor.0 - actual_window.left as f32, anchor.1 - actual_window.top as f32),
+                        t, transfer,
+                    ),
+                    _ => clone_region(img, local, cov, offset, transfer),
+                },
                 None => heal_region(img, local, cov, mode),
             },
         )?;

@@ -10,6 +10,7 @@
 #include <functional>
 
 class QCheckBox;
+class QComboBox;
 class QToolButton;
 
 namespace pictura {
@@ -21,9 +22,7 @@ class ToolController;
 // own Alt-clicked source), the Offset between destination and source, and the
 // source transform (W / H with Maintain Aspect Ratio, Rotate, Flip Horizontal /
 // Vertical, Reset Transform). Everything edits the controller's active slot.
-// ponytail: the overlay (Show Overlay, Opacity, mode, Clipped, Auto Hide,
-// Invert) is not drawn, and the Extended frame controls are not wired; both are
-// shown disabled.
+// ponytail: the Extended frame controls remain disabled.
 class CloneSourcePanel : public QWidget {
     Q_OBJECT
 
@@ -48,6 +47,12 @@ private:
     QToolButton* link_ = nullptr;
     QToolButton* flipH_ = nullptr;
     QToolButton* flipV_ = nullptr;
+    QCheckBox* overlayShow_ = nullptr;
+    QCheckBox* overlayAutoHide_ = nullptr;
+    QCheckBox* overlayClipped_ = nullptr;
+    QCheckBox* overlayInvert_ = nullptr;
+    NumericField* overlayOpacity_ = nullptr;
+    QComboBox* overlayMode_ = nullptr;
 };
 
 } // namespace pictura

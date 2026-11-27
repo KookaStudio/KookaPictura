@@ -169,6 +169,10 @@ pub struct Stroke {
 }
 
 impl Stroke {
+    pub fn shared_source_image(&self) -> Option<Arc<RgbaImage>> {
+        self.source.as_ref().and_then(StampSource::shared_image)
+    }
+
     pub fn begin_at(doc: &Document, path: &str, cfg: StrokeConfig) -> Result<Stroke, PaintError> {
         Stroke::begin_kind(doc, path, cfg, StrokeKind::Paint)
     }

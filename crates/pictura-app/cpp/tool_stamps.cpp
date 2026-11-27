@@ -169,7 +169,7 @@ private:
 // transform about the point the offset was measured at. Aligned keeps the
 // offset across strokes; unchecked, every stroke copies from the source point
 // again.
-// ponytail: no source overlay and no on-canvas source crosshair.
+// ponytail: no on-canvas source crosshair.
 class CloneStampToolHandler : public StampToolHandler {
 public:
     CloneStampToolHandler(std::shared_ptr<PaintOptions> paint, std::shared_ptr<StampGroup> stamp,
@@ -188,6 +188,7 @@ protected:
         CloneSource slot = clone_->active();
         slot.source = QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
         slot.hasSource = true;
+        slot.healingSourceValid = true;
         slot.hasOffset = false;
         clone_->setActive(slot);
     }

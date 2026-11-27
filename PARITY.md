@@ -452,7 +452,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-PAN-11 | Properties panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | — |
 | P-PAN-12 | Adjustments panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Mode/depth gating, fill-layer presets (#1521), and icon artwork remain | #1521 |
 | P-PAN-13 | Brush panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | — |
-| P-PAN-14 | Clone Source panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Overlay controls remain | #537 |
+| P-PAN-14 | Clone Source panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels; crates/pictura-app/cpp/tool_clone_overlay.cpp | none | Overlay controls implemented with approximate blend math; source movement and shortcuts remain | #486 |
 | P-PAN-15 | Character panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | #517 |
 | P-PAN-16 | Paragraph panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | #518 |
 | P-PAN-17 | Glyphs panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | — |

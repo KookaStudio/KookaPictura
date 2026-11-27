@@ -60,6 +60,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/text_input.h
     crates/pictura-app/cpp/theme.cpp
     crates/pictura-app/cpp/theme.h
+    crates/pictura-app/cpp/tool_clone_overlay.cpp
     crates/pictura-app/cpp/tools.cpp
     crates/pictura-app/cpp/tools_input.cpp
     crates/pictura-app/cpp/tools.h

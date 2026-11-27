@@ -182,6 +182,26 @@ public:
     // when no image). Used by dialogs that preview the current canvas section.
     QRectF visibleDocumentRect() const;
 
+    struct CloneOverlay {
+        QImage source;
+        QPoint origin;
+        int sourceStep = 1;
+        QPointF sourceAnchor;
+        QPointF destinationAnchor;
+        QPointF pointer;
+        double scaleX = 1.0;
+        double scaleY = 1.0;
+        double angle = 0.0;
+        double brushSize = 1.0;
+        double brushRoundness = 1.0;
+        double brushAngle = 0.0;
+        int opacity = 100;
+        int mode = 0;
+        bool clipped = false;
+    };
+    void setCloneOverlay(const CloneOverlay& overlay);
+    void clearCloneOverlay();
+
     // Brush-size ring drawn in image space under the pan/zoom transform. The
     // diameter is in image pixels, so a zoomed canvas scales the ring for free.
     // The Eraser's Block mode draws a square of the same size instead, so the
@@ -969,6 +989,8 @@ private:
     // While the settle is pending every resize re-fits; the first visible
     // paint ends it, and any explicit user view change ends it early.
     bool pendingSettle_ = false;
+    CloneOverlay cloneOverlay_;
+    void paintCloneOverlay(QPainter& painter);
     QPolygonF overlayPolygon_;
 
     QList<QPolygonF> selectionContours_;

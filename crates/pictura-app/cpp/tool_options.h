@@ -265,6 +265,7 @@ struct TypeOptions {
 // counter-clockwise, flips).
 struct CloneSource {
     bool hasSource = false;
+    bool healingSourceValid = false;
     QPoint source;
     bool hasOffset = false;
     QPoint offset;
@@ -274,6 +275,12 @@ struct CloneSource {
     double angle = 0.0;
     bool flipH = false;
     bool flipV = false;
+    bool overlayShow = false;
+    bool overlayAutoHide = false;
+    bool overlayClipped = false;
+    int overlayOpacity = 100;
+    int overlayMode = 0;
+    bool overlayInvert = false;
 };
 
 // The Move tool options: Auto-Select on/off and 0 Group / 1 Layer, Show
@@ -815,6 +822,12 @@ public:
         if (changed) {
             changed();
         }
+    }
+
+    void invalidateHealingSources()
+    {
+        for (auto& slot : slots_) slot.healingSourceValid = false;
+        if (changed) changed();
     }
 
     std::function<void()> changed;
