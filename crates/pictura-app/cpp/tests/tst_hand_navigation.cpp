@@ -458,10 +458,10 @@ void HandNavigationTest::flickContinues()
         canvas.setOffset(starting);
         drag(canvas, QPointF(60, 0));
         QTRY_VERIFY(canvas.offset().x() > starting.x() + 60.0);
-        if (setting == 0) canvas.setFreePan(true);
-        else canvas.setSnapToWorkspace(true);
+        if (setting == 0) canvas.setFreePan(!canvas.freePan());
+        else canvas.setSnapToWorkspace(!canvas.snapToWorkspace());
         const QPointF stopped = canvas.offset();
-        QTest::qWait(70);
+        QTest::qWait(70); // An interrupted timer emits no signal to confirm it stays stopped.
         QCOMPARE(canvas.offset(), stopped);
     }
     canvas.setFreePan(false);
