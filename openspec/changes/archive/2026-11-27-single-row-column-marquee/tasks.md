@@ -20,4 +20,4 @@
 
 - [x] 4.1 Implement read-only live band previews, release, and cancellation without changing the selection-move gesture.
 - [x] 4.2 Add the drag and cancellation Qt scenarios.
-- [ ] 4.3 Build and run the focused Qt suites and repository gates for the follow-up.
+- [x] 4.3 Build and run the focused Qt suites and repository gates for the follow-up.
