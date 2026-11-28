@@ -12,6 +12,7 @@ use pictura_core::PixelBuffer;
 
 pub mod canvas;
 pub mod orient;
+pub mod puppet_warp;
 pub mod resize;
 
 pub use canvas::{resize_canvas, Anchor};

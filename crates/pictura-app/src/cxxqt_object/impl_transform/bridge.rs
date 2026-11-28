@@ -1,18 +1,22 @@
 //! The transform options bar's bridge: the session's reference point, numeric
 //! scale/rotation/skew setters and readouts, and the interpolation choice
-//! (Warp mode is `warp.rs`). Free functions over [`PictureView`] (their own bridge, so
-//! the `PictureView` declaration list does not grow).
+//! plus the Puppet Warp dialog bridge. Warp mode of Free Transform is in
+//! `warp.rs`. These are free functions over [`PictureView`].
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
 mod imp;
 
 use super::super::qobject::PictureView;
+use super::puppet_warp::*;
 use imp::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
+
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
 
@@ -188,5 +192,33 @@ pub mod ffi {
         /// What the last committed transform targeted: `"selection"`,
         /// `"layer"`, or empty before a repeatable commit.
         fn transform_last_target(view: &PictureView) -> QString;
+
+        type PuppetWarpSession;
+
+        fn puppet_warp_pin_angle(session: &PuppetWarpSession, ordinal: u32) -> f64;
+
+        fn puppet_warp_available(view: &PictureView) -> bool;
+        fn puppet_warp_begin(view: Pin<&mut PictureView>) -> Box<PuppetWarpSession>;
+        fn puppet_warp_size(session: &PuppetWarpSession) -> Vec<i32>;
+        // Pins are back to front: rest xy, target xy, angle (NaN for Auto), ordinal.
+        fn puppet_warp_configure(
+            session: &mut PuppetWarpSession,
+            pins: &[f64],
+            mode: i32,
+            density: i32,
+            expansion: i32,
+        ) -> i32;
+        fn puppet_warp_bounds(session: &PuppetWarpSession) -> Vec<i32>;
+        fn puppet_warp_triangles(session: &PuppetWarpSession) -> Vec<f64>;
+        fn puppet_warp_hit(session: &PuppetWarpSession, x: f64, y: f64) -> Vec<f64>;
+        fn puppet_warp_render(
+            session: &PuppetWarpSession,
+            x: f64,
+            y: f64,
+            scale: f64,
+            w: i32,
+            h: i32,
+        ) -> QImage;
+        fn puppet_warp_commit(view: Pin<&mut PictureView>, session: &PuppetWarpSession) -> bool;
     }
 }

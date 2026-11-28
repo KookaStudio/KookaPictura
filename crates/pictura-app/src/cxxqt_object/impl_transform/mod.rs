@@ -7,6 +7,7 @@ mod group;
 mod mask_move;
 mod mode_switch;
 mod perspective;
+mod puppet_warp;
 mod selection;
 mod session;
 mod skew;

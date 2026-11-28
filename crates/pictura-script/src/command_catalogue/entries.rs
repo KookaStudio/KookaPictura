@@ -65,7 +65,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "edit.fill", path: &["Edit", "Fill…"], label: "Fill…", shortcut: "Shift+F5", implemented: true, checkable: false },
     CommandSpec { id: "edit.stroke", path: &["Edit", "Stroke…"], label: "Stroke…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "edit.seam.aware.scale", path: &["Edit", "Seam-Aware Scale"], label: "Seam-Aware Scale", shortcut: "Alt+Shift+Ctrl+C", implemented: false, checkable: false },
-    CommandSpec { id: "edit.puppet.warp", path: &["Edit", "Puppet Warp"], label: "Puppet Warp", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "edit.puppet.warp", path: &["Edit", "Puppet Warp"], label: "Puppet Warp", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "edit.freeTransform", path: &["Edit", "Free Transform"], label: "Free Transform", shortcut: "Ctrl+T", implemented: true, checkable: false },
     CommandSpec { id: "edit.transform.again", path: &["Edit", "Transform", "Again"], label: "Again", shortcut: "Shift+Ctrl+T", implemented: true, checkable: false },
     CommandSpec { id: "edit.transform.scale", path: &["Edit", "Transform", "Scale"], label: "Scale", shortcut: "", implemented: true, checkable: false },
