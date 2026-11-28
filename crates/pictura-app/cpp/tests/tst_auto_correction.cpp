@@ -17,6 +17,7 @@
 #include <QtCore/QTimer>
 #include <QtGui/QAction>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QMenu>
@@ -63,6 +64,7 @@ private slots:
     void autoOptionsCancelExactPreview();
     void autoOptionsRestoredPreviewIsClean();
     void autoOptionsDefaultsPersist();
+    void curvesNormalAutoUsesSavedOptions();
     void directAutoUsesSavedOptions();
     void directAutoFactoryCompatibility();
     void directAutoTargetDispatch();
@@ -363,6 +365,30 @@ void AutoCorrectionTest::autoOptionsDefaultsPersist()
         dialog.reject();
     }));
     QCOMPARE(pictura::loadPreferences().autoCorrectionShadowClip, 17.0);
+}
+
+void AutoCorrectionTest::curvesNormalAutoUsesSavedOptions()
+{
+    QVERIFY(openRamp());
+    QVERIFY(addAdjustment(QStringLiteral("curves")));
+    auto* button = panel_->findChild<QPushButton*>(QStringLiteral("propertiesAuto"));
+    auto* channel = panel_->findChild<QComboBox*>(QStringLiteral("adjustmentCurveChannel"));
+    QVERIFY(button && channel && !button->isHidden());
+    const QString factory = pictura::adjustment_curve(*view_, path_, 0);
+    const int history = view_->history_count();
+    channel->setCurrentIndex(1);
+    button->click();
+    QCOMPARE(pictura::adjustment_curve(*view_, path_, 0), factory);
+    QCOMPARE(pictura::adjustment_curve(*view_, path_, 1), QStringLiteral("30,0 220,255"));
+    QCOMPARE(view_->history_count(), history + 1);
+    QVERIFY(view_->undo());
+    panel_->refresh();
+
+    QVERIFY(saveTestDefaults());
+    button->click();
+    QCOMPARE(view_->composite_argb(0, 0), qRgb(32, 32, 32));
+    QCOMPARE(view_->composite_argb(19, 0), qRgb(224, 224, 224));
+    QCOMPARE(view_->history_count(), history + 1);
 }
 
 void AutoCorrectionTest::directAutoUsesSavedOptions()

@@ -49,6 +49,7 @@ pub mod ffi {
             width: i32,
             height: i32,
         ) -> QImage;
+        /// The one-pixel composite below the adjustment, or transparent if unavailable.
         fn adjustment_input_argb(view: &PictureView, path: &QString, x: i32, y: i32) -> u32;
         fn adjustment_input_histogram(source: &AutoCorrectionSource, channel: i32) -> Vec<u32>;
         fn adjustment_auto_block(

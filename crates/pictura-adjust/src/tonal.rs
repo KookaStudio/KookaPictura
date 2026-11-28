@@ -40,6 +40,14 @@ fn curve_lut(points: &[(u8, u8)]) -> Result<[u8; 256], AdjustError> {
             "curves need at least 2 points".into(),
         ));
     }
+    if points.len() == 256
+        && points
+            .iter()
+            .enumerate()
+            .all(|(x, p)| x == usize::from(p.0))
+    {
+        return Ok(std::array::from_fn(|x| points[x].1));
+    }
     if points.len() > 14 {
         return Err(AdjustError::InvalidParams(
             "curves support at most 14 points".into(),

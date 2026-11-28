@@ -237,7 +237,7 @@ fn curves_edit_per_channel() {
     let flat = set_curve_points(&edited, 1, &[(0, 0), (255, 255)]).unwrap();
     assert!(matches!(decode_adjustment(&flat), Some(Adjustment::Curves(c)) if c.red.is_none()));
     assert!(set_curve_points(&curves, 0, &[(10, 0), (5, 255)]).is_none());
-    assert!(set_curve_points(&curves, 4, &red).is_none());
+    assert!(set_curve_points(&curves, 5, &red).is_none());
 }
 
 #[test]
@@ -272,4 +272,56 @@ fn exposure_specs_carry_the_dialog_precision() {
     assert_eq!(spec("exposure"), (-20.0, 20.0, 2));
     assert_eq!(spec("offset"), (-0.5, 0.5, 4));
     assert_eq!(spec("gamma"), (0.01, 9.99, 2));
+}
+
+#[test]
+fn dense_curve_round_trip() {
+    let base = encode_curves(&[(0, 0), (255, 255)], None, None, None);
+    let pencil: Vec<_> = (0..=255u8).map(|x| (x, x ^ 0x20)).collect();
+    let edited = set_curve_points(&base, 1, &pencil).unwrap();
+    let edited = set_curve_points(&edited, 2, &[(0, 5), (255, 245)]).unwrap();
+    assert_eq!(curve_points(&edited, 1).unwrap(), pencil);
+    assert_eq!(curve_points(&edited, 2).unwrap(), [(0, 5), (255, 245)]);
+    let decoded = decode_adjustment(&edited).unwrap();
+    let lut = pictura_adjust::adjustment_lut(&decoded).unwrap();
+    let pictura_adjust::AdjustmentLut::PerChannel(channels) = lut else {
+        panic!("Curves must produce per-channel lookup tables");
+    };
+    for (x, y) in pencil {
+        assert_eq!(channels[0][usize::from(x)], y);
+    }
+}
+
+#[test]
+fn curves_cmyk_channels_round_trip() {
+    let mut block = encode_curves(&[(0, 0), (255, 255)], None, None, None);
+    for channel in 0..5 {
+        block = set_curve_points(&block, channel, &[(0, channel as u8 + 1), (255, 245)]).unwrap();
+    }
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
+        adjustment: Some(block),
+        rect: pictura_core::PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 2,
+        },
+        ..Default::default()
+    });
+    let mut doc = pictura_core::Document::new(
+        2,
+        2,
+        pictura_core::ColorMode::Rgb,
+        pictura_core::BitDepth::Eight,
+    );
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let bytes = pictura_codec::write_psd(&doc).unwrap();
+    let reopened = pictura_codec::read_psd(&bytes).unwrap();
+    let adjustment = reopened.layers[0].adjustment().unwrap();
+    for channel in 0..5 {
+        assert_eq!(
+            curve_points(adjustment, channel).unwrap(),
+            [(0, channel as u8 + 1), (255, 245)]
+        );
+    }
 }

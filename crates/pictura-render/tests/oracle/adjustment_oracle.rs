@@ -154,6 +154,7 @@ fn fixture_curves_decodes() {
             red: None,
             green: None,
             blue: None,
+            black: None,
         }))
     );
 
@@ -169,6 +170,7 @@ fn fixture_curves_decodes() {
             red: Some(vec![(0, 0), (128, 255), (255, 255)]),
             green: Some(vec![(0, 0), (64, 16), (255, 255)]),
             blue: Some(vec![(0, 255), (255, 0)]),
+            black: None,
         }))
     );
 }

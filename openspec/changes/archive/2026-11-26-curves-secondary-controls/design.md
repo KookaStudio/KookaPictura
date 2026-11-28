@@ -1,0 +1,32 @@
+## Context
+
+Both editors use CurveWidget and the same encoded adjustment block. CurveWidget also serves unrelated contour editors, whose opt-in linear interpolation and point behavior must stay compatible. The destructive dialog owns a temporary block and Properties stages layer previews. The current encoder models sparse RGB curves with four channel slots. The renderer's non-RGB adjustments work through its document mode and existing RGB-backed editing representation.
+
+## Goals / Non-Goals
+
+Implement the secondary controls on both Curves surfaces. Preserve existing spline behavior, existing presets, and exact sampling of Pictura-authored pencil curves. Keep the existing adjustment transaction owners. Matching Adobe's proprietary smoothing kernel and byte-exact Photoshop pencil interoperability require a reference file and are outside this change.
+
+## Decisions
+
+- Expose the extra Qt controls as a reusable Curves editor layered over CurveWidget. Keep generic graph settings opt-in. Convert axis units at the UI boundary and keep input coordinates in stored code order.
+- Use a 256-sample table for a pencil stroke, fill skipped inputs by linear interpolation, and keep untouched columns. Apply a bounded three-tap smoothing pass with fixed endpoints. Fit a sparse approximation only when explicitly leaving pencil editing for point editing or when serializing an external fallback.
+- Extend the typed model and editor bridge to hold a composite and four independently addressable CMYK component curves, alongside the existing RGB and Gray/Lab representations. Do not reinterpret the existing four RGB slots. Define the fifth slot in the private extension and retain a valid sparse legacy record as a fallback. An unedited source adjustment block is emitted byte-for-byte, including unknown content. A Pictura edit preserves every unaffected channel, including its dense table and unrelated preserved source content. Only an explicit switch of that same channel from pencil to points replaces its dense table with the fitted sparse approximation.
+- Store each exact 256-sample pencil table in a versioned, length-delimited private trailer alongside the sparse fallback. Locate the trailer from a fixed-size footer at the end of the block, carrying its magic, version and bounded length. Its start MUST be at or after the fully parsed legacy record. Never scan arbitrary bytes for a marker, and retain intervening standard or unknown source bytes. Bound all counts and lengths, reject duplicate channels, unknown versions and truncated or malformed trailers atomically, and use the sparse fallback without partial replacement. Preserve unknown source content rather than mistaking it for the trailer. Saving unchanged source content must retain its exact bytes. Edited content retains unrelated data and regenerates only the affected representation. Photoshop interoperability of the private extension requires separate fixture work. See [Adobe's file format documentation](https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/).
+- For CMYK and Lab, transform RGB-backed input into the document mode using the existing mode-aware transforms, apply the selected component curves in that mode, then transform back to RGB for the editing pipeline. Apply the composite consistently in that mode, preserve identity bit-exactly by skipping conversion for an identity adjustment, and retain native-depth processing where the pipeline supports it. Since these transforms couple RGB channels, route non-RGB Curves to the CPU rather than the GPU's independent RGB LUT. RGB dense tables may use the existing LUT path only when it evaluates the exact tables.
+- Auto uses the existing fixed 0.1%-per-tail histogram stretch for the selected RGB or Gray channel. Empty or narrower-than-two-level histograms leave the block and history unchanged. Disable Auto in CMYK and Lab. The fixed stretch uses no Auto Options.
+- Sample once on press for targeted adjustment and move that same selected point vertically with the drag. Use the original preview input when available. Integrate with canvas press/drag/release ownership and clear it when a target disappears.
+- For dark/light samples replace the appropriate endpoint. For a gray sample update RGB components together to map to a common lightness. Gray sampling is unavailable for a single-channel curve. Use existing mode-aware color transforms where the edit pipeline uses RGB backing. Keep identity adjustments free of conversion error.
+
+## Risks / Trade-offs
+
+- A freehand curve can contain details that a compatible sparse fallback cannot represent.
+- A canvas pick must be canceled on dialog close or a change of Properties target so it never acts on another image.
+- Properties picks composite a one-pixel prefix and enter the innermost isolated group before sampling. A clipped adjustment can see an isolated clipping-run backdrop that this prefix does not reproduce. Complex effects can also expand work beyond the requested pixel. Histograms remain based on the displayed composite when the Properties target opens.
+- On edit, a complete, recognized version-4 `Crv ` duplicate at the legacy-record boundary is removed. Malformed, unsupported or unrecognized trailing records are preserved and may remain stale for external readers.
+- CMYK and Lab are displayed in their own units. Their available precision is governed by the document's RGB-backed editing representation. The mode transform is an approximation and cannot recover source component information lost in RGB conversion.
+
+## Properties layout follow-up
+
+Keep the inner editor named and keyboard-accessible with existing Pictura widgets. Move the configured Properties Auto button into the channel row, retaining Alt-click, saved defaults and the menu. Without an override, normal Curves Auto uses the selected channel's factory stretch. Use one endpoint track with two handles and draw the plot at the width available beside the strip. Share the existing Properties clipping preview with its menu, reset it on target changes, and keep the dialog layout independent. Reuse Pictura icons and register original theme-tinted icons for missing tools.
+
+Keep display options as editor-local state. The Properties menu and the existing destructive Curves button open the same modal, which edits a copy and applies it only on acceptance. Display changes update the graph and coordinate fields without staging a document edit.

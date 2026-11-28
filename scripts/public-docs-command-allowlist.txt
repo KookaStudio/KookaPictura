@@ -69,6 +69,7 @@ paragraph.singleLineComposer Paragraph panel control
 paragraph.everyLineComposer Paragraph panel control
 paragraph.reset Paragraph panel control
 panel.properties.autoOptions Levels and Curves Properties panel control
+panel.properties.curvesDisplay Properties panel control
 panel.properties.savePreset Properties panel control
 panel.properties.loadPreset Properties panel control
 panel.properties.clipToggle Properties panel control

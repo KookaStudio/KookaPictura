@@ -6,8 +6,8 @@
 #include "api/type_api.h"
 
 #include "adjustment_controls.h"
-#include "adjustment_presets.h"
 #include "tools.h"
+#include "adjustment_presets.h"
 #include "image_view.h"
 
 #include <algorithm>
@@ -46,8 +46,6 @@
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
-#include <algorithm>
-#include <cmath>
 #include <map>
 #include <memory>
 
@@ -193,12 +191,13 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     adjustmentLayout->addWidget(autoButton_, 0, Qt::AlignRight);
     controls_ = new AdjustmentControls(adjustmentPage);
     controls_->setObjectName(QStringLiteral("propertiesControls"));
+    controls_->setCurvesAutoButton(autoButton_);
+    connect(controls_, &AdjustmentControls::curvesClippingChanged, this, &PropertiesPanel::setClippingPreview);
     controls_->setCurveSource([this](int channel) {
         return view_ ? QString(adjustment_curve(*view_, path_, channel)) : QString();
     });
     connect(controls_, &AdjustmentControls::valueChanged, this, &PropertiesPanel::push);
     connect(controls_, &AdjustmentControls::valueChanged, this, [this] { if (levelsClipping_) updateLevelsClipping(); });
-    connect(controls_, &AdjustmentControls::curvesCanvasRequested, this, &PropertiesPanel::startCurvesCanvas);
     connect(controls_, &AdjustmentControls::levelsChannelChanged, this, [this] { if (levelsClipping_) updateLevelsClipping(); });
     connect(controls_, &AdjustmentControls::levelsPickRequested, this, [this](int point) {
         if (!tools_ || !view_ || path_.isEmpty() || tools_->canvasSamplerActive() || tools_->canvasBrushActive()) return;
@@ -253,9 +252,23 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
                 if (!previewTimer_->isActive()) {
                     previewTimer_->start();
                 }
-                commitTimer_->start();
+                if (!curveGestureActive_) {
+                    commitTimer_->start();
+                }
             });
-    connect(controls_, &AdjustmentControls::gestureEnded, this, &PropertiesPanel::commit);
+    connect(controls_, &AdjustmentControls::curveGestureStarted, this, [this] {
+        commit();
+        curveGestureActive_ = true;
+    });
+    connect(controls_, &AdjustmentControls::gestureEnded, this, [this] {
+        curveGestureActive_ = false;
+        commit();
+    });
+    connect(controls_, &AdjustmentControls::grayPointPicked, this, [this](const QColor& color) {
+        if (view_ && !path_.isEmpty()) {
+            applyPresetBlock(curvesGrayPointBlock(bytes(adjustment_block(*view_, path_)), color));
+        }
+    });
     adjustmentLayout->addWidget(controls_);
     connect(preset_, &PresetCombo::presetChosen, this,
             [this](const QByteArray& block) { applyPresetBlock(block); });
@@ -685,10 +698,12 @@ void PropertiesPanel::setView(PictureView* view)
         focusNextAdjustment_ = true;
         if (tools_ && tools_->canvas()) tools_->canvas()->clearFilterPreview();
         if (levelsPicking_ && tools_) tools_->setCanvasSampler({});
-        if (curvesPicking_ && tools_) tools_->setCanvasBrush({});
         levelsPicking_ = false;
-        curvesPicking_ = false;
         levelsClipping_ = false;
+        if (auto* curves = controls_->curves()) {
+            curves->disarm();
+        }
+        curveContextPath_.clear();
         commit();
     }
     view_ = view;
@@ -731,10 +746,12 @@ void PropertiesPanel::refresh()
     if (pageChanged) {
         if (tools_ && tools_->canvas()) tools_->canvas()->clearFilterPreview();
         if (levelsPicking_ && tools_) tools_->setCanvasSampler({});
-        if (curvesPicking_ && tools_) tools_->setCanvasBrush({});
         levelsPicking_ = false;
-        curvesPicking_ = false;
         levelsClipping_ = false;
+        if (auto* curves = controls_->curves()) {
+            curves->disarm();
+        }
+        curveContextPath_.clear();
         commit();
     }
     path_ = path;
@@ -880,7 +897,6 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
     setPage(AdjustmentPage);
     canvas_->hide();
     footer_->show();
-    autoButton_->setVisible(canAutoCorrect());
     const bool supported = adjustmentPresetSupportsMenu(kind_);
     preset_->setVisible(supported);
     if (supported && view_) {
@@ -888,7 +904,7 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
     } else {
         preset_->setBlock(QString(), QByteArray());
     }
-    if (view_ && (kind_ == QLatin1String("levels") || kind_ == QLatin1String("curves"))) {
+    if (view_ && kind_ == QLatin1String("levels")) {
         std::array<std::array<int, 256>, 4> histograms{};
         const auto source = adjustment_auto_source(*view_, path_);
         for (int channel = 0; channel < 4; ++channel) {
@@ -901,11 +917,23 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
             return histograms.at(std::clamp(channel, 0, 3));
         });
     }
-    controls_->setPage(page, dirty_);
+    refreshCurvesContext();
+    controls_->setPage(page, dirty_ || curveGestureActive_);
+    placeAutoButton();
+    if (auto* curves = controls_->curves()) {
+        if (!curves->autoAvailable() && levelsClipping_) {
+            setClippingPreview(false);
+        }
+        curves->setClippingPreview(levelsClipping_);
+    }
     if (view_ && !dirty_) {
         controls_->refreshThresholdHistogram(*view_, path_);
     }
-    if (kind_ == QLatin1String("curves") && autoSelectCurves_ && !curvesPicking_) startCurvesCanvas(0);
+    if (autoSelectCurves_) {
+        if (auto* curves = controls_->curves()) {
+            curves->setTargeting(true);
+        }
+    }
     title_ = controls_->title();
     header_->setText(title_);
 }
@@ -983,6 +1011,10 @@ void PropertiesPanel::performPanelMenuAction(const QString& id)
         loadPreset();
     } else if (id == QLatin1String("autoOptions")) {
         applyAuto(true);
+    } else if (id == QLatin1String("curvesDisplay")) {
+        if (auto* curves = controls_->curves(); curves && kind_ == QLatin1String("curves")) {
+            curves->openDisplayOptions();
+        }
     }
 }
 
@@ -1004,12 +1036,8 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
                     if (enabled) controls_->focusFirstParameter();
                 });
             }
-        } else if (id == QLatin1String("properties.curvesDisplay")) {
+        } else if (id == QLatin1String(command_ids::PanelPropertiesCurvesDisplay)) {
             action->setEnabled(hasLayer && kind_ == QLatin1String("curves"));
-            if (!action->property("propertiesConnected").toBool()) {
-                action->setProperty("propertiesConnected", true);
-                connect(action, &QAction::triggered, this, [this] { controls_->toggleCurvesDisplay(); });
-            }
         } else if (id == QLatin1String("properties.autoTarget")) {
             action->setEnabled(hasLayer && kind_ == QLatin1String("curves"));
             action->setChecked(autoSelectCurves_);
@@ -1017,8 +1045,9 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
                 action->setProperty("propertiesConnected", true);
                 connect(action, &QAction::triggered, this, [this](bool enabled) {
                     autoSelectCurves_ = enabled;
-                    if (enabled && !curvesPicking_) startCurvesCanvas(0);
-                    else if (!enabled && curvesPicking_ && tools_) { tools_->setCanvasBrush({}); curvesPicking_ = false; }
+                    if (auto* curves = controls_->curves()) {
+                        curves->setTargeting(enabled);
+                    }
                 });
             }
         } else if (id == QLatin1String("properties.deletePreset")) {
@@ -1044,14 +1073,13 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
                 });
             }
         } else if (id == QLatin1String("properties.showClipping")) {
-            action->setEnabled(hasLayer && (kind_ == QLatin1String("levels") || kind_ == QLatin1String("curves")));
-            action->setChecked(levelsClipping_);
+            const auto* curves = controls_->curves();
+            const bool available = hasLayer && (kind_ == QLatin1String("levels") || (curves && curves->autoAvailable()));
+            action->setEnabled(available);
+            action->setChecked(available && levelsClipping_);
             if (!action->property("propertiesClippingConnected").toBool()) {
                 action->setProperty("propertiesClippingConnected", true);
-                connect(action, &QAction::triggered, this, [this](bool enabled) {
-                    levelsClipping_ = enabled;
-                    updateLevelsClipping();
-                });
+                connect(action, &QAction::triggered, this, &PropertiesPanel::setClippingPreview);
             }
         } else if (id == QLatin1String(command_ids::PanelPropertiesAutoOptions)) {
             action->setEnabled(canAutoCorrect());
@@ -1130,7 +1158,9 @@ void PropertiesPanel::edited()
     if (preset_ && !preset_->isHidden() && view_ && !path_.isEmpty()) {
         preset_->setBlock(kind_, bytes(adjustment_block(*view_, path_)));
     }
-    commitTimer_->start();
+    if (!curveGestureActive_) {
+        commitTimer_->start();
+    }
 }
 
 void PropertiesPanel::commit()

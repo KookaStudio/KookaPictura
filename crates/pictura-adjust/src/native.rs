@@ -7,6 +7,10 @@
 //! adjustment outside the covered set is refused with [`AdjustError::Unsupported`]
 //! and the store is left unchanged.
 
+mod curves;
+
+pub(crate) use self::curves::curve_map;
+
 use crate::types::levels_map;
 use pictura_core::{BitDepth, PixelBuffer, Sample, Samples};
 
@@ -16,17 +20,15 @@ use crate::color::{
     band_delta, band_weights, cmyk_unit_to_rgb, hue_saturation_is_identity, hue_saturation_rgb,
     rgb_unit_to_cmyk, skin_bump, validate_hue_saturation,
 };
-use crate::common::{
-    hermite_eval, hsl_to_rgb, linear_to_srgb, luma, monotone_tangents, rgb_to_hsl, srgb_to_linear,
-};
+use crate::common::{hermite_eval, hsl_to_rgb, linear_to_srgb, luma, rgb_to_hsl, srgb_to_linear};
 use crate::lut::sample;
 use crate::tonal::gradient_lut;
 use crate::types::{
     AdjustError, Adjustment, AutoKind, BlackWhiteParams, BrightnessContrastParams,
-    ChannelMixerParams, ColorBalanceMode, ColorBalanceParams, ColorLookupParams, CurvesParams,
-    ExposureParams, GradientMapParams, HueSaturationParams, LevelsChannel, Lut3d,
-    PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams, SelectiveRange,
-    ShadowsHighlightsParams, VibranceParams,
+    ChannelMixerParams, ColorBalanceMode, ColorBalanceParams, ColorLookupParams, ExposureParams,
+    GradientMapParams, HueSaturationParams, LevelsChannel, Lut3d, PhotoFilterParams,
+    SelectiveColorMethod, SelectiveColorParams, SelectiveRange, ShadowsHighlightsParams,
+    VibranceParams,
 };
 
 type Rgb = [f64; 3];
@@ -88,7 +90,16 @@ pub fn apply_native_in_mode(
             });
             Ok(())
         }
-        Adjustment::Curves(p) => curves_native(p, samples, width, height, channels),
+        Adjustment::Curves(p) if mode == ColorBalanceMode::Rgb => {
+            curves::curves_native_rgb(p, samples, width, height, channels)
+        }
+        Adjustment::Curves(p) => {
+            let map_curve = curve_map(p, mode)?;
+            if let Some(map_curve) = map_curve {
+                map(samples, width, height, channels, map_curve);
+            }
+            Ok(())
+        }
         Adjustment::BrightnessContrast(p) => {
             brightness_contrast_native(p, samples, width, height, channels)
         }
@@ -315,68 +326,6 @@ fn shadows_highlights_native(
             (r + delta).clamp(0.0, 1.0),
             (g + delta).clamp(0.0, 1.0),
             (b + delta).clamp(0.0, 1.0),
-        ]
-    });
-    Ok(())
-}
-
-struct Curve {
-    xs: Vec<f64>,
-    ys: Vec<f64>,
-    ms: Vec<f64>,
-}
-
-fn curve(points: &[(u8, u8)]) -> Result<Curve, AdjustError> {
-    if points.len() < 2 {
-        return Err(AdjustError::InvalidParams(
-            "curves need at least 2 points".into(),
-        ));
-    }
-    if points.len() > 14 {
-        return Err(AdjustError::InvalidParams(
-            "curves support at most 14 points".into(),
-        ));
-    }
-    let xs: Vec<f64> = points.iter().map(|q| q.0 as f64).collect();
-    let ys: Vec<f64> = points.iter().map(|q| q.1 as f64).collect();
-    if xs.windows(2).any(|w| w[0] >= w[1]) {
-        return Err(AdjustError::InvalidParams(
-            "curve inputs must be strictly increasing".into(),
-        ));
-    }
-    let ms = monotone_tangents(&xs, &ys);
-    Ok(Curve { xs, ys, ms })
-}
-
-fn curve_unit(c: &Curve, u: f64) -> f64 {
-    hermite_eval(&c.xs, &c.ys, &c.ms, u * 255.0) / 255.0
-}
-
-fn curves_native(
-    p: &CurvesParams,
-    samples: &mut Samples,
-    width: usize,
-    height: usize,
-    channels: u8,
-) -> Result<(), AdjustError> {
-    let composite = curve(&p.points)?;
-    let red = p.red.as_deref().map(curve).transpose()?;
-    let green = p.green.as_deref().map(curve).transpose()?;
-    let blue = p.blue.as_deref().map(curve).transpose()?;
-    if red.is_some() || green.is_some() || blue.is_some() {
-        map(samples, width, height, channels, |[r, g, b]| {
-            [
-                red.as_ref().map_or(r, |c| curve_unit(c, r)),
-                green.as_ref().map_or(g, |c| curve_unit(c, g)),
-                blue.as_ref().map_or(b, |c| curve_unit(c, b)),
-            ]
-        });
-    }
-    map(samples, width, height, channels, move |[r, g, b]| {
-        [
-            curve_unit(&composite, r),
-            curve_unit(&composite, g),
-            curve_unit(&composite, b),
         ]
     });
     Ok(())

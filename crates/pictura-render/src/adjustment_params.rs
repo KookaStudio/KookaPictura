@@ -831,7 +831,7 @@ pub fn reset_adjustment_in_mode(data: &AdjustmentData, cmyk: bool) -> Option<Adj
 }
 
 /// A Curves layer's points for `channel` (0 composite, 1 red, 2 green,
-/// 3 blue); an absent channel curve is the identity line.
+/// 3 blue, 4 black); an absent channel curve is the identity line.
 pub fn curve_points(data: &AdjustmentData, channel: usize) -> Option<Vec<(u8, u8)>> {
     let Some(Adjustment::Curves(curves)) = decode_adjustment(data) else {
         return None;
@@ -842,12 +842,12 @@ pub fn curve_points(data: &AdjustmentData, channel: usize) -> Option<Vec<(u8, u8
         1 => curves.red.unwrap_or_else(identity),
         2 => curves.green.unwrap_or_else(identity),
         3 => curves.blue.unwrap_or_else(identity),
+        4 => curves.black.unwrap_or_else(identity),
         _ => return None,
     })
 }
 
-/// A Curves layer with `channel`'s points replaced (2..=14 strictly
-/// increasing inputs). An identity channel curve is dropped rather than
+/// A Curves layer with `channel`'s points replaced (2..=14 increasing inputs or all 256 codes). An identity channel curve is dropped rather than
 /// stored. `None` for another kind or invalid points.
 pub fn set_curve_points(
     data: &AdjustmentData,
@@ -857,7 +857,9 @@ pub fn set_curve_points(
     let Some(Adjustment::Curves(mut curves)) = decode_adjustment(data) else {
         return None;
     };
-    if !(2..=14).contains(&points.len()) || points.windows(2).any(|w| w[0].0 >= w[1].0) {
+    if (!(2..=14).contains(&points.len()) && points.len() != 256)
+        || points.windows(2).any(|w| w[0].0 >= w[1].0)
+    {
         return None;
     }
     let channel_curve = (points != [(0, 0), (255, 255)]).then(|| points.to_vec());
@@ -866,14 +868,10 @@ pub fn set_curve_points(
         1 => curves.red = channel_curve,
         2 => curves.green = channel_curve,
         3 => curves.blue = channel_curve,
+        4 => curves.black = channel_curve,
         _ => return None,
     }
-    let out = crate::encode_curves(
-        &curves.points,
-        curves.red.as_deref(),
-        curves.green.as_deref(),
-        curves.blue.as_deref(),
-    );
+    let out = pictura_codec::layer_content::curves::encode_curves_params(&curves, Some(data));
     decode_adjustment(&out).map(|_| out)
 }
 

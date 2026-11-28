@@ -23,6 +23,8 @@ private slots:
     void rampSliderRampAndTracking();
     void spectrumBarHueShiftRepaints();
     void curveWidgetDefaultsAndLut();
+    void curvesEndpointAndDisplay();
+    void curvesPencilSmooth();
     void jumpSliderJumpsToClickAndTracks();
 };
 
@@ -122,6 +124,41 @@ void SharedWidgetsTest::curveWidgetDefaultsAndLut()
     uint8_t resetLut[256];
     curve.buildLut(resetLut);
     QCOMPARE(int(resetLut[128]), 128);
+}
+
+void SharedWidgetsTest::curvesEndpointAndDisplay()
+{
+    pictura::CurveWidget curve;
+    curve.enableCurvesControls();
+    curve.setEndpoint(true, 243);
+    QCOMPARE(curve.pointsText(), QStringLiteral("0,0 243,255"));
+    QCOMPARE(curve.outputAt(243), 255);
+    QCOMPARE(curve.outputAt(250), 255);
+    const QString points = curve.pointsText();
+    curve.setGraphOptions(true, true, true);
+    curve.setShowHistogram(false);
+    QCOMPARE(curve.pointsText(), points);
+}
+
+void SharedWidgetsTest::curvesPencilSmooth()
+{
+    pictura::CurveWidget curve;
+    curve.resize(265, 265);
+    curve.enableCurvesControls();
+    curve.setPencilEnabled(true);
+    QTest::mousePress(&curve, Qt::LeftButton, Qt::NoModifier, QPoint(55, 25));
+    QTest::mouseMove(&curve, QPoint(155, 55));
+    QTest::mouseRelease(&curve, Qt::LeftButton, Qt::NoModifier, QPoint(155, 55));
+    QVERIFY(curve.hasDenseCurve());
+    QVERIFY(curve.outputAt(100) > 180);
+    QCOMPARE(curve.outputAt(0), 0);
+    QCOMPARE(curve.outputAt(255), 255);
+    const QString drawn = curve.pointsText();
+    curve.smoothPencil();
+    const QString smoothed = curve.pointsText();
+    QVERIFY(smoothed != drawn);
+    curve.smoothPencil();
+    QVERIFY(curve.pointsText() != smoothed);
 }
 
 void SharedWidgetsTest::jumpSliderJumpsToClickAndTracks()

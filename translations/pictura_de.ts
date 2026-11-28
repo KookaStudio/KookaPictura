@@ -180,6 +180,10 @@ GPU-Treiber: %5</translation>
         <translation>32-Bit-Vorschauoptionen…</translation>
     </message>
     <message>
+        <source>Curves Display Options…</source>
+        <translation>Anzeigeoptionen für Gradationskurven…</translation>
+    </message>
+    <message>
         <source>100%</source>
         <translation>100%</translation>
     </message>

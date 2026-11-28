@@ -1,9 +1,12 @@
 #pragma once
 
+#include <QtCore/QMargins>
 #include <QtCore/QPointF>
+#include <QtCore/QPair>
 #include <QtCore/QRectF>
 #include <QtCore/QString>
 #include <QtCore/QVector>
+#include <QtGui/QColor>
 #include <QtWidgets/QWidget>
 
 #include <array>
@@ -62,21 +65,34 @@ public:
     // The selected point's index, or -1.
     int selected() const { return selected_; }
     // Move the selected point to (`input`, `output`) in 0..255, its input
-    // kept strictly between its neighbours'; endpoints keep their input.
+    // kept strictly between its neighbours'. Endpoint input movement is opt-in.
     void moveSelected(int input, int output);
-    bool selectTone(int input);
     void selectFirstPoint();
-    int outputAt(int input) const;
-    void setEndpoint(bool white, int input);
 
     void buildLut(uint8_t lut[256]) const;
     const float (&normalizedSamples() const)[256] { return curve_; }
 
+    void enableCurvesControls() { secondaryControls_ = true; }
+    void setGraphOptions(bool detailed, bool guides, bool reversed);
+    void setOverlays(const QVector<QPair<QColor, QString>>& overlays);
+    bool hasDenseCurve() const { return points_.size() == 256; }
+    bool setPencilEnabled(bool enabled);
+    void smoothPencil();
+    void setEndpoint(bool white, int input, bool resetOutput = true);
+    bool selectTone(int input);
+    int outputAt(int input) const;
+
+    void useSquareLayout();
+    QMargins plotInsets() const;
+    int heightForWidth(int width) const override;
     QSize sizeHint() const override;
 
 signals:
     void curveChanged();
     void selectionChanged();
+    void gestureStarted();
+    void gestureEnded();
+    void gridToggled();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -89,6 +105,7 @@ private:
     void interpolate();
     void select(int index);
     void removeAt(int index);
+    void drawPencilTo(QPointF position);
     // The square the curve is drawn in, right of / above the ramps.
     QRectF plot() const;
     QPointF toWidget(QPointF p) const;
@@ -103,6 +120,14 @@ private:
     bool showBaseline_ = true;
     bool showRamps_ = false;
     bool linear_ = false;
+    bool secondaryControls_ = false;
+    bool detailedGrid_ = false;
+    bool guides_ = false;
+    bool reversed_ = false;
+    bool pencil_ = false;
+    bool gesture_ = false;
+    int pencilLast_ = -1;
+    QVector<QPair<QColor, QVector<float>>> overlays_;
 };
 
 } // namespace pictura

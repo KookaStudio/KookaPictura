@@ -181,6 +181,7 @@ fn curves_identity_and_control_point() {
             red: None,
             green: None,
             blue: None,
+            black: None,
         }),
         &mut b,
     )
@@ -193,6 +194,7 @@ fn curves_identity_and_control_point() {
             red: None,
             green: None,
             blue: None,
+            black: None,
         }),
         &mut b,
     )
@@ -209,6 +211,7 @@ fn curves_monotone_and_validation() {
             red: None,
             green: None,
             blue: None,
+            black: None,
         }),
         &mut b,
     )
@@ -223,6 +226,7 @@ fn curves_monotone_and_validation() {
             red: None,
             green: None,
             blue: None,
+            black: None,
         }),
         &mut b
     )
@@ -233,6 +237,7 @@ fn curves_monotone_and_validation() {
             red: None,
             green: None,
             blue: None,
+            black: None,
         }),
         &mut b
     )
@@ -248,6 +253,7 @@ fn curves_per_channel_touches_only_its_plane() {
             red: Some(vec![(0, 0), (128, 255), (255, 255)]),
             green: None,
             blue: None,
+            black: None,
         }),
         &mut b,
     )
@@ -267,6 +273,7 @@ fn curves_per_channel_only_with_identity_composite() {
             red: None,
             green: Some(vec![(0, 0), (128, 255), (255, 255)]),
             blue: None,
+            black: None,
         }),
         &mut b,
     )
@@ -290,6 +297,7 @@ fn curves_composite_applies_after_per_channel() {
             red: Some(vec![(0, 0), (100, 50), (255, 255)]),
             green: None,
             blue: None,
+            black: None,
         }),
         &mut b,
     )
@@ -308,6 +316,7 @@ fn curves_rejects_bad_per_channel() {
             red: Some(vec![(0, 0), (0, 255)]),
             green: None,
             blue: None,
+            black: None,
         }),
         &mut b
     )
@@ -1127,6 +1136,7 @@ fn alpha_is_never_modified() {
             red: None,
             green: None,
             blue: None,
+            black: None,
         }),
         Adjustment::BrightnessContrast(BrightnessContrastParams {
             brightness: 10,

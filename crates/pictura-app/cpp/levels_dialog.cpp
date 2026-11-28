@@ -132,22 +132,38 @@ void TriangleSlider::setColor(int index, const QColor& color)
 
 int TriangleSlider::value(int index) const { return thumbs_[index].value; }
 
+void TriangleSlider::setTrackInsets(int left, int right)
+{
+    leftInset_ = left;
+    rightInset_ = right;
+    update();
+}
+
+void TriangleSlider::setInvertedAppearance(bool inverted)
+{
+    inverted_ = inverted;
+    update();
+}
+
 int TriangleSlider::xForValue(int value) const
 {
-    return LevelsStrip::kInset + value * std::max(1, width() - 2 * LevelsStrip::kInset - 1) / 255;
+    const int span = std::max(1, width() - leftInset_ - rightInset_);
+    return leftInset_ + (inverted_ ? 255 - value : value) * span / 255;
 }
 
 int TriangleSlider::valueForX(int index, int x) const
 {
-    const int span = std::max(1, width() - 2 * LevelsStrip::kInset - 1);
-    return std::clamp((x - LevelsStrip::kInset) * 255 / span, thumbs_[index].min, thumbs_[index].max);
+    const int span = std::max(1, width() - leftInset_ - rightInset_);
+    const int value = (x - leftInset_) * 255 / span;
+    return std::clamp(inverted_ ? 255 - value : value, thumbs_[index].min, thumbs_[index].max);
 }
 
 void TriangleSlider::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    for (const Thumb& thumb : thumbs_) {
+    for (int i = 0; i < thumbs_.size(); ++i) {
+        const auto& thumb = thumbs_[i];
         const qreal x = xForValue(thumb.value) + 0.5;
         QPainterPath path;
         path.moveTo(x, 1);
@@ -155,7 +171,9 @@ void TriangleSlider::paintEvent(QPaintEvent*)
         path.lineTo(x + 5, kThumbHeight + 1);
         path.closeSubpath();
         p.setBrush(thumb.color);
-        p.setPen(QPen(QColor(90, 90, 90), 1));
+        const bool focused = hasFocus() && i == keyboardThumb_;
+        p.setPen(QPen(focused ? palette().highlight().color() : QColor(90, 90, 90),
+                      focused ? 2 : 1));
         p.drawPath(path);
     }
 }
@@ -175,6 +193,11 @@ void TriangleSlider::mousePressEvent(QMouseEvent* event)
             best = distance;
             dragging_ = i;
         }
+    }
+    if (dragging_ >= 0) {
+        keyboardThumb_ = dragging_;
+        emit dragStarted();
+        update();
     }
     if (draggingInputEndpoint()) {
         qApp->installEventFilter(this);
@@ -201,6 +224,31 @@ void TriangleSlider::mouseReleaseEvent(QMouseEvent* event)
     if (event->button() == Qt::LeftButton) {
         endDrag();
     }
+}
+
+void TriangleSlider::keyPressEvent(QKeyEvent* event)
+{
+    const int key = event->key();
+    if (key == Qt::Key_Up || key == Qt::Key_Down) {
+        const int delta = key == Qt::Key_Up ? -1 : 1;
+        keyboardThumb_ = std::clamp(keyboardThumb_ + delta, 0, int(thumbs_.size()) - 1);
+        update();
+        return;
+    }
+    if (key == Qt::Key_Left || key == Qt::Key_Right) {
+        const int index = keyboardThumb_;
+        const int delta = ((key == Qt::Key_Right) != inverted_) ? 1 : -1;
+        const auto& thumb = thumbs_[index];
+        const int value = std::clamp(thumb.value + delta, thumb.min, thumb.max);
+        if (value != thumb.value) {
+            emit dragStarted();
+            setValue(index, value);
+            emit valueChanged(index, value);
+            emit dragEnded();
+        }
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 
 bool TriangleSlider::event(QEvent* event)
@@ -243,7 +291,11 @@ void TriangleSlider::endDrag()
         qApp->removeEventFilter(this);
         updateClipping(false);
     }
+    const bool wasDragging = dragging_ >= 0;
     dragging_ = -1;
+    if (wasDragging) {
+        emit dragEnded();
+    }
 }
 
 LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRect& visible,

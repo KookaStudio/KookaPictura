@@ -75,7 +75,7 @@ public:
     void setPreviewArea(const QRect& visible);
     // The tool controller whose canvas sampler a colour picker opened from
     // this dialog arms, so the picker can take a colour from the image.
-    void setCanvasSampling(ToolController* tools) { tools_ = tools; }
+    virtual void setCanvasSampling(ToolController* tools) { tools_ = tools; }
 
 protected:
     // A hand-laid-out dialog titled `title`: no generic controls. The subclass

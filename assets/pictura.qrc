@@ -43,6 +43,12 @@
     <file>icons/adjustments.selective-color.svg</file>
     <file>icons/chevron.down.svg</file>
     <file>icons/chevron.up.svg</file>
+    <file>icons/curves.blackPoint.svg</file>
+    <file>icons/curves.clipping.svg</file>
+    <file>icons/curves.grayPoint.svg</file>
+    <file>icons/curves.smooth.svg</file>
+    <file>icons/curves.target.svg</file>
+    <file>icons/curves.whitePoint.svg</file>
     <file>icons/edit.redo.svg</file>
     <file>icons/edit.stepBackward.svg</file>
     <file>icons/edit.stepForward.svg</file>

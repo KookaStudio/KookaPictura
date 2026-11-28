@@ -278,7 +278,7 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 |---|---|---|---|---|---|---|---|---|---|---|
 | P-IMG-01 | Brightness/Contrast | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src/tonal.rs | none | Auto ships | #578 |
 | P-IMG-02 | Levels | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/levels_dialog.cpp | automated:tst_levels_canvas_controls::levelsAltDragClips | RGB and Grayscale eyedroppers and clipping preview ship; CS6 and native-depth behavior remain unverified | #560 |
-| P-IMG-03 | Curves | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | On-image, pencil, smooth, sliders, display options, CMYK/Lab graphs remain | #561 |
+| P-IMG-03 | Curves | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Secondary controls implemented; CMYK/Lab and histogram display are approximations | #561 |
 | P-IMG-04 | Exposure | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
 | P-IMG-05 | Vibrance | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Auto uses a bounded sample and presets use Pictura format | #564 |
 | P-IMG-06 | Hue/Saturation | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Colorize, range-band editing, eyedroppers, and on-image tool remain | #573 |

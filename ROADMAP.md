@@ -312,7 +312,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] The Local Adaptation Toning Curve and Corner option (follow-up to #557)
 - [x] The Auto Color Correction Options dialog (#559)
 - [x] Levels eyedroppers and the Alt-drag clipping preview for RGB and Grayscale (#560)
-- [ ] The Curves secondary UI: on-image, pencil and smooth, sliders and
+- [x] The Curves secondary UI: on-image, pencil and smooth, sliders and
       eyedroppers, display options, and the CMYK and Lab graphs (#561)
 - [x] The Shadows/Highlights local-surround operator and its eight controls
       (#562)

@@ -63,6 +63,7 @@ fn every_kernel() -> Vec<(&'static str, Adjustment)> {
                 red: None,
                 green: None,
                 blue: None,
+                black: None,
             }),
         ),
         (

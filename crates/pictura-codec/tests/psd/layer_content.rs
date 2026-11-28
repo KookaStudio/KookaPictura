@@ -119,6 +119,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
         red: Some(vec![(0, 10), (255, 240)]),
         green: None,
         blue: None,
+        black: None,
     };
     let mut selective = SelectiveColorParams::default();
     selective.ranges[0].c = 20;
@@ -236,6 +237,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
                 red: Some(vec![(0, 10), (255, 240)]),
                 green: None,
                 blue: None,
+                black: None,
             }),
         ),
         (
@@ -634,4 +636,71 @@ fn shadow_highlight_blocks_round_trip() {
     let mut malformed = expanded.data.to_vec();
     malformed.pop();
     assert!(decode_adjustment(&block(b"shd2", malformed)).is_none());
+}
+
+#[test]
+fn curves_trailer_fallback_and_source_preservation() {
+    use pictura_codec::layer_content::curves::{encode_curves, encode_curves_params};
+    use pictura_core::CurvesParams;
+
+    let source = encode_curves(&[(0, 0), (255, 255)], None, None, None);
+    let mut raw = source.data.to_vec();
+    raw.extend_from_slice(b"opaque-content");
+    let source = block(b"curv", raw);
+    let dense = CurvesParams {
+        points: (0..=255u8).map(|x| (x, x ^ 64)).collect(),
+        red: None,
+        green: None,
+        blue: None,
+        black: None,
+    };
+    let extended = encode_curves_params(&dense, Some(&source));
+    let bytes = extended.data.as_slice();
+    assert!(bytes.windows(14).any(|window| window == b"opaque-content"));
+    assert_eq!(
+        decode_adjustment(&extended),
+        Some(Adjustment::Curves(dense.clone()))
+    );
+
+    let legacy_end = bytes.len() - 7 - 258;
+    let legacy = decode_adjustment(&block(b"curv", bytes[..legacy_end].to_vec()));
+    let mut wrong_version = bytes.to_vec();
+    wrong_version[bytes.len() - 7] = 2;
+    assert_eq!(decode_adjustment(&block(b"curv", wrong_version)), legacy);
+    assert_eq!(
+        decode_adjustment(&block(b"curv", bytes[..bytes.len() - 1].to_vec())),
+        legacy
+    );
+    let mut duplicate = bytes[..bytes.len() - 7].to_vec();
+    duplicate.extend_from_slice(&bytes[legacy_end..legacy_end + 258]);
+    duplicate.push(1);
+    duplicate.extend_from_slice(&516u16.to_be_bytes());
+    duplicate.extend_from_slice(b"PkCv");
+    assert_eq!(decode_adjustment(&block(b"curv", duplicate)), legacy);
+
+    let mut standard = encode_curves(&[(0, 0), (255, 255)], None, None, None)
+        .data
+        .to_vec();
+    standard.extend_from_slice(b"Crv \0\x04\0\0\0\x01\0\x02\0\0\0\0\0\xff\0\xff");
+    standard.extend_from_slice(b"unrelated");
+    let edited = encode_curves_params(&dense, Some(&block(b"curv", standard)));
+    assert!(!edited.data.windows(4).any(|bytes| bytes == b"Crv "));
+    assert!(edited.data.windows(9).any(|bytes| bytes == b"unrelated"));
+    assert_eq!(
+        decode_adjustment(&edited),
+        Some(Adjustment::Curves(dense.clone()))
+    );
+
+    let mut truncated = encode_curves(&[(0, 0), (255, 255)], None, None, None)
+        .data
+        .to_vec();
+    truncated.extend_from_slice(b"Crv \0\x04\0\0\0\x01\0\x02");
+    let edited = encode_curves_params(&dense, Some(&block(b"curv", truncated)));
+    assert!(edited.data.windows(4).any(|bytes| bytes == b"Crv "));
+
+    let doc = document(layer(Some(extended.clone()), Vec::new()));
+    for serialized in [write_psd(&doc).unwrap(), write_psb(&doc).unwrap()] {
+        let reopened = read_psd(&serialized).unwrap();
+        assert_eq!(reopened.layers[0].adjustment(), Some(&extended));
+    }
 }

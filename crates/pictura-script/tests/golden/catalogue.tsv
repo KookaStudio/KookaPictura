@@ -690,6 +690,7 @@ paragraph.singleLineComposer		Single-line Composer		1	0
 paragraph.everyLineComposer		Every-line Composer		1	0
 paragraph.reset		Reset Paragraph		1	0
 panel.properties.autoOptions		Auto Options…		1	0
+panel.properties.curvesDisplay		Curves Display Options…		1	0
 panel.properties.savePreset		Save Preset…		1	0
 panel.properties.loadPreset		Load Preset…		1	0
 panel.properties.clipToggle		Clip to Layer		1	0

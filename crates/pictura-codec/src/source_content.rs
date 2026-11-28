@@ -41,12 +41,7 @@ pub(crate) fn adjustment(layer: &Layer) -> Result<Option<AdjustmentData>, PsdErr
                 crate::encode_channel_mixer_ink(p.ink, p.ink_constant)
             }
         }
-        Adjustment::Curves(p) => crate::encode_curves(
-            &p.points,
-            p.red.as_deref(),
-            p.green.as_deref(),
-            p.blue.as_deref(),
-        ),
+        Adjustment::Curves(p) => layer_content::curves::encode_curves_params(p, None),
         Adjustment::SelectiveColor(p) => crate::encode_selective_color(p.method, &p.ranges),
         Adjustment::GradientMap(p) => crate::encode_gradient_map(p, false),
         Adjustment::ShadowsHighlights(p) => {

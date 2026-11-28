@@ -5,7 +5,7 @@ use crate::color::{
     black_white, channel_mixer, color_balance, hue_saturation, photo_filter, selective_color,
     vibrance,
 };
-use crate::common::{map_float, validate};
+use crate::common::{map_float, map_rgb, validate};
 use crate::match_color::match_color;
 use crate::replace_color::replace_color;
 use crate::tonal::{
@@ -54,6 +54,15 @@ pub fn apply_with_coverage_in_mode(
     }
     match adjustment {
         Adjustment::Levels(p) => levels(p, buf, n),
+        Adjustment::Curves(p) if mode != ColorBalanceMode::Rgb => {
+            if let Some(curve) = crate::native::curve_map(p, mode)? {
+                map_rgb(buf, n, |r, g, b| {
+                    curve([r, g, b].map(|v| f64::from(v) / 255.0))
+                        .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
+                });
+            }
+            Ok(())
+        }
         Adjustment::Curves(p) => curves(p, buf, n),
         Adjustment::BrightnessContrast(p) => brightness_contrast(p, buf, n),
         Adjustment::Exposure(p) => exposure(p, buf, n),
@@ -200,6 +209,7 @@ mod lut_tests {
                 red: None,
                 green: None,
                 blue: None,
+                black: None,
             }),
             Adjustment::Exposure(crate::types::ExposureParams {
                 exposure: 0.5,

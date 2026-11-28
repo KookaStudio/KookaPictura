@@ -4,6 +4,7 @@
 
 #include <QtCore/QRectF>
 #include <QtCore/QStringList>
+#include <QtCore/QSignalBlocker>
 #include <QtGui/QColor>
 #include <QtGui/QKeyEvent>
 #include <QtGui/QLinearGradient>
@@ -157,6 +158,19 @@ CurveWidget::CurveWidget(QWidget* parent)
     resetCurve();
 }
 
+void CurveWidget::useSquareLayout()
+{
+    QSizePolicy policy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    policy.setHeightForWidth(true);
+    setSizePolicy(policy);
+    setMinimumSize(96, 96);
+}
+
+int CurveWidget::heightForWidth(int width) const
+{
+    return sizePolicy().hasHeightForWidth() ? width : QWidget::heightForWidth(width);
+}
+
 QSize CurveWidget::sizeHint() const
 {
     const int extra = showRamps_ ? int(kRamp + kGap) : 0;
@@ -196,7 +210,9 @@ QString CurveWidget::pointsText() const
     return pairs.join(QLatin1Char(' '));
 }
 
-void CurveWidget::setPointsText(const QString& text)
+namespace {
+
+QVector<QPointF> pointsFromText(const QString& text)
 {
     QVector<QPointF> points;
     for (const QString& pair : text.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
@@ -205,8 +221,135 @@ void CurveWidget::setPointsText(const QString& text)
             points.append(QPointF(xy[0].toInt() / 255.0, xy[1].toInt() / 255.0));
         }
     }
+    return points;
+}
+
+} // namespace
+
+void CurveWidget::setPointsText(const QString& text)
+{
     const QSignalBlocker block(this);
-    setPoints(points);
+    auto points = pointsFromText(text);
+    pencil_ = points.size() == 256;
+    setPoints(points.isEmpty() ? QVector<QPointF>{{0, 0}, {1, 1}} : points);
+}
+
+void CurveWidget::setGraphOptions(bool detailed, bool guides, bool reversed)
+{
+    detailedGrid_ = detailed;
+    guides_ = guides;
+    reversed_ = reversed;
+    update();
+}
+
+void CurveWidget::setOverlays(const QVector<QPair<QColor, QString>>& overlays)
+{
+    overlays_.clear();
+    for (const auto& [color, text] : overlays) {
+        const auto points = pointsFromText(text);
+        QVector<float> samples(256);
+        if (points.size() == 256) {
+            for (int x = 0; x < 256; ++x) {
+                samples[x] = float(points[x].y());
+            }
+        } else {
+            splineInterpolate(points, samples.data());
+        }
+        overlays_.append({color, samples});
+    }
+    update();
+}
+
+bool CurveWidget::setPencilEnabled(bool enabled)
+{
+    if (!enabled && hasDenseCurve()) {
+        QVector<QPointF> sparse;
+        for (int i = 0; i < kMaxPoints; ++i) {
+            sparse.append(points_[(i * 255 + 6) / 13]);
+        }
+        pencil_ = false;
+        setPoints(sparse);
+        return true;
+    }
+    pencil_ = enabled;
+    select(-1);
+    return false;
+}
+
+void CurveWidget::drawPencilTo(QPointF position)
+{
+    if (!hasDenseCurve()) {
+        points_.clear();
+        for (int i = 0; i < 256; ++i) {
+            points_.append({i / 255.0, outputAt(i) / 255.0});
+        }
+    }
+    const QPointF point = fromWidget(position);
+    const int x = qBound(0, qRound(point.x() * 255.0), 255);
+    const int y = qBound(0, qRound(point.y() * 255.0), 255);
+    if (pencilLast_ >= 0 && pencilLast_ != x) {
+        const double first = points_[pencilLast_].y();
+        for (int i = std::min(pencilLast_, x); i <= std::max(pencilLast_, x); ++i) {
+            const double t = double(i - pencilLast_) / (x - pencilLast_);
+            points_[i].setY(qRound((1.0 - t) * first * 255.0 + t * y) / 255.0);
+        }
+    }
+    points_[x].setY(y / 255.0);
+    pencilLast_ = x;
+    interpolate();
+    update();
+    emit curveChanged();
+}
+
+void CurveWidget::smoothPencil()
+{
+    if (!hasDenseCurve()) {
+        return;
+    }
+    auto smooth = points_;
+    for (int x = 1; x < 255; ++x) {
+        const double v = (points_[x - 1].y() + 2 * points_[x].y() + points_[x + 1].y()) / 4;
+        smooth[x].setY(qRound(v * 255.0) / 255.0);
+    }
+    if (smooth != points_) {
+        setPoints(smooth);
+    }
+}
+
+int CurveWidget::outputAt(int input) const
+{
+    return qRound(curve_[qBound(0, input, 255)] * 255.0f);
+}
+
+bool CurveWidget::selectTone(int input)
+{
+    if (pencil_ || input < 0 || input > 255 || points_.isEmpty()) {
+        return false;
+    }
+    int index = 0;
+    while (index < points_.size() && qRound(points_[index].x() * 255.0) < input) {
+        ++index;
+    }
+    if (index == points_.size() || qRound(points_[index].x() * 255.0) != input) {
+        if (index == 0 || index == points_.size() || points_.size() >= kMaxPoints) {
+            return false;
+        }
+        points_.insert(index, QPointF(input / 255.0, outputAt(input) / 255.0));
+        interpolate();
+        emit curveChanged();
+    }
+    select(index);
+    return true;
+}
+
+void CurveWidget::setEndpoint(bool white, int input, bool resetOutput)
+{
+    if (pencil_ || points_.size() < 2) {
+        return;
+    }
+    select(white ? int(points_.size()) - 1 : 0);
+    const int output = resetOutput ? (white ? 255 : 0) : qRound(points_[selected_].y() * 255);
+    moveSelected(input, output);
 }
 
 void CurveWidget::setBins(const std::array<int, 256>& bins)
@@ -225,7 +368,11 @@ void CurveWidget::buildLut(uint8_t lut[256]) const
 void CurveWidget::interpolate()
 {
     std::sort(points_.begin(), points_.end(), byInput);
-    if (linear_) {
+    if (hasDenseCurve()) {
+        for (int x = 0; x < 256; ++x) {
+            curve_[x] = float(points_[x].y());
+        }
+    } else if (linear_) {
         linearInterpolate(points_, curve_);
     } else {
         splineInterpolate(points_, curve_);
@@ -268,18 +415,20 @@ void CurveWidget::moveSelected(int input, int output)
         return;
     }
     const int last = int(points_.size()) - 1;
-    double x = qBound(0, input, 255) / 255.0;
-    if (selected_ == 0) {
-        x = points_[0].x();
-    } else if (selected_ == last) {
-        x = points_[last].x();
-    } else {
-        const double left = points_[selected_ - 1].x();
-        const double right = points_[selected_ + 1].x();
-        const double step = std::min(1.0 / 255.0, (right - left) / 3.0);
-        x = std::clamp(x, left + step, right - step);
+    const auto inputAt = [this](int i) { return qRound(points_[i].x() * 255.0); };
+    int lower = selected_ == 0 ? 0 : inputAt(selected_ - 1) + 1;
+    int upper = selected_ == last ? 255 : inputAt(selected_ + 1) - 1;
+    if (!secondaryControls_ && (selected_ == 0 || selected_ == last)) {
+        lower = upper = inputAt(selected_);
     }
-    points_[selected_] = QPointF(x, qBound(0, output, 255) / 255.0);
+    if (lower > upper) {
+        return;
+    }
+    const QPointF next(qBound(lower, input, upper) / 255.0, qBound(0, output, 255) / 255.0);
+    if (points_[selected_] == next) {
+        return;
+    }
+    points_[selected_] = next;
     interpolate();
     update();
     emit curveChanged();
@@ -290,61 +439,36 @@ void CurveWidget::selectFirstPoint()
     if (!points_.isEmpty()) select(0);
 }
 
-int CurveWidget::outputAt(int input) const
+QMargins CurveWidget::plotInsets() const
 {
-    return qRound(curve_[qBound(0, input, 255)] * 255.0f);
-}
-
-bool CurveWidget::selectTone(int input)
-{
-    if (input < 0 || input > 255 || points_.size() < 2) return false;
-    int index = 0;
-    while (index < points_.size() && qRound(points_[index].x() * 255.0) < input) ++index;
-    if (index == points_.size() || qRound(points_[index].x() * 255.0) != input) {
-        if (index == 0 || index == points_.size() || points_.size() >= kMaxPoints) return false;
-        points_.insert(index, QPointF(input / 255.0, outputAt(input) / 255.0));
-        interpolate();
-        emit curveChanged();
-    }
-    select(index);
-    return true;
-}
-
-void CurveWidget::setEndpoint(bool white, int input)
-{
-    if (points_.size() < 2) return;
-    const int index = white ? int(points_.size()) - 1 : 0;
-    const int low = white ? qRound(points_[index - 1].x() * 255) + 1 : 0;
-    const int high = white ? 255 : qRound(points_[1].x() * 255) - 1;
-    points_[index].setX(qBound(low, input, high) / 255.0);
-    points_[index].setY(white ? 1.0 : 0.0);
-    select(index);
-    interpolate();
-    update();
-    emit curveChanged();
+    // An endpoint's square overhangs the face by 4 px.
+    constexpr int inset = 5;
+    const int ramp = showRamps_ ? int(kRamp + kGap) : inset;
+    return {ramp, inset, inset, ramp};
 }
 
 QRectF CurveWidget::plot() const
 {
-    // An endpoint's square overhangs the face by 4 px, so inset by that much.
-    constexpr qreal inset = 5.0;
-    const qreal left = showRamps_ ? kRamp + kGap : inset;
-    const qreal bottom = showRamps_ ? kRamp + kGap : inset;
-    const qreal side =
-        std::max<qreal>(1.0, std::min(width() - left - inset, height() - bottom - inset));
-    return {left, inset, side, side};
+    const auto insets = plotInsets();
+    const int side = std::max(1, std::min(width() - insets.left() - insets.right(),
+                                          height() - insets.top() - insets.bottom()));
+    return QRectF(insets.left(), insets.top(), side, side);
 }
 
 QPointF CurveWidget::toWidget(QPointF p) const
 {
     const QRectF r = plot();
+    if (reversed_) {
+        p = QPointF(1.0 - p.x(), 1.0 - p.y());
+    }
     return {r.left() + p.x() * r.width(), r.top() + (1.0 - p.y()) * r.height()};
 }
 
 QPointF CurveWidget::fromWidget(QPointF p) const
 {
     const QRectF r = plot();
-    return {(p.x() - r.left()) / r.width(), 1.0 - (p.y() - r.top()) / r.height()};
+    const QPointF unit((p.x() - r.left()) / r.width(), 1.0 - (p.y() - r.top()) / r.height());
+    return reversed_ ? QPointF(1.0 - unit.x(), 1.0 - unit.y()) : unit;
 }
 
 void CurveWidget::paintEvent(QPaintEvent*)
@@ -355,12 +479,12 @@ void CurveWidget::paintEvent(QPaintEvent*)
 
     if (showRamps_) {
         QLinearGradient vertical(r.left(), r.bottom(), r.left(), r.top());
-        vertical.setColorAt(0.0, Qt::black);
-        vertical.setColorAt(1.0, Qt::white);
+        vertical.setColorAt(0.0, reversed_ ? Qt::white : Qt::black);
+        vertical.setColorAt(1.0, reversed_ ? Qt::black : Qt::white);
         p.fillRect(QRectF(0.0, r.top(), kRamp, r.height()), vertical);
         QLinearGradient horizontal(r.left(), 0.0, r.right(), 0.0);
-        horizontal.setColorAt(0.0, Qt::black);
-        horizontal.setColorAt(1.0, Qt::white);
+        horizontal.setColorAt(0.0, reversed_ ? Qt::white : Qt::black);
+        horizontal.setColorAt(1.0, reversed_ ? Qt::black : Qt::white);
         p.fillRect(QRectF(r.left(), r.bottom() + kGap, r.width(), kRamp), horizontal);
     }
 
@@ -370,7 +494,7 @@ void CurveWidget::paintEvent(QPaintEvent*)
         area.moveTo(r.bottomLeft());
         for (int i = 0; i < 256; ++i) {
             const qreal x = r.left() + (i + 0.5) * r.width() / 256.0;
-            area.lineTo(x, r.bottom() - double(histo_[i]) / peak * r.height());
+            area.lineTo(x, r.bottom() - double(histo_[reversed_ ? 255 - i : i]) / peak * r.height());
         }
         area.lineTo(r.bottomRight());
         area.closeSubpath();
@@ -378,9 +502,10 @@ void CurveWidget::paintEvent(QPaintEvent*)
     }
 
     p.setPen(QPen(Theme::tokenColor(QStringLiteral("border-input")), 1));
-    for (int i = 1; i < 4; ++i) {
-        const qreal x = r.left() + i * r.width() / 4.0;
-        const qreal y = r.top() + i * r.height() / 4.0;
+    const int divisions = detailedGrid_ ? 10 : 4;
+    for (int i = 1; i < divisions; ++i) {
+        const qreal x = r.left() + i * r.width() / divisions;
+        const qreal y = r.top() + i * r.height() / divisions;
         p.drawLine(QPointF(x, r.top()), QPointF(x, r.bottom()));
         p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y));
     }
@@ -391,17 +516,28 @@ void CurveWidget::paintEvent(QPaintEvent*)
         p.drawLine(r.bottomLeft(), r.topRight());
     }
 
-    QPainterPath curve;
-    curve.moveTo(toWidget(QPointF(0.0, curve_[0])));
-    for (int i = 1; i < 256; ++i) {
-        curve.lineTo(toWidget(QPointF(i / 255.0, curve_[i])));
+    const auto drawCurve = [&](const float* samples, const QColor& color, double width) {
+        QPainterPath path(toWidget(QPointF(0.0, samples[0])));
+        for (int i = 1; i < 256; ++i) {
+            path.lineTo(toWidget(QPointF(i / 255.0, samples[i])));
+        }
+        p.setPen(QPen(color, width));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(path);
+    };
+    for (const auto& [color, samples] : overlays_) {
+        drawCurve(samples.constData(), color, 1);
     }
-    p.setPen(QPen(Theme::tokenColor(QStringLiteral("content-body")), 1.6));
-    p.setBrush(Qt::NoBrush);
-    p.drawPath(curve);
+    if (guides_ && dragging_ >= 0 && dragging_ < points_.size()) {
+        const QPointF at = toWidget(points_[dragging_]);
+        p.setPen(QPen(Theme::tokenColor(QStringLiteral("graph-axis")), 1, Qt::DashLine));
+        p.drawLine(QPointF(at.x(), r.top()), QPointF(at.x(), r.bottom()));
+        p.drawLine(QPointF(r.left(), at.y()), QPointF(r.right(), at.y()));
+    }
+    drawCurve(curve_, Theme::tokenColor(QStringLiteral("content-body")), 1.6);
 
     // Hollow squares; the selected one filled.
-    for (int i = 0; i < points_.size(); ++i) {
+    for (int i = 0; !pencil_ && i < points_.size(); ++i) {
         const QPointF c = toWidget(points_[i]);
         const qreal half = i == selected_ ? 4.0 : 3.0;
         p.setPen(QPen(Theme::tokenColor(QStringLiteral("content-body")), 1));
@@ -417,7 +553,23 @@ void CurveWidget::paintEvent(QPaintEvent*)
 
 void CurveWidget::mousePressEvent(QMouseEvent* event)
 {
+    if (secondaryControls_ && event->button() != Qt::LeftButton) {
+        return;
+    }
+    if (secondaryControls_ && event->modifiers().testFlag(Qt::AltModifier)) {
+        emit gridToggled();
+        return;
+    }
     dragging_ = -1;
+    if (secondaryControls_) {
+        gesture_ = true;
+        emit gestureStarted();
+        if (pencil_) {
+            pencilLast_ = -1;
+            drawPencilTo(event->position());
+            return;
+        }
+    }
     for (int i = 0; i < points_.size(); ++i) {
         if ((event->position() - toWidget(points_[i])).manhattanLength() < 10) {
             if (event->modifiers() & Qt::ControlModifier) {
@@ -434,6 +586,14 @@ void CurveWidget::mousePressEvent(QMouseEvent* event)
     }
     QPointF pos = fromWidget(event->position());
     pos = QPointF(qBound(0.0, pos.x(), 1.0), qBound(0.0, pos.y(), 1.0));
+    if (secondaryControls_) {
+        const int x = qRound(pos.x() * 255.0);
+        if (selectTone(x)) {
+            dragging_ = selected_;
+            moveSelected(x, qRound(pos.y() * 255.0));
+        }
+        return;
+    }
     if (std::any_of(points_.cbegin(), points_.cend(),
                     [pos](QPointF point) { return point.x() == pos.x(); })) {
         return;
@@ -447,10 +607,19 @@ void CurveWidget::mousePressEvent(QMouseEvent* event)
 
 void CurveWidget::mouseMoveEvent(QMouseEvent* event)
 {
+    if (pencil_ && gesture_) {
+        drawPencilTo(event->position());
+        return;
+    }
     if (dragging_ < 0) {
         return;
     }
     QPointF pos = fromWidget(event->position());
+    if (secondaryControls_) {
+        moveSelected(qBound(0, qRound(pos.x() * 255.0), 255),
+                     qBound(0, qRound(pos.y() * 255.0), 255));
+        return;
+    }
     pos = QPointF(qBound(0.0, pos.x(), 1.0), qBound(0.0, pos.y(), 1.0));
     if (dragging_ == 0) {
         pos.setX(points_.first().x());
@@ -479,10 +648,20 @@ void CurveWidget::mouseReleaseEvent(QMouseEvent* event)
         }
     }
     dragging_ = -1;
+    pencilLast_ = -1;
+    update();
+    if (gesture_) {
+        gesture_ = false;
+        emit gestureEnded();
+    }
 }
 
 void CurveWidget::keyPressEvent(QKeyEvent* event)
 {
+    if (pencil_) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
     if (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) {
         removeAt(selected_);
         return;
