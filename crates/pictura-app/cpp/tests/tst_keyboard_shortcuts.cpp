@@ -101,6 +101,7 @@ private slots:
     void noticeIsDarkOnYellow();
     void okAppliesCancelDiscards();
     void overridesPersistAcrossLaunch();
+    void contentAwareScaleKeepsLegacyShortcut();
     void toolIdOrderMatchesCatalogue();
     void toolCatalogueMatchesGolden();
 
@@ -536,6 +537,31 @@ void KeyboardShortcutsTest::overridesPersistAcrossLaunch()
     QCOMPARE(relaunched->registry()->action(kNew)->shortcuts(), keys({"Ctrl+N", "Ctrl+Alt+N"}));
     QVERIFY(pictura::toolShortcut(pictura::ToolId::Hand).isNull());
     QVERIFY(!pictura::toolShortcutKeys().contains(QChar(u'H')));
+}
+
+void KeyboardShortcutsTest::contentAwareScaleKeepsLegacyShortcut()
+{
+    const pictura::test::ScopedStateHome home;
+    QVERIFY(home.isValid());
+    QVERIFY(pictura::initializePreferences());
+    const auto initial = pictura::loadPreferences();
+    auto legacy = initial;
+    legacy.shortcuts.insert(QStringLiteral("edit.seam.aware.scale"),
+                            {QStringLiteral("Ctrl+Alt+Shift+9")});
+    QVERIFY(pictura::savePreferences(initial, legacy));
+
+    const QString currentId = QStringLiteral("edit.content.aware.scale");
+    {
+        auto window = pictura::test::makeMainWindow();
+        QCOMPARE(window->registry()->shortcuts(currentId), keys({"Ctrl+Alt+Shift+9"}));
+    }
+
+    const auto saved = pictura::loadPreferences();
+    auto current = saved;
+    current.shortcuts.insert(currentId, {});
+    QVERIFY(pictura::savePreferences(saved, current));
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window->registry()->shortcuts(currentId).isEmpty());
 }
 
 // `ToolId` mirrors the engine catalogue's order (#274). The golden's

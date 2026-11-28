@@ -2356,7 +2356,7 @@ Näytönohjaimen ajuri: %5</translation>
         <translation>Komentosarjat</translation>
     </message>
     <message>
-        <source>Seam-Aware Scale</source>
+        <source>Content-Aware Scale</source>
         <translation>Skaalaa sisältö huomioiden</translation>
     </message>
     <message>
@@ -3918,6 +3918,22 @@ Näytönohjaimen ajuri: %5</translation>
 </context>
 <context>
     <name>PicturaUi</name>
+    <message>
+        <source>Protect alpha channel</source>
+        <translation>Suojattava alfakanava</translation>
+    </message>
+    <message>
+        <source>Calculating…</source>
+        <translation>Lasketaan…</translation>
+    </message>
+    <message>
+        <source>Preview unavailable</source>
+        <translation>Esikatselu ei ole käytettävissä</translation>
+    </message>
+    <message>
+        <source>Content-Aware Scale preview could not be computed.</source>
+        <translation>Sisällön huomioivan skaalauksen esikatselua ei voitu laskea.</translation>
+    </message>
     <message>
         <source>R: —  G: —  B: —</source>
         <translation>R: .. G: ... B: ...</translation>

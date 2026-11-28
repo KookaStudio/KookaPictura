@@ -88,7 +88,7 @@ QString ContentAwareScaleTest::beginLayer()
 bool ContentAwareScaleTest::beginScale()
 {
     window_->registry()->refresh();
-    auto* action = window_->registry()->action(QStringLiteral("edit.seam.aware.scale"));
+    auto* action = window_->registry()->action(QStringLiteral("edit.content.aware.scale"));
     if (!action || !action->isEnabled()) return false;
     action->trigger();
     auto* tools = window_->findChild<pictura::ToolController*>();
@@ -129,7 +129,7 @@ void ContentAwareScaleTest::refusesTargets()
     const QString layer = beginLayer();
     QVERIFY(!layer.isEmpty());
     auto* view = window_->activeView();
-    auto* action = window_->registry()->action(QStringLiteral("edit.seam.aware.scale"));
+    auto* action = window_->registry()->action(QStringLiteral("edit.content.aware.scale"));
     QVERIFY(action);
     auto* channels = window_->findChild<pictura::ChannelsPanel*>();
     QVERIFY(channels);

@@ -2356,8 +2356,8 @@ GPU-Treiber: %5</translation>
         <translation>Skripte</translation>
     </message>
     <message>
-        <source>Seam-Aware Scale</source>
-        <translation>Nahtbewusst skalieren</translation>
+        <source>Content-Aware Scale</source>
+        <translation>Inhaltsbasiert skalieren</translation>
     </message>
     <message>
         <source>Search…</source>
@@ -3918,6 +3918,22 @@ GPU-Treiber: %5</translation>
 </context>
 <context>
     <name>PicturaUi</name>
+    <message>
+        <source>Protect alpha channel</source>
+        <translation>Alphakanal zum Schutz</translation>
+    </message>
+    <message>
+        <source>Calculating…</source>
+        <translation>Wird berechnet…</translation>
+    </message>
+    <message>
+        <source>Preview unavailable</source>
+        <translation>Vorschau nicht verfügbar</translation>
+    </message>
+    <message>
+        <source>Content-Aware Scale preview could not be computed.</source>
+        <translation>Die Vorschau für die inhaltsbasierte Skalierung konnte nicht berechnet werden.</translation>
+    </message>
     <message>
         <source>R: —  G: —  B: —</source>
         <translation>R: — G: — B: —</translation>

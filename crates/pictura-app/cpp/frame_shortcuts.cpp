@@ -18,7 +18,13 @@ void PicturaMainWindow::registerShortcutHandlers()
 // is dropped, losing only its override.
 void PicturaMainWindow::applyShortcutOverrides(const Preferences& prefs)
 {
+    const QString legacyScale = QStringLiteral("edit.seam.aware.scale");
+    const QString contentAwareScale = QStringLiteral("edit.content.aware.scale");
     for (auto it = prefs.shortcuts.cbegin(); it != prefs.shortcuts.cend(); ++it) {
+        const bool legacy = it.key() == legacyScale;
+        if (legacy && prefs.shortcuts.contains(contentAwareScale)) {
+            continue;
+        }
         QList<QKeySequence> bindings;
         for (const QString& binding : it.value()) {
             const QKeySequence sequence(binding, QKeySequence::PortableText);
@@ -26,7 +32,7 @@ void PicturaMainWindow::applyShortcutOverrides(const Preferences& prefs)
                 bindings << sequence;
             }
         }
-        commandRegistry()->setShortcuts(it.key(), bindings);
+        commandRegistry()->setShortcuts(legacy ? contentAwareScale : it.key(), bindings);
     }
     resetToolShortcuts();
     for (auto it = prefs.toolShortcuts.cbegin(); it != prefs.toolShortcuts.cend(); ++it) {

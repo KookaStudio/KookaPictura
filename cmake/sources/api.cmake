@@ -1,6 +1,7 @@
 # api sources for pictura_shell.
 # Included from the root CMakeLists.txt; keep paths explicit (no globbing).
 list(APPEND PICTURA_SHELL_SOURCES
+    crates/pictura-app/cpp/api/content_aware_test_api.h
     crates/pictura-app/cpp/api/document_api.cpp
     crates/pictura-app/cpp/api/document_api.h
     crates/pictura-app/cpp/api/document_bridge.h

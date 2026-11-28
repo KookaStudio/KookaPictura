@@ -36,7 +36,7 @@ void MenuRegistrar::wireTransformMenu()
         return tools_ && tools_->transformPending() && (!activeView() || !content_aware_active(*activeView()));
     };
 
-    const QString contentAwareId = QStringLiteral("edit.seam.aware.scale");
+    const QString contentAwareId = QStringLiteral("edit.content.aware.scale");
     commands_->setHandler(contentAwareId, [this, transformTarget]() {
         auto* channels = panels_ ? panels_->channelsPanel() : nullptr;
         if (channels && !channels->isCompositeChannelActive(activeView())) return;
