@@ -14,6 +14,8 @@
 #include "api/filters_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
+#include "api/selection_bridge.h"
+#include "preset_store.h"
 #include "api/engine_bridge.h"
 #include "api/type_api.h"
 
@@ -39,6 +41,7 @@
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QInputDialog>
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QVBoxLayout>
 
@@ -284,6 +287,46 @@ void MenuRegistrar::registerEditHandlers()
     commands_->setHandler(command_ids::EditPasteInto, [paste]() { paste(PasteKind::Into); });
     commands_->setHandler(command_ids::EditPasteOutside, [paste]() { paste(PasteKind::Outside); });
 
+    commands_->setHandler(QStringLiteral("edit.define.pattern"), [this]() {
+        const QPointer<PictureView> view(activeView());
+        if (!view || !view->has_document()) return;
+        const auto generation = view->document_generation();
+        const auto selection = view->selection_revision();
+        const auto canvas = view->canvas_revision();
+        const auto content = selection_pattern_revision(*view);
+        if (!selection_pattern_valid(*view)) {
+            QMessageBox::warning(dialogParent(), tr("Define Pattern"),
+                                 tr("Select a nonempty, hard rectangular area first."));
+            return;
+        }
+        QInputDialog dialog(dialogParent());
+        dialog.setObjectName(QStringLiteral("definePatternDialog"));
+        dialog.setWindowTitle(tr("Define Pattern"));
+        dialog.setLabelText(tr("Name:"));
+        dialog.setTextValue(tr("Pattern"));
+        if (runDialog(dialog, dialogParent()) != QDialog::Accepted) return;
+        if (!view || view.data() != activeView() || view->document_generation() != generation
+            || view->selection_revision() != selection || view->canvas_revision() != canvas
+            || selection_pattern_revision(*view) != content) {
+            QMessageBox::warning(dialogParent(), tr("Define Pattern"),
+                                 tr("The document or selection changed. Try again."));
+            return;
+        }
+        const auto encoded = selection_pattern_preset(*view, dialog.textValue());
+        if (encoded.empty() && edit_refused_for_memory()) {
+            QMessageBox::warning(dialogParent(), tr("Define Pattern"), tr("Not enough memory to create the pattern."));
+            return;
+        }
+        const QByteArray bytes(reinterpret_cast<const char*>(encoded.data()), qsizetype(encoded.size()));
+        const auto result = readPresetLibrary(PresetType::Patterns, QStringLiteral("kpset"), bytes);
+        QString error;
+        if (!result.ok || result.rows.isEmpty()
+            || !PresetStore::current().append(PresetType::Patterns, result.rows, &error)) {
+            QMessageBox::warning(dialogParent(), tr("Define Pattern"),
+                                 error.isEmpty() ? tr("Could not save the pattern.") : error);
+        }
+    });
+
     // Edit > Fill… fills the active pixel layer (within the selection) through
     // the fill engine. The dialog's contents, mode, opacity, and Preserve
     // Transparency drive one "Fill" state.
@@ -301,10 +344,24 @@ void MenuRegistrar::registerEditHandlers()
         const QColor color = dialog.fillColor();
         const int patternIndex = pattern ? dialog.selectedPatternIndex() : -1;
         const int argb = pattern ? 0 : int(color.rgba());
+        QByteArray patternBytes;
+        if (pattern) {
+            const QByteArray selected = dialog.selectedPatternBytes();
+            const auto* data = reinterpret_cast<const std::uint8_t*>(selected.constData());
+            const auto snapshot = pattern_preset_snapshot(::rust::Slice<const std::uint8_t>(data, size_t(selected.size())));
+            patternBytes = QByteArray(reinterpret_cast<const char*>(snapshot.data()), qsizetype(snapshot.size()));
+        }
+        const int script = pattern ? dialog.script() : 0;
         // A large document's fill runs as a job behind a progress window (#1300).
         const bool filled = runDocumentCommand(dialogParent(), *view, tr("Fill"), [&] {
-            edit_fill(*view, uint32_t(argb), patternIndex, dialog.blendMode(), dialog.opacity(),
-                      dialog.preserveTransparency());
+            if (pattern) {
+                const auto* data = reinterpret_cast<const std::uint8_t*>(patternBytes.constData());
+                edit_fill_preset(*view, ::rust::Slice<const std::uint8_t>(data, size_t(patternBytes.size())),
+                                 script, dialog.blendMode(), dialog.opacity(), dialog.preserveTransparency());
+            } else {
+                edit_fill(*view, uint32_t(argb), -1, dialog.blendMode(), dialog.opacity(),
+                          dialog.preserveTransparency());
+            }
         });
         if (filled) {
             refresh();
@@ -314,6 +371,10 @@ void MenuRegistrar::registerEditHandlers()
             command.values.insert(QStringLiteral("color"),
                                   static_cast<double>(uint32_t(argb)));
             command.values.insert(QStringLiteral("pattern"), patternIndex);
+            if (pattern) {
+                command.values.insert(QStringLiteral("patternSnapshot"), QString::fromLatin1(patternBytes.toBase64()));
+                command.values.insert(QStringLiteral("patternScript"), script);
+            }
             command.values.insert(QStringLiteral("mode"), dialog.blendMode());
             command.values.insert(QStringLiteral("opacity"), dialog.opacity());
             command.values.insert(QStringLiteral("preserveTransparency"),
@@ -328,6 +389,18 @@ void MenuRegistrar::registerEditHandlers()
         const QString path = layerAnchor();
         if (!view || !view->has_document() || path.isEmpty()) {
             return false;
+        }
+        const auto snapshotValue = params.values.value(QStringLiteral("patternSnapshot"));
+        if (snapshotValue.isString()) {
+            const QByteArray bytes = QByteArray::fromBase64(snapshotValue.toString().toLatin1());
+            const auto* data = reinterpret_cast<const std::uint8_t*>(bytes.constData());
+            const bool applied = edit_fill_preset(*view, ::rust::Slice<const std::uint8_t>(data, size_t(bytes.size())),
+                params.values.value(QStringLiteral("patternScript")).toInt(),
+                params.values.value(QStringLiteral("mode")).toString(QStringLiteral("normal")),
+                params.values.value(QStringLiteral("opacity")).toInt(100),
+                params.values.value(QStringLiteral("preserveTransparency")).toBool());
+            if (applied) refresh();
+            return applied;
         }
         const bool applied = edit_fill(
             *view, uint32_t(params.values.value(QStringLiteral("color")).toDouble()),

@@ -32,6 +32,10 @@ pub enum BucketPaint<'a> {
     Foreground(Rgba),
     /// A tile repeated from the document origin.
     Pattern(&'a RgbaImage),
+    /// Original deterministic approximations of the scripted fill layouts.
+    Scripted(&'a RgbaImage, i32, (i32, i32), (i32, i32)),
+    /// A pattern sampled at document coordinates from a local surface.
+    PatternOffset(&'a RgbaImage, (i32, i32)),
 }
 
 /// Where the Paint Bucket reads the colours it compares, in document space.
@@ -472,7 +476,7 @@ pub fn fill(
 ) -> Option<PsdRect> {
     let opacity = opacity.clamp(0.0, 1.0);
     let width = doc.width as i32;
-    let empty_tile = matches!(paint, BucketPaint::Pattern(t) if t.width <= 0 || t.height <= 0);
+    let empty_tile = matches!(paint, BucketPaint::Pattern(t) | BucketPaint::PatternOffset(t, _) | BucketPaint::Scripted(t, _, _, _) if t.width <= 0 || t.height <= 0);
     if opacity <= 0.0 || empty_tile || mask.len() < (width * doc.height as i32) as usize {
         return None;
     }
@@ -486,7 +490,7 @@ pub fn fill(
         if cover == 0 {
             return None;
         }
-        Some((paint_at(paint, x, y), cover as f32 / 255.0 * opacity))
+        paint_sample(paint, mode, x, y, cover as f32 / 255.0 * opacity)
     })
 }
 
@@ -539,7 +543,7 @@ pub fn fill_within(
     alpha: Alpha,
 ) -> Option<PsdRect> {
     let opacity = opacity.clamp(0.0, 1.0);
-    let empty_tile = matches!(paint, BucketPaint::Pattern(t) if t.width <= 0 || t.height <= 0);
+    let empty_tile = matches!(paint, BucketPaint::Pattern(t) | BucketPaint::PatternOffset(t, _) | BucketPaint::Scripted(t, _, _, _) if t.width <= 0 || t.height <= 0);
     let bw = bounds.width().max(0);
     let short = mask.is_some_and(|m| m.len() < (bw * bounds.height().max(0)) as usize);
     if opacity <= 0.0 || empty_tile || short {
@@ -574,19 +578,166 @@ pub fn fill_within(
         if cover == 0 {
             return None;
         }
-        Some((paint_at(paint, x, y), cover as f32 / 255.0 * opacity))
+        paint_sample(paint, mode, x, y, cover as f32 / 255.0 * opacity)
     })
+}
+
+fn paint_sample(
+    paint: BucketPaint<'_>,
+    mode: PaintMode,
+    x: i32,
+    y: i32,
+    cover: f32,
+) -> Option<(Rgba, f32)> {
+    let color = paint_at(paint, x, y);
+    if !matches!(paint, BucketPaint::Foreground(_)) && color.a == 0 {
+        return None;
+    }
+    let cover = if mode == PaintMode::Clear && !matches!(paint, BucketPaint::Foreground(_)) {
+        cover * f32::from(color.a) / 255.0
+    } else {
+        cover
+    };
+    Some((color, cover))
 }
 
 /// The colour `paint` lays at document pixel `(x, y)`.
 fn paint_at(paint: BucketPaint<'_>, x: i32, y: i32) -> Rgba {
     match paint {
         BucketPaint::Foreground(color) => color,
+        BucketPaint::Scripted(tile, script, origin, center) => scripted_pattern_at_center(
+            tile,
+            script,
+            x.saturating_add(origin.0),
+            y.saturating_add(origin.1),
+            center,
+        ),
+        BucketPaint::PatternOffset(tile, origin) => {
+            let [r, g, b, a] = tile.get(
+                x.saturating_add(origin.0).rem_euclid(tile.width),
+                y.saturating_add(origin.1).rem_euclid(tile.height),
+            );
+            Rgba { r, g, b, a }
+        }
         BucketPaint::Pattern(tile) => {
             let [r, g, b, a] = tile.get(x.rem_euclid(tile.width), y.rem_euclid(tile.height));
             Rgba { r, g, b, a }
         }
     }
+}
+
+/// Bound the amount of work in a scripted fill before editing the document.
+pub fn scripted_pattern_work_admitted(width: i32, height: i32) -> bool {
+    width > 0 && height > 0 && i64::from(width) * i64::from(height) <= 64 * 1024 * 1024
+}
+
+/// Sample a deterministic approximation of one of the five scripted layouts.
+/// Coordinates are document anchored and work per sample is bounded.
+pub fn scripted_pattern_at(tile: &RgbaImage, script: i32, x: i32, y: i32) -> Rgba {
+    scripted_pattern_at_center(tile, script, x, y, (0, 0))
+}
+
+/// Sample a scripted layout around its document-space center.
+pub fn scripted_pattern_at_center(
+    tile: &RgbaImage,
+    script: i32,
+    x: i32,
+    y: i32,
+    center: (i32, i32),
+) -> Rgba {
+    if tile.width <= 0 || tile.height <= 0 {
+        return Rgba {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 0,
+        };
+    }
+    let (w, h) = (i64::from(tile.width), i64::from(tile.height));
+    let (x, y) = (i64::from(x), i64::from(y));
+    let (u, v) = match script {
+        1 => (
+            (x + (y.div_euclid(h).rem_euclid(2) * w / 2)).rem_euclid(w),
+            y.rem_euclid(h),
+        ),
+        2 => {
+            let side = w.max(h);
+            let (lx, ly) = (x.rem_euclid(side), y.rem_euclid(side));
+            let (u, v) = if (x.div_euclid(side) + y.div_euclid(side)).rem_euclid(2) == 0 {
+                (lx, ly)
+            } else {
+                (ly, h - 1 - lx)
+            };
+            if u < 0 || v < 0 || u >= w || v >= h {
+                return Rgba {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 0,
+                };
+            }
+            (u, v)
+        }
+        3 => {
+            let (cw, ch) = (w * 2, h * 2);
+            let (cx, cy) = (x.div_euclid(cw), y.div_euclid(ch));
+            let hash = (cx as u64).wrapping_mul(0x9e3779b97f4a7c15)
+                ^ (cy as u64).wrapping_mul(0xbf58476d1ce4e5b9);
+            let u = x.rem_euclid(cw) - (hash % w as u64) as i64;
+            let v = y.rem_euclid(ch) - ((hash >> 16) % h as u64) as i64;
+            if u < 0 || v < 0 || u >= w || v >= h {
+                return Rgba {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 0,
+                };
+            }
+            (u, v)
+        }
+        4 => {
+            let radius = (x as f64).hypot(y as f64);
+            let angle = (y as f64).atan2(x as f64);
+            let spacing = w.max(h) as f64;
+            let pitch = spacing / std::f64::consts::TAU;
+            let turn = ((radius / pitch - angle) / std::f64::consts::TAU).round() as i64;
+            let mut point = None;
+            for offset in -1..=1 {
+                let theta = angle + (turn + offset) as f64 * std::f64::consts::TAU;
+                if theta < 0.0 {
+                    continue;
+                }
+                let r = pitch * theta;
+                let sx = (r * theta.cos()).round() as i64 - w / 2;
+                let sy = (r * theta.sin()).round() as i64 - h / 2;
+                let (u, v) = (x - sx, y - sy);
+                if u >= 0 && v >= 0 && u < w && v < h {
+                    point = Some((u, v));
+                    break;
+                }
+            }
+            match point {
+                Some(point) => point,
+                None => {
+                    return Rgba {
+                        r: 0,
+                        g: 0,
+                        b: 0,
+                        a: 0,
+                    }
+                }
+            }
+        }
+        5 => {
+            let (cx, cy) = (i64::from(center.0), i64::from(center.1));
+            let sx = if x >= cx { 2 * cx - 1 - x } else { x };
+            let sy = if y >= cy { 2 * cy - 1 - y } else { y };
+            (sx.rem_euclid(w), sy.rem_euclid(h))
+        }
+        _ => (x.rem_euclid(w), y.rem_euclid(h)),
+    };
+    let [r, g, b, a] = tile.get(u as i32, v as i32);
+    Rgba { r, g, b, a }
 }
 
 /// [`fill`] through a document-sized tiled coverage `mask` that is zero
@@ -607,7 +758,7 @@ pub fn fill_tiled(
     alpha: Alpha,
 ) -> Option<PsdRect> {
     let opacity = opacity.clamp(0.0, 1.0);
-    let empty_tile = matches!(paint, BucketPaint::Pattern(t) if t.width <= 0 || t.height <= 0);
+    let empty_tile = matches!(paint, BucketPaint::Pattern(t) | BucketPaint::PatternOffset(t, _) | BucketPaint::Scripted(t, _, _, _) if t.width <= 0 || t.height <= 0);
     if opacity <= 0.0 || empty_tile {
         return None;
     }
@@ -637,7 +788,7 @@ pub fn fill_tiled(
             if x < bounds.left || y < bounds.top || x >= bounds.right || y >= bounds.bottom {
                 return None;
             }
-            Some((paint_at(paint, x, y), cover as f32 / 255.0 * opacity))
+            paint_sample(paint, mode, x, y, cover as f32 / 255.0 * opacity)
         },
     )
 }

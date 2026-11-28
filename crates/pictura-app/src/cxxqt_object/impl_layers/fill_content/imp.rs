@@ -340,7 +340,11 @@ fn ensure_pattern(doc: &mut Document, id: &str) -> bool {
     pictura_codec::add_document_pattern(doc, &pattern.pattern_id, &record)
 }
 
-fn ensure_payload_pattern(doc: &mut Document, id: &str, payload: &str) -> bool {
+pub(in crate::cxxqt_object) fn ensure_payload_pattern(
+    doc: &mut Document,
+    id: &str,
+    payload: &str,
+) -> bool {
     let Some(hex) = payload.split('|').nth(5) else {
         return ensure_pattern(doc, id);
     };

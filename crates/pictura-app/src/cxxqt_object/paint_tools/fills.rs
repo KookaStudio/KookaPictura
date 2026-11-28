@@ -123,6 +123,20 @@ pub mod ffi {
             all_layers: bool,
         ) -> bool;
 
+        /// Paint Bucket with a native pattern preset snapshot.
+        fn bucket_fill_preset(
+            view: Pin<&mut PictureView>,
+            x: i32,
+            y: i32,
+            preset: &[u8],
+            mode: &QString,
+            opacity: i32,
+            tolerance: i32,
+            antialias: bool,
+            contiguous: bool,
+            all_layers: bool,
+        ) -> bool;
+
         /// `Edit ▸ Fill…`: fill the active pixel layer (its selection when there
         /// is one) with `foreground` (`0xAARRGGBB`), or built-in pattern
         /// `pattern` when it is not negative, at `opacity` 0–100 % in Brush mode
@@ -133,6 +147,19 @@ pub mod ffi {
             view: Pin<&mut PictureView>,
             foreground: u32,
             pattern: i32,
+            mode: &QString,
+            opacity: i32,
+            preserve_transparency: bool,
+        ) -> bool;
+
+        /// Materialize a native pattern preset into a portable pixel snapshot.
+        fn pattern_preset_snapshot(preset: &[u8]) -> Vec<u8>;
+
+        /// Fill with a native pattern preset snapshot and optional scripted layout.
+        fn edit_fill_preset(
+            view: Pin<&mut PictureView>,
+            preset: &[u8],
+            script: i32,
             mode: &QString,
             opacity: i32,
             preserve_transparency: bool,

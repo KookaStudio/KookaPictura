@@ -212,6 +212,84 @@ pub(super) fn bucket_fill_at(
         },
         Err(_) => None,
     };
+    bucket_fill_with_tile(
+        view, x, y, foreground, tile, mode, opacity, tolerance, antialias, contiguous, all_layers,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn bucket_fill_preset(
+    view: Pin<&mut PictureView>,
+    x: i32,
+    y: i32,
+    preset: &[u8],
+    mode: &QString,
+    opacity: i32,
+    tolerance: i32,
+    antialias: bool,
+    contiguous: bool,
+    all_layers: bool,
+) -> bool {
+    use pictura_codec::preset_library::{decode, Format, Kind, Payload};
+    let Ok(set) = decode(Kind::Patterns, Format::Native, preset) else {
+        return false;
+    };
+    let [entry] = set.library.entries.as_slice() else {
+        return false;
+    };
+    let tile = match &entry.payload {
+        Payload::Pattern(p) => Some(p.clone()),
+        Payload::BuiltIn(index) => pictura_render::builtin_pattern(*index as usize),
+        _ => None,
+    };
+    let Some(tile) = tile else {
+        return false;
+    };
+    let Some(count) = (tile.width as usize).checked_mul(tile.height as usize) else {
+        return false;
+    };
+    if count == 0
+        || count > (1 << 24)
+        || tile.rgba.len() != count * 4
+        || tile.width > i32::MAX as u32
+        || tile.height > i32::MAX as u32
+    {
+        return false;
+    }
+    let tile = pictura_paint::healing::RgbaImage {
+        width: tile.width as i32,
+        height: tile.height as i32,
+        data: tile.rgba.as_chunks::<4>().0.to_vec(),
+    };
+    bucket_fill_with_tile(
+        view,
+        x,
+        y,
+        0,
+        Some(tile),
+        mode,
+        opacity,
+        tolerance,
+        antialias,
+        contiguous,
+        all_layers,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bucket_fill_with_tile(
+    view: Pin<&mut PictureView>,
+    x: i32,
+    y: i32,
+    foreground: u32,
+    tile: Option<pictura_paint::healing::RgbaImage>,
+    mode: &QString,
+    opacity: i32,
+    tolerance: i32,
+    antialias: bool,
+    contiguous: bool,
+    all_layers: bool,
+) -> bool {
     let foreground = rgba_from_argb(foreground);
     let mode = paint_mode_from(&mode.to_string());
     let opacity = opacity.clamp(0, 100) as f32 / 100.0;
@@ -234,7 +312,7 @@ pub(super) fn bucket_fill_at(
         gate,
         move |doc, path, t, selection| {
             let paint = match &tile {
-                Some(tile) => BucketPaint::Pattern(tile),
+                Some(tile) => BucketPaint::PatternOffset(tile, t.origin),
                 None => BucketPaint::Foreground(foreground),
             };
             let (ox, oy) = t.origin;
@@ -313,8 +391,108 @@ pub(super) fn edit_fill(
         |doc, path, t| spill_gate(doc, path, t.bounds, 0),
         move |doc, path, t, selection| {
             let paint = match &tile {
-                Some(tile) => BucketPaint::Pattern(tile),
+                Some(tile) => BucketPaint::PatternOffset(tile, t.origin),
                 None => BucketPaint::Foreground(foreground),
+            };
+            bucket::fill_within(
+                doc, path, t.bounds, None, paint, mode, opacity, selection, alpha,
+            )
+        },
+    )
+}
+
+pub(super) fn pattern_preset_snapshot(preset: &[u8]) -> Vec<u8> {
+    use pictura_codec::preset_library::{decode, encode_native, Format, Kind, Payload};
+    let Ok(mut set) = decode(Kind::Patterns, Format::Native, preset) else {
+        return Vec::new();
+    };
+    let [entry] = set.library.entries.as_mut_slice() else {
+        return Vec::new();
+    };
+    if let Payload::BuiltIn(index) = &entry.payload {
+        let Some(tile) = pictura_render::builtin_pattern(*index as usize) else {
+            return Vec::new();
+        };
+        entry.payload = Payload::Pattern(tile);
+    }
+    if !matches!(&entry.payload, Payload::Pattern(_)) {
+        return Vec::new();
+    }
+    encode_native(&set.library).unwrap_or_default()
+}
+
+pub(super) fn edit_fill_preset(
+    view: Pin<&mut PictureView>,
+    preset: &[u8],
+    script: i32,
+    mode: &QString,
+    opacity: i32,
+    preserve_transparency: bool,
+) -> bool {
+    use pictura_codec::preset_library::{decode, Format, Kind, Payload};
+    if view.rust().modal_transform_blocks_fill() || !(0..=5).contains(&script) {
+        return false;
+    }
+    let Ok(set) = decode(Kind::Patterns, Format::Native, preset) else {
+        return false;
+    };
+    let [entry] = set.library.entries.as_slice() else {
+        return false;
+    };
+    let tile = match &entry.payload {
+        Payload::Pattern(p) => Some(p.clone()),
+        Payload::BuiltIn(index) => pictura_render::builtin_pattern(*index as usize),
+        _ => None,
+    };
+    let Some(tile) = tile else {
+        return false;
+    };
+    let Some(expected) = (tile.width as usize).checked_mul(tile.height as usize) else {
+        return false;
+    };
+    if expected == 0
+        || expected > (1 << 24)
+        || tile.rgba.len() != expected * 4
+        || tile.width > i32::MAX as u32
+        || tile.height > i32::MAX as u32
+    {
+        return false;
+    }
+    let tile = pictura_paint::healing::RgbaImage {
+        width: tile.width as i32,
+        height: tile.height as i32,
+        data: tile.rgba.as_chunks::<4>().0.to_vec(),
+    };
+    let mode = paint_mode_from(&mode.to_string());
+    let opacity = opacity.clamp(0, 100) as f32 / 100.0;
+    let alpha = if preserve_transparency {
+        Alpha::Keep
+    } else {
+        Alpha::Blend
+    };
+    apply_job(
+        view,
+        "Fill",
+        move |doc, path, t| {
+            (script == 0
+                || bucket::scripted_pattern_work_admitted(t.bounds.width(), t.bounds.height()))
+                && spill_gate(doc, path, t.bounds, 0)
+        },
+        move |doc, path, t, selection| {
+            let center = (
+                t.origin
+                    .0
+                    .saturating_add(t.bounds.left)
+                    .saturating_add(t.bounds.width() / 2),
+                t.origin
+                    .1
+                    .saturating_add(t.bounds.top)
+                    .saturating_add(t.bounds.height() / 2),
+            );
+            let paint = if script == 0 {
+                BucketPaint::PatternOffset(&tile, t.origin)
+            } else {
+                BucketPaint::Scripted(&tile, script, t.origin, center)
             };
             bucket::fill_within(
                 doc, path, t.bounds, None, paint, mode, opacity, selection, alpha,

@@ -5,6 +5,8 @@
 #include <QtCore/QCoreApplication>
 
 #include "gradient_editor_dialog.h"
+#include "preset_store.h"
+#include <QtCore/QSignalBlocker>
 #include "panels/numeric_field.h"
 
 #include "api/paint_bridge.h"
@@ -316,18 +318,49 @@ QWidget* OptionsBar::buildPaintBucketPage(ToolId id)
     pattern->setObjectName(QStringLiteral("optionsBucketPattern"));
     pattern->setToolTip(QCoreApplication::translate("PicturaUi", "Pattern"));
     pattern->setIconSize(QSize(20, 20));
-    for (int i = 0; i < stamp_pattern_count(); ++i) {
-        pattern->addItem(patternIcon(i), stamp_pattern_name(i));
-    }
-    pattern->setCurrentIndex(initial.pattern);
+    auto& store = PresetStore::current();
+    const auto rebuild = [this, pattern, &store] {
+        const QSignalBlocker block(pattern);
+        const BucketOptions selected = controller_ ? bucket_->get() : BucketOptions{};
+        pattern->clear();
+        int current = -1;
+        for (const auto& item : store.rows(PresetType::Patterns)) {
+            const int index = item.values.value(QStringLiteral("index")).toInt(-1);
+            if ((selected.patternPreset.isEmpty() && index >= 0 && index == selected.pattern)
+                || (!selected.patternPreset.isEmpty() && selected.patternPreset == item.native)) {
+                current = pattern->count();
+            }
+            pattern->addItem(index >= 0 ? patternIcon(index) : QIcon(QPixmap::fromImage(item.preview)),
+                             item.name, item.native);
+            pattern->setItemData(pattern->count() - 1, index, Qt::UserRole + 1);
+        }
+        pattern->setCurrentIndex(current >= 0 ? current : (pattern->count() ? 0 : -1));
+    };
+    rebuild();
+    const auto updatePattern = [update, pattern] {
+        const auto preset = pattern->currentData().toByteArray();
+        const int index = pattern->currentIndex() < 0
+            ? -1 : pattern->currentData(Qt::UserRole + 1).toInt();
+        update([preset, index](BucketOptions& o) {
+            o.patternPreset = preset;
+            o.pattern = index;
+        });
+    };
+    updatePattern();
     pattern->setEnabled(initial.fill == 1);
     layout->addWidget(pattern);
     connect(fill, &QComboBox::currentIndexChanged, this, [update, pattern](int i) {
         pattern->setEnabled(i == 1);
         update([i](BucketOptions& o) { o.fill = i; });
     });
-    connect(pattern, &QComboBox::currentIndexChanged, this,
-            [update](int i) { update([i](BucketOptions& o) { o.pattern = i; }); });
+    connect(pattern, &QComboBox::currentIndexChanged, this, updatePattern);
+    connect(&store, &PresetStore::changed, pattern, [rebuild, updatePattern](int kind) {
+        if (kind != int(PresetType::Patterns)) {
+            return;
+        }
+        rebuild();
+        updatePattern();
+    });
 
     auto* mode =
         addFillMode(layout, page, QStringLiteral("optionsBucketMode"), initial.mode, true);

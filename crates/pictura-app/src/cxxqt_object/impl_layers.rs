@@ -14,6 +14,7 @@ use pictura_core::{BlendMode, ColorLabel, Document, Layer};
 
 mod auto_select;
 mod fill_content;
+pub(super) use fill_content::ensure_payload_pattern;
 mod layer_masks;
 mod mask_commands;
 pub(in crate::cxxqt_object) use mask_commands::coverage_at;

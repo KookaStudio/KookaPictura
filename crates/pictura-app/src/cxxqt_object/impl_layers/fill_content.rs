@@ -5,6 +5,7 @@
 //! recomposites and records one state.
 
 mod imp;
+pub(in crate::cxxqt_object) use imp::ensure_payload_pattern;
 
 use super::super::qobject::PictureView;
 use imp::*;

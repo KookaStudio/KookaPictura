@@ -951,6 +951,7 @@ free	begin_tone	begin_tone	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint
 free	brush_dab_preview	brush_dab_preview	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	brush_tip_preview	brush_tip_preview	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	bucket_fill_at	bucket_fill_at	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
+free	bucket_fill_preset	bucket_fill_preset	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	cache_levels	cache_levels	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	calibrated_ruler_length	calibrated_ruler_length	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	clear_markers	clear_markers	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
@@ -985,6 +986,7 @@ free	count_set_visible	count_set_visible	api/paint_bridge.h	pictura_app/src/cxxq
 free	document_size_bytes	document_size_bytes	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	draw_gradient	draw_gradient	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	edit_fill	edit_fill	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
+free	edit_fill_preset	edit_fill_preset	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	edit_refused_for_memory	edit_refused_for_memory	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	edit_refused_for_scratch	edit_refused_for_scratch	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	edit_refused_for_scratch_full	edit_refused_for_scratch_full	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
@@ -1026,6 +1028,7 @@ free	open_refused_for_memory	open_refused_for_memory	api/paint_bridge.h	pictura_
 free	paint_dab_pose	paint_dab_pose	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	paint_hold	paint_hold	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	patch_selection	patch_selection	api/paint_bridge.h	pictura_app/src/cxxqt_object/healing.cxxqt.h
+free	pattern_preset_snapshot	pattern_preset_snapshot	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	red_eye	red_eye	api/paint_bridge.h	pictura_app/src/cxxqt_object/healing.cxxqt.h
 free	remove_marker	remove_marker	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	replay_tool_stroke	replay_tool_stroke	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
@@ -1125,6 +1128,9 @@ free	selection_end_lasso_aa	selection_end_lasso_aa	api/selection_bridge.h	pictur
 free	selection_magic_wand_aa	selection_magic_wand_aa	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_marquee_rect	selection_marquee_rect	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_mask_targets	selection_mask_targets	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	selection_pattern_preset	selection_pattern_preset	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	selection_pattern_revision	selection_pattern_revision	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	selection_pattern_valid	selection_pattern_valid	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_rect_preview_contour	selection_rect_preview_contour	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_select_ellipse_aa	selection_select_ellipse_aa	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_within_radius	selection_within_radius	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h

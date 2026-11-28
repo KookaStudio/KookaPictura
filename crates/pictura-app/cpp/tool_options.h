@@ -164,6 +164,7 @@ struct GradientOptions {
 struct BucketOptions {
     int fill = 0;
     int pattern = 0;
+    QByteArray patternPreset;
     QString mode = QStringLiteral("normal");
     int opacity = 100;
     int tolerance = 32;
