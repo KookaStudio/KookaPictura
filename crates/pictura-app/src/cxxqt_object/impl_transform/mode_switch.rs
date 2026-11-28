@@ -11,7 +11,7 @@ use super::geometry::{pivot_point, quad_is_degenerate, session_quad};
 /// warp (its box is the warp's frame), and Distort or Perspective on editable
 /// type, which their begin refuses too.
 pub(super) fn can_set_mode(session: &TransformSession, mode: TransformMode) -> bool {
-    if session.warp_editing {
+    if session.content_aware.is_some() || session.warp_editing {
         return false;
     }
     if !mode.is_projective() {

@@ -11,6 +11,7 @@
 
 #include "document_registry.h"
 #include "panel_host.h"
+#include "panels/channels_panel.h"
 #include "tools.h"
 
 #include "transform_commit.h"
@@ -28,12 +29,29 @@ void MenuRegistrar::wireTransformMenu()
     const auto transformTargetable = [this, transformTarget]() {
         PictureView* view = activeView();
         const QString path = transformTarget();
-        return view && view->has_document() && !path.isEmpty()
+        return view && view->has_document() && !path.isEmpty() && !content_aware_active(*view)
             && view->layer_can_free_transform(path);
     };
     const auto modalSession = [this]() {
-        return tools_ && tools_->transformPending();
+        return tools_ && tools_->transformPending() && (!activeView() || !content_aware_active(*activeView()));
     };
+
+    const QString contentAwareId = QStringLiteral("edit.content.aware.scale");
+    commands_->setHandler(contentAwareId, [this, transformTarget]() {
+        auto* channels = panels_ ? panels_->channelsPanel() : nullptr;
+        if (channels && !channels->isCompositeChannelActive(activeView())) return;
+        if (tools_ && tools_->beginTransformMode(transformTarget(), QStringLiteral("content-aware"))) {
+            refresh();
+        }
+    });
+    commands_->setEnabledProvider(contentAwareId, [this, transformTarget]() {
+        PictureView* view = activeView();
+        const QString path = transformTarget();
+        auto* channels = panels_ ? panels_->channelsPanel() : nullptr;
+        return view && view->has_document() && !path.isEmpty()
+            && (!channels || channels->isCompositeChannelActive(view))
+            && content_aware_can_begin(*view, path);
+    });
 
     commands_->setHandler(command_ids::EditFreeTransform, [this, transformTarget]() {
         // A pending border transform is not silently replaced: Apply / Don't
@@ -78,13 +96,13 @@ void MenuRegistrar::wireTransformMenu()
                 return transform_can_set_mode(*view, mode);
             }
             const QString path = transformTarget();
-            return view && view->has_document() && !path.isEmpty()
+            return view && view->has_document() && !path.isEmpty() && !content_aware_active(*view)
                 && layer_can_transform_mode(*view, path, mode);
         });
     }
 
     commands_->setHandler(command_ids::EditTransformWarp, [this, transformTarget]() {
-        if (tools_ && tools_->beginWarp(transformTarget())) {
+        if (tools_ && (!activeView() || !content_aware_active(*activeView())) && tools_->beginWarp(transformTarget())) {
             refresh();
         }
     });

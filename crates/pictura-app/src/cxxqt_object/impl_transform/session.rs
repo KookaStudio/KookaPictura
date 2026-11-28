@@ -29,7 +29,8 @@ mod view_preview;
 
 use preview::{build_transform_preview, transform_preview_above, transform_preview_bytes};
 pub(in crate::cxxqt_object) use preview::{
-    rendered_transform_group, set_transform_preview_pixels_for_test, transform_preview_layer_at,
+    moving_layer_pixels, rendered_transform_group, set_transform_preview_pixels_for_test,
+    transform_preview_layer_at,
 };
 use selection::{lift_coverage, lifts_selection};
 pub(in crate::cxxqt_object) use view_preview::{MoveView, MoveViewPixels};
@@ -74,7 +75,7 @@ impl qobject::PictureView {
     /// A second begin on the same active path is a no-op; a begin on a different
     /// path first cancels the active session.
     pub fn begin_free_transform(self: Pin<&mut Self>, path: &QString) -> bool {
-        self.begin_transform_session(path, TransformMode::Free)
+        self.begin_transform_session(path, TransformMode::Free, false)
     }
 
     /// Begin a Skew / Distort / Perspective session on the layer at `path`.
@@ -85,19 +86,30 @@ impl qobject::PictureView {
         let Some(mode) = TransformMode::parse(&mode.to_string()) else {
             return false;
         };
-        self.begin_transform_session(path, mode)
+        self.begin_transform_session(path, mode, false)
     }
 
-    fn begin_transform_session(
+    pub(in crate::cxxqt_object) fn begin_transform_session(
         mut self: Pin<&mut Self>,
         path: &QString,
         mode: TransformMode,
+        content_aware: bool,
     ) -> bool {
         memory_gate::clear();
         self.as_mut().settle_pending_composite();
         if !self
             .rust()
             .slot_allows(super::super::document_session::SessionKind::Transform)
+        {
+            return false;
+        }
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+            || (content_aware && self.rust().session.live.transform().is_some())
         {
             return false;
         }
@@ -127,7 +139,19 @@ impl qobject::PictureView {
             .live
             .transform()
             .is_some_and(|session| session.lifted.is_some());
-        let Some(session) = self.as_mut().rust_mut().prepare_transform(&path, mode) else {
+        let original = if content_aware {
+            self.rust().session.doc.as_ref().cloned()
+        } else {
+            None
+        };
+        let prepared = if content_aware {
+            self.as_mut()
+                .rust_mut()
+                .prepare_transform_kind(&path, mode, true)
+        } else {
+            self.as_mut().rust_mut().prepare_transform(&path, mode)
+        };
+        let Some(mut session) = prepared else {
             return false;
         };
         let bounded = session.lifted.is_none();
@@ -144,6 +168,16 @@ impl qobject::PictureView {
         ) {
             self.as_mut().rust_mut().restore_transform_begin(session);
             return false;
+        }
+        if content_aware {
+            let Some(doc) = self.rust().session.doc.as_ref() else {
+                return false;
+            };
+            session.content_aware = Some(super::content_aware::ContentAwareState::new(
+                doc.clone(),
+                original.expect("content-aware original"),
+            ));
+            session.history_label = "Content-Aware Scale".into();
         }
         {
             let mut rust = self.as_mut().rust_mut();
@@ -235,20 +269,9 @@ impl qobject::PictureView {
     /// selected layer, and a trimmed layer would clip later filters).
     fn drop_transform_session(mut self: Pin<&mut Self>) {
         let session = self.as_mut().rust_mut().session.live.take_transform();
-        if let Some(session) = &session {
-            for (member, rect) in &session.untrimmed {
-                if let Some(doc) = self.as_mut().rust_mut().session.doc.as_mut() {
-                    pictura_render::untrim_to(doc, member, *rect);
-                }
-            }
+        if let Some(session) = session {
+            self.as_mut().rust_mut().restore_transform_begin(session);
         }
-        if let Some((_, before)) = session.and_then(|session| session.lifted) {
-            self.as_mut().rust_mut().session.doc.set(Some(*before));
-            self.as_mut().recomposite();
-        }
-        // The controller's own cancel route: the flag goes with the session, so
-        // no caller that skips `transform_set_controls` can leave it set.
-        self.as_mut().rust_mut().transform_controls = false;
     }
 
     /// Commit the session: one transform op (the similarity, an affine quad
@@ -258,6 +281,9 @@ impl qobject::PictureView {
     /// identity transform or warp records nothing; an engine refusal records
     /// nothing. The session always clears.
     pub fn commit_transform(mut self: Pin<&mut Self>) -> bool {
+        if super::content_aware::content_aware_active(self.as_ref().get_ref()) {
+            return super::content_aware::content_aware_commit(self);
+        }
         memory_gate::clear();
         self.as_mut().rust_mut().transform_controls = false;
         if self.rust().selection_transform_live() {
@@ -489,6 +515,15 @@ impl PictureViewRust {
         path: &str,
         mode: TransformMode,
     ) -> Option<TransformSession> {
+        self.prepare_transform_kind(path, mode, false)
+    }
+
+    fn prepare_transform_kind(
+        &mut self,
+        path: &str,
+        mode: TransformMode,
+        content_aware: bool,
+    ) -> Option<TransformSession> {
         let lift = lifts_selection(self, path);
         if !can_begin_mode(self, path, mode) {
             return None;
@@ -536,7 +571,11 @@ impl PictureViewRust {
         } else {
             let group = {
                 let doc = self.session.doc.as_ref()?;
-                transform_group(self, doc, &path)
+                if content_aware {
+                    vec![path.clone()]
+                } else {
+                    transform_group(self, doc, &path)
+                }
             };
             for member in group {
                 // The box hugs each layer's visible pixels, not its (often
@@ -548,11 +587,19 @@ impl PictureViewRust {
                     .as_ref()
                     .and_then(|doc| pictura_render::resolve_path(doc, &member))
                     .map(|layer| layer.rect);
-                let trimmed = self
-                    .session
-                    .doc
-                    .as_mut()
-                    .is_some_and(|doc| pictura_render::trim_to_content(doc, &member));
+                let may_trim = !content_aware
+                    || self
+                        .session
+                        .doc
+                        .as_ref()
+                        .and_then(|doc| pictura_render::resolve_path(doc, &member))
+                        .is_some_and(|layer| layer.source_channels.is_none());
+                let trimmed = may_trim
+                    && self
+                        .session
+                        .doc
+                        .as_mut()
+                        .is_some_and(|doc| pictura_render::trim_to_content(doc, &member));
                 if trimmed {
                     if let Some(rect) = before {
                         untrimmed.push((member.clone(), rect));
@@ -612,6 +659,10 @@ impl PictureViewRust {
     /// Put back what a refused transform begin changed: the pre-trim layer
     /// extent and the pre-lift document.
     pub(in crate::cxxqt_object) fn restore_transform_begin(&mut self, session: TransformSession) {
+        if let Some(state) = session.content_aware.as_ref() {
+            self.session.doc.set(Some(state.original().clone()));
+            return;
+        }
         for (member, rect) in &session.untrimmed {
             if let Some(doc) = self.session.doc.as_mut() {
                 pictura_render::untrim_to(doc, member, *rect);

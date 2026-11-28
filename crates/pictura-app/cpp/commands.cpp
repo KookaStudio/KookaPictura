@@ -64,7 +64,7 @@ const SeparatorRow kSeparators[] = {
     {{QStringLiteral("Edit"), QStringLiteral("Cut")}, {QStringLiteral("Edit")}},
     {{QStringLiteral("Edit"), QStringLiteral("Check Spelling…")}, {QStringLiteral("Edit")}},
     {{QStringLiteral("Edit"), QStringLiteral("Fill…")}, {QStringLiteral("Edit")}},
-    {{QStringLiteral("Edit"), QStringLiteral("Seam-Aware Scale")}, {QStringLiteral("Edit")}},
+    {{QStringLiteral("Edit"), QStringLiteral("Content-Aware Scale")}, {QStringLiteral("Edit")}},
     {{QStringLiteral("Edit"), QStringLiteral("Transform"), QStringLiteral("Scale")}, {QStringLiteral("Edit"), QStringLiteral("Transform")}},
     {{QStringLiteral("Edit"), QStringLiteral("Transform"), QStringLiteral("Rotate 180°")}, {QStringLiteral("Edit"), QStringLiteral("Transform")}},
     {{QStringLiteral("Edit"), QStringLiteral("Transform"), QStringLiteral("Flip Horizontal")}, {QStringLiteral("Edit"), QStringLiteral("Transform")}},

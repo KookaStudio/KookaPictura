@@ -13,6 +13,7 @@
 #include "warp_styles.h"
 
 #include "api/transform_bridge.h"
+#include "api/layers_bridge.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QIcon>
@@ -23,6 +24,7 @@
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QToolButton>
 
@@ -321,6 +323,30 @@ QWidget* OptionsBar::buildTransformPage()
         refreshTransformPage();
     });
 
+    auto* amount = new NumericField(QStringLiteral("Amount"),
+        numericConfig(0.0, 100.0, 1.0, 0, QStringLiteral("%"), true,
+                      QStringLiteral("optionsContentAwareAmount")), page);
+    layout->addWidget(amount);
+    auto* protect = new QComboBox(page);
+    protect->setObjectName(QStringLiteral("optionsContentAwareProtect"));
+    protect->setToolTip(QCoreApplication::translate("PicturaUi", "Protect alpha channel"));
+    layout->addWidget(protect);
+    auto* status = new QLabel(page);
+    status->setObjectName(QStringLiteral("optionsContentAwareStatus"));
+    layout->addWidget(status);
+    connect(amount, &NumericField::valueChanged, this, [this, protect](double value) {
+        if (controller_ && controller_->view()) {
+            content_aware_set_options(*controller_->view(), int(value), protect->currentIndex() - 1);
+            refreshTransformPage();
+        }
+    });
+    connect(protect, &QComboBox::currentIndexChanged, this, [this, amount](int index) {
+        if (controller_ && controller_->view()) {
+            content_aware_set_options(*controller_->view(), int(amount->value()), index - 1);
+            refreshTransformPage();
+        }
+    });
+
     auto* cancel = iconButton(QStringLiteral("optionsTransformCancel"),
                               QStringLiteral("crop.cancel"), QCoreApplication::translate("PicturaUi", "Cancel (Esc)"),
                               page);
@@ -432,6 +458,38 @@ void OptionsBar::refreshTransformPage()
         return;
     }
 
+    const bool aware = content_aware_active(*v);
+    auto* amount = field("optionsContentAwareAmount");
+    auto* protect = transformPage_->findChild<QComboBox*>(QStringLiteral("optionsContentAwareProtect"));
+    auto* status = transformPage_->findChild<QLabel*>(QStringLiteral("optionsContentAwareStatus"));
+    if (status) {
+        status->setVisible(aware && !content_aware_ready(*v));
+        status->setText(content_aware_pending(*v)
+            ? QCoreApplication::translate("PicturaUi", "Calculating…")
+            : QCoreApplication::translate("PicturaUi", "Preview unavailable"));
+    }
+    auto* apply = transformPage_->findChild<QToolButton*>(QStringLiteral("optionsTransformApply"));
+    if (!apply) apply = transformPage_->findChild<QToolButton*>(QStringLiteral("optionsContentAwareCommit"));
+    if (amount && protect && apply) {
+        amount->setVisible(aware);
+        protect->setVisible(aware);
+        apply->setObjectName(aware ? QStringLiteral("optionsContentAwareCommit") : QStringLiteral("optionsTransformApply"));
+        apply->setEnabled(!aware || content_aware_ready(*v));
+        if (aware) {
+            const QSignalBlocker blockAmount(amount);
+            const QSignalBlocker blockProtect(protect);
+            amount->setValue(content_aware_amount(*v));
+            protect->clear();
+            protect->addItem(QCoreApplication::translate("PicturaUi", "None"));
+            protect->addItems(channels_alpha_names(*v));
+            protect->setCurrentIndex(content_aware_protect(*v) + 1);
+        }
+    }
+    for (QWidget* widget : {static_cast<QWidget*>(angleField), static_cast<QWidget*>(skewHField),
+                            static_cast<QWidget*>(skewVField), static_cast<QWidget*>(warp),
+                            static_cast<QWidget*>(interpolation)}) {
+        widget->setVisible(!aware);
+    }
     const QString mode = transform_session_mode(*v);
     const bool freeMode = mode == QStringLiteral("free") || mode == QStringLiteral("scale")
         || mode == QStringLiteral("rotate");
@@ -499,7 +557,8 @@ void OptionsBar::refreshTransformPage()
     }
     for (const char* name : kBoxFields) {
         if (QWidget* w = transformPage_->findChild<QWidget*>(QString::fromLatin1(name))) {
-            w->setVisible(!warping);
+            const bool contentAwareExcluded = aware && (w == angleField || w == skewHField || w == skewVField);
+            w->setVisible(!warping && !contentAwareExcluded);
         }
     }
     refreshWarpFields(v, warping);

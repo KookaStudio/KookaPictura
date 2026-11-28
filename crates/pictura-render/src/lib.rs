@@ -300,6 +300,7 @@ pub use document_ops::{
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use document_ops::{apply_smart_filter, replace_smart_filter_at, smart_filter_record};
+pub use document_ops::{content_aware_scale, ContentAwareOptions};
 
 mod text_render;
 mod type_decor;

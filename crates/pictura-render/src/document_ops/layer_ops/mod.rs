@@ -8,6 +8,9 @@ mod auto_align;
 mod auto_blend;
 mod clipboard;
 mod clipping;
+mod content_aware;
+#[cfg(test)]
+mod content_aware_tests;
 mod create;
 mod crossed_quad;
 pub(super) mod kernel;
@@ -95,6 +98,7 @@ pub use clipping::{
     can_create_clipping_mask, can_release_clipping_mask, clipping_release_paths,
     create_clipping_mask, release_clipping_mask,
 };
+pub use content_aware::{content_aware_scale, ContentAwareOptions};
 pub(crate) use create::insert_node;
 pub use create::{
     add_gradient_fill, add_group, add_group_full, add_group_in, add_layer, add_layer_full,

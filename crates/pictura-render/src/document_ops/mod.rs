@@ -90,6 +90,7 @@ pub use layer_ops::{
     VectorMaskKind, AUTO_ALIGN_PROGRESS_MAX, AUTO_BLEND_PROGRESS_MAX, MASK_FLAG_UNLINKED,
     VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
 };
+pub use layer_ops::{content_aware_scale, ContentAwareOptions};
 pub use layer_ops::{
     duplicate_is_content_neutral, insertion_is_content_neutral, move_is_content_neutral,
 };

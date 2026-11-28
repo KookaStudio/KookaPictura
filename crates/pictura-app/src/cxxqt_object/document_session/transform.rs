@@ -100,6 +100,9 @@ pub(in crate::cxxqt_object) enum WarpDrag {
 /// The live Free Transform session: the target path, the source rect, the
 /// current similarity transform about its reference point, and the drag state.
 pub(in crate::cxxqt_object) struct TransformSession {
+    /// Optional state owned by a Content-Aware Scale session.
+    pub(in crate::cxxqt_object) content_aware:
+        Option<super::super::impl_transform::content_aware::ContentAwareState>,
     /// This session's target: a layer's pixels or the selection border.
     pub(in crate::cxxqt_object) target: TransformTarget,
     pub(in crate::cxxqt_object) path: String,
@@ -203,6 +206,7 @@ impl TransformSession {
         let corners = source_corners(orig_rect);
         let centre = rect_center(orig_rect);
         Self {
+            content_aware: None,
             target,
             path,
             members,

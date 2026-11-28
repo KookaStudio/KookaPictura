@@ -174,6 +174,15 @@ impl PictureViewRust {
 
 impl qobject::PictureView {
     pub fn undo(mut self: Pin<&mut Self>) -> bool {
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return false;
+        }
         memory_gate::clear();
         self.as_mut().settle_pending_composite();
         if self.rust().pending_vector_place.is_some() {
@@ -190,6 +199,15 @@ impl qobject::PictureView {
     }
 
     pub fn redo(mut self: Pin<&mut Self>) -> bool {
+        if self
+            .rust()
+            .session
+            .live
+            .transform()
+            .is_some_and(|s| s.content_aware.is_some())
+        {
+            return false;
+        }
         memory_gate::clear();
         self.as_mut().settle_pending_composite();
         if self.rust().pending_vector_place.is_some() {

@@ -1,0 +1,34 @@
+# Design
+
+## Context
+
+The command catalogue marks `edit.seam.aware.scale` unimplemented. The long-form contract identifies forward-energy seam carving, Amount and alpha protection as inferred, with no Adobe algorithm oracle. #527 and #530 are independent parallel changes.
+
+## Goals / Non-Goals
+
+**Goals:** Implement a deterministic, bounded CPU approximation and an interactive session, with feature code in separate modules and shared session, geometry and command integration where necessary.
+
+**Non-Goals:** Adobe pixel parity, skin-tone detection, Puppet Warp, vector transforms, selected content at 16/32-bit depth, scaling layers with attached raster or vector masks, converted-mode layers without retained source channels, and a new dependency. Refuse these unsupported targets without mutation; do not silently reduce depth or discard masks.
+
+## Decisions
+
+- Use the existing exclusive live-session slot and transform lock/resolution mechanisms. Beginning this session while another edit session owns the slot is refused; while it is pending, document edits are locked and tool or layer switches use the existing Apply / Cancel / Don't Apply resolution. Coordinate shared registrations with #527; neither feature may replace the other's session. Use the existing reference-point geometry and history integration, but keep nonlinear raster mapping feature-specific.
+- For a nonempty selection, support 8-bit documents only. Lift coverage-weighted pixels from the source, leaving the complementary coverage in place; transform the lifted pixels and composite them normally over the destination, including originally unselected pixels. Fractional selection coverage contributes proportionally. Clear the selection border on successful commit, matching the current lifted transform; cancel and undo restore the original selection. Refuse an empty intersection with visible layer pixels. Whole-layer operation supports 8/16/32-bit native samples and non-RGB component planes; do not use the 8-bit lift/merge path for high-depth whole layers.
+- Refuse converted-mode layers lacking retained source channels: their working RGB bytes cannot safely be reinterpreted as source-mode components. In an unconverted 16/32-bit document, widen a layer without a native store to native depth before resampling.
+- Refuse a layer with any attached raster or vector mask, whether linked or unlinked, including masks with different bounds. This avoids an undefined nonlinear mask mapping; scaling the mask target itself is also unavailable.
+- Compute forward-energy seams using the mean of normalized color components as intensity, clamped to [0,1] only for energy (never for stored samples), with stable tie-breaking (leftmost predecessor and then leftmost endpoint); add 1,000,000 times normalized protection coverage to each seam pixel cost. Carry color, transparency, and the protection map through each seam operation; handle horizontal operations by equivalent transposed traversal. Remove one least-cost seam at a time for shrinking, recomputing energy and protection each time. For growth, repeatedly find a least-cost seam and insert the per-plane average of that pixel and its right neighbor (left neighbor at the right edge; duplicate the sole pixel for a one-pixel axis), recomputing after each insertion. Apply the equivalent rule on the vertical axis. Protection is sampled from the named document alpha channel in document coordinates; the channel itself is never changed.
+- Compute ordinary output with the existing bilinear resampler and carved output at identical target dimensions from the original source; blend premultiplied color and alpha linearly by Amount/100, then unpremultiply where alpha is nonzero; quantize integer samples once using nearest rounding and retain floating-point range. This interpretation is an approximation of the undocumented Adobe control. Preserve native depth and document-space channels, including unclamped floating-point samples.
+- Admit a request only when checked arithmetic establishes that peak feature scratch storage is at most 256 MiB and the conservative work estimate `(source_width.max(target_width) * source_height.max(target_height)) * (abs(target_width - source_width) + abs(target_height - source_height))` is at most 32,000,000 pixel-seam visits. Include ordinary output, carved output, protection, energy, predecessor and temporary planes in the scratch estimate, and apply the existing memory governor as well. Reject zero, non-finite, unrepresentable or over-budget geometry before mutation. Feature-owned scratch allocations must be fallible, and admission, try_reserve or governor refusal leaves document and history unchanged. Existing shared output containers, including Plane and its Arc backing and the shared preview RGBA conversion, use infallible standard allocation; global out-of-memory handling for those allocations is not guaranteed and changing core storage is out of scope. Amount 0 may skip seam work but remains subject to checked storage and governor admission.
+- Existing shared transform backdrop and above-layer setup may run synchronously at session entry and retains its existing cost. Run seam computation and transformed preview rendering off the GUI thread, from an immutable original source. Each update cancels the previous job and advances a generation; workers check cancellation during seam traversal and only the current generation may publish. While the current result is pending, keep the last completed preview visibly pending and disable commit; commit applies only the current completed result. Cancel, session replacement or document closure cancels jobs and invalidates their results. Failure retains the staged source, reports refusal, and cannot commit a stale result. The same deterministic computation supplies preview and commit.
+
+## Risks / Trade-offs
+
+- [No Adobe oracle] → State approximation explicitly and test observable invariants, not Photoshop parity.
+- [Seam carving is expensive and extreme ratios can artifact] → The fixed work and memory ceilings intentionally refuse some otherwise valid sizes; do not silently fall back to uniform scaling.
+- [Amount blend, protection strength, enlargement strategy and skin-tone scope are unsourced] → These are approximation decisions, not established parity.
+- [Shared backdrop preparation remains synchronous] → Reuse existing transform setup; large source preparation can still delay session entry.
+- [Shared transform and menu files may be touched by #527] → Coordinate shared session, lock and registration changes without coupling feature-specific algorithms.
+
+## Migration Plan
+
+No persisted document migration is required. A revert removes the new command/session and operation; existing raster history remains ordinary document history.
