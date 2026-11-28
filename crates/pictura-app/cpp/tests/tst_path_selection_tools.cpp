@@ -3,6 +3,7 @@
 #include <QtTest/QtTest>
 
 #include "selftest_paint_fixture.h"
+#include "panels/paths_panel.h"
 
 #include "api/layers_bridge.h"
 
@@ -61,6 +62,10 @@ private slots:
     void init();
     void pathSelectionTool();
     void directSelectionTool();
+    void multiSelectToggle();
+    void multiSelectMarquee();
+    void multiSelectClear();
+    void multiSelectionDragAndDelete();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -208,6 +213,145 @@ void PathSelectionToolsTest::directSelectionTool()
     sendKey(frame, Qt::Key_Delete, Qt::NoModifier, QString());
     QVERIFY2(f.committedOnce(base + 3, "Delete Path"), "delete");
     QCOMPARE(pictura::path_subpath_count(*f.view), 0);
+}
+
+void PathSelectionToolsTest::multiSelectToggle()
+{
+    auto& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("path_multi_toggle"));
+    QVERIFY(f.ok());
+    drawSquare(frame, f);
+    click(f, QPointF(70, 80));
+    click(f, QPointF(90, 80));
+    frame.setActiveTool(pictura::ToolId::DirectSelection);
+    const int before = f.view->history_index();
+    click(f, QPointF(10, 10));
+    click(f, QPointF(70, 80), Qt::ShiftModifier);
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 2);
+    QVERIFY(f.canvas->pathOverlaySelectedAnchorPositionsForTest().contains(QPointF(10, 10)));
+    QVERIFY(f.canvas->pathOverlaySelectedAnchorPositionsForTest().contains(QPointF(70, 80)));
+    click(f, QPointF(10, 10), Qt::ShiftModifier);
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 1);
+    QVERIFY(f.canvas->pathOverlaySelectedAnchorPositionsForTest().contains(QPointF(70, 80)));
+    click(f, QPointF(50, 10));
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 1);
+    QVERIFY(f.canvas->pathOverlaySelectedAnchorPositionsForTest().contains(QPointF(50, 10)));
+    QCOMPARE(f.view->history_index(), before);
+    QCOMPARE(anchor(f, 0, 0), QPointF(10, 10));
+    QCOMPARE(anchor(f, 1, 0), QPointF(70, 80));
+
+    frame.setActiveTool(pictura::ToolId::PathSelection);
+    click(f, QPointF(30, 30));
+    click(f, QPointF(80, 80), Qt::ShiftModifier);
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 6);
+    click(f, QPointF(30, 30), Qt::ShiftModifier);
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 2);
+    QCOMPARE(f.view->history_index(), before);
+}
+
+void PathSelectionToolsTest::multiSelectMarquee()
+{
+    auto& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("path_multi_marquee"));
+    QVERIFY(f.ok());
+    drawSquare(frame, f);
+    click(f, QPointF(70, 80));
+    click(f, QPointF(90, 80));
+    frame.setActiveTool(pictura::ToolId::DirectSelection);
+    const int before = f.view->history_index();
+    f.drag({QPointF(0, 0), QPointF(98, 95)});
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 6);
+    QCOMPARE(f.view->history_index(), before);
+    QCOMPARE(anchor(f, 1, 0), QPointF(70, 80));
+    frame.setActiveTool(pictura::ToolId::PathSelection);
+    f.drag({QPointF(0, 0), QPointF(98, 95)});
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 6);
+    QCOMPARE(f.view->history_index(), before);
+}
+
+void PathSelectionToolsTest::multiSelectClear()
+{
+    auto& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("path_multi_clear"));
+    QVERIFY(f.ok());
+    drawSquare(frame, f);
+    frame.setActiveTool(pictura::ToolId::DirectSelection);
+    const int before = f.view->history_index();
+    click(f, QPointF(10, 10));
+    click(f, QPointF(50, 10), Qt::ShiftModifier);
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 2);
+    click(f, QPointF(95, 5));
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 0);
+    click(f, QPointF(10, 10));
+    click(f, QPointF(50, 10), Qt::ShiftModifier);
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.setActiveTool(pictura::ToolId::DirectSelection);
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 0);
+    QCOMPARE(f.view->history_index(), before);
+    click(f, QPointF(10, 10));
+    click(f, QPointF(50, 10), Qt::ShiftModifier);
+    auto* paths = frame.findChild<pictura::PathsPanel*>(QStringLiteral("pathsPanel"));
+    QVERIFY(paths);
+    QVERIFY(paths->saveWorkPath(QStringLiteral("Selection target")));
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 0);
+    click(f, QPointF(10, 10));
+    click(f, QPointF(50, 10), Qt::ShiftModifier);
+    QVERIFY(f.view->undo());
+    QCOMPARE(f.canvas->pathOverlaySelectedAnchorCountForTest(), 0);
+}
+
+void PathSelectionToolsTest::multiSelectionDragAndDelete()
+{
+    auto& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("path_multi_drag_delete"));
+    QVERIFY(f.ok());
+    drawSquare(frame, f);
+    click(f, QPointF(70, 80));
+    click(f, QPointF(90, 80));
+    frame.setActiveTool(pictura::ToolId::DirectSelection);
+    click(f, QPointF(10, 10));
+    click(f, QPointF(70, 80), Qt::ShiftModifier);
+    int before = f.view->history_index();
+    f.drag({QPointF(10, 10), QPointF(15, 15)});
+    QCOMPARE(anchor(f, 0, 0), QPointF(15, 15));
+    QCOMPARE(anchor(f, 1, 0), QPointF(75, 85));
+    QVERIFY(f.committedOnce(before, "Drag Anchor Point"));
+    QVERIFY(f.view->undo());
+    frame.setActiveTool(pictura::ToolId::PathSelection);
+    click(f, QPointF(30, 30));
+    click(f, QPointF(80, 80), Qt::ShiftModifier);
+    before = f.view->history_index();
+    f.drag({QPointF(30, 30), QPointF(35, 35)});
+    QCOMPARE(anchor(f, 0, 0), QPointF(15, 15));
+    QCOMPARE(anchor(f, 1, 0), QPointF(75, 85));
+    QVERIFY(f.committedOnce(before, "Drag Path"));
+    f.drag({QPointF(35, 35), QPointF(40, 35)}, Qt::AltModifier);
+    QCOMPARE(pictura::path_subpath_count(*f.view), 4);
+    QCOMPARE(anchor(f, 2, 0), QPointF(20, 15));
+    QCOMPARE(anchor(f, 3, 0), QPointF(80, 85));
+    before = f.view->history_index();
+    sendKey(frame, Qt::Key_Delete, Qt::NoModifier, QString());
+    QVERIFY(f.committedOnce(before, "Delete Path"));
+    QCOMPARE(pictura::path_subpath_count(*f.view), 2);
+    QVERIFY(f.view->undo());
+    QCOMPARE(pictura::path_subpath_count(*f.view), 4);
+    QVERIFY(f.view->redo());
+    QCOMPARE(pictura::path_subpath_count(*f.view), 2);
+    click(f, QPointF(35, 35));
+    click(f, QPointF(85, 85), Qt::ShiftModifier);
+    before = f.view->history_index();
+    f.drag({QPointF(35, 35), QPointF(40, 40)}, Qt::ShiftModifier);
+    QCOMPARE(anchor(f, 0, 0), QPointF(15, 15));
+    QCOMPARE(anchor(f, 1, 0), QPointF(75, 85));
+    QCOMPARE(f.view->history_index(), before);
 }
 
 PICTURA_QT_TEST_MAIN(PathSelectionToolsTest)

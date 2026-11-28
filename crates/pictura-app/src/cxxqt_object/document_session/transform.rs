@@ -97,11 +97,23 @@ pub(in crate::cxxqt_object) enum WarpDrag {
     },
 }
 
+/// Original path geometry and its selected items for a vector transform.
+pub(in crate::cxxqt_object) struct PathTransform {
+    pub(in crate::cxxqt_object) original: pictura_core::path::VectorPath,
+    pub(in crate::cxxqt_object) bounds: [f64; 4],
+    pub(in crate::cxxqt_object) components: Vec<usize>,
+    pub(in crate::cxxqt_object) anchors: Vec<(usize, usize)>,
+    pub(in crate::cxxqt_object) active: super::super::paths::ActivePath,
+    pub(in crate::cxxqt_object) layer: Option<String>,
+    pub(in crate::cxxqt_object) generation: u64,
+}
+
 /// The live Free Transform session: the target path, the source rect, the
 /// current similarity transform about its reference point, and the drag state.
 pub(in crate::cxxqt_object) struct TransformSession {
     /// This session's target: a layer's pixels or the selection border.
     pub(in crate::cxxqt_object) target: TransformTarget,
+    pub(in crate::cxxqt_object) path_transform: Option<PathTransform>,
     pub(in crate::cxxqt_object) path: String,
     /// Every layer the session transforms with the source rect its map is
     /// centred on, in panel order. `orig_rect` is the union of their rects.
@@ -183,6 +195,20 @@ pub(in crate::cxxqt_object) struct TransformSession {
 }
 
 impl TransformSession {
+    pub(in crate::cxxqt_object) fn source_corners(&self) -> [(f64, f64); 4] {
+        if let Some(target) = &self.path_transform {
+            let [l, t, r, b] = target.bounds;
+            [(l, t), (r, t), (r, b), (l, b)]
+        } else {
+            source_corners(self.orig_rect)
+        }
+    }
+
+    pub(in crate::cxxqt_object) fn source_center(&self) -> (f64, f64) {
+        let q = self.source_corners();
+        ((q[0].0 + q[2].0) / 2.0, (q[0].1 + q[2].1) / 2.0)
+    }
+
     /// The only place a session is built: a fresh, ungestured session over
     /// `orig_rect`, with its reference point at the rect's centre and its quad
     /// set for a projective mode.
@@ -204,6 +230,7 @@ impl TransformSession {
         let centre = rect_center(orig_rect);
         Self {
             target,
+            path_transform: None,
             path,
             members,
             orig_rect,

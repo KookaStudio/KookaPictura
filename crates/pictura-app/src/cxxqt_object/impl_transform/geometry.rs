@@ -140,7 +140,9 @@ pub(super) fn linear(session: &TransformSession) -> [[f64; 2]; 2] {
 
 /// The source-rect corners under the session map.
 pub(super) fn map_quad(session: &TransformSession) -> [(f64, f64); 4] {
-    MapParams::of(session).map_quad(session.orig_rect)
+    session
+        .source_corners()
+        .map(|p| MapParams::of(session).map_point(p))
 }
 
 /// Whether a session's snapshot is the identity transform: a warp's own
@@ -462,10 +464,36 @@ pub(super) fn quad_is_degenerate(quad: &[(f64, f64); 4]) -> bool {
     false
 }
 
+pub(super) fn session_quad_is_degenerate(
+    session: &TransformSession,
+    quad: &[(f64, f64); 4],
+) -> bool {
+    if session.path_transform.is_none() {
+        return quad_is_degenerate(quad);
+    }
+    if quad.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
+        return true;
+    }
+    let area2: f64 = (0..4)
+        .map(|i| {
+            let a = quad[i];
+            let b = quad[(i + 1) % 4];
+            a.0 * b.1 - b.0 * a.1
+        })
+        .sum();
+    if area2.abs() < 1e-12 {
+        return true;
+    }
+    (0..4).any(|i| {
+        let (a, b, c) = (quad[i], quad[(i + 1) % 4], quad[(i + 2) % 4]);
+        ((b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)).abs() < 1e-12
+    })
+}
+
 /// Store `quad` on the session unless it is degenerate; returns whether it was
 /// accepted.
 pub(super) fn store_quad(session: &mut TransformSession, quad: [(f64, f64); 4]) -> bool {
-    if quad_is_degenerate(&quad) {
+    if session_quad_is_degenerate(session, &quad) {
         return false;
     }
     session.quad = Some(quad);
@@ -485,23 +513,6 @@ pub(super) fn projective_coefficients(
     Some([h[0], h[3], h[6], h[1], h[4], h[7], h[2], h[5], h[8]])
 }
 
-/// Source coordinate of handle `h` (4..=7 are edge midpoints).
-pub(super) fn handle_source_point(rect: PsdRect, h: i32) -> (f64, f64) {
-    let (left, top) = (rect.left as f64, rect.top as f64);
-    let (right, bottom) = (rect.right as f64, rect.bottom as f64);
-    let (mx, my) = ((left + right) / 2.0, (top + bottom) / 2.0);
-    match h {
-        0 => (left, top),
-        1 => (right, top),
-        2 => (right, bottom),
-        3 => (left, bottom),
-        4 => (mx, top),
-        5 => (right, my),
-        6 => (mx, bottom),
-        _ => (left, my),
-    }
-}
-
 /// The anchor handle opposite `h` (the pivot a scale keeps fixed).
 pub(super) fn opposite_handle(h: i32) -> i32 {
     match h {
@@ -517,7 +528,7 @@ pub(super) fn opposite_handle(h: i32) -> i32 {
 }
 
 /// The eight handle positions of the current quad.
-fn handle_points(quad: &[(f64, f64); 4]) -> [(f64, f64); 8] {
+pub(super) fn handle_points(quad: &[(f64, f64); 4]) -> [(f64, f64); 8] {
     [
         quad[0],
         quad[1],
@@ -563,11 +574,11 @@ pub(super) fn gesture_rotate(session: &mut TransformSession, x: f64, y: f64, shi
 /// ratio and the transformed rect is clamped to at least 1 px per axis. The
 /// current H/V shear is kept.
 pub(super) fn gesture_scale(session: &mut TransformSession, x: f64, y: f64, shift: bool) -> bool {
-    let rect = session.orig_rect;
     let [start_sx, start_sy, start_angle, ..] = session.start;
     let h = session.handle;
-    let drag_src = handle_source_point(rect, h);
-    let anchor_src = handle_source_point(rect, opposite_handle(h));
+    let source_handles = handle_points(&session.source_corners());
+    let drag_src = source_handles[h as usize];
+    let anchor_src = source_handles[opposite_handle(h) as usize];
     let anchor_doc = start_map_point(session, anchor_src);
     let (th, tv) = (session.skew_x.tan(), session.skew_y.tan());
     let ux = drag_src.0 - anchor_src.0;
@@ -593,8 +604,17 @@ pub(super) fn gesture_scale(session: &mut TransformSession, x: f64, y: f64, shif
         new_sx = uniform;
         new_sy = uniform;
     }
-    let min_sx = 1.0 / rect.width() as f64;
-    let min_sy = 1.0 / rect.height() as f64;
+    let source = session.source_corners();
+    let min_sx = if session.path_transform.is_some() {
+        1e-9
+    } else {
+        1.0 / (source[1].0 - source[0].0)
+    };
+    let min_sy = if session.path_transform.is_some() {
+        1e-9
+    } else {
+        1.0 / (source[3].1 - source[0].1)
+    };
     if new_sx.abs() < min_sx {
         new_sx = if new_sx < 0.0 { -min_sx } else { min_sx };
     }

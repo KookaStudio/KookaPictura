@@ -40,6 +40,7 @@ pub mod ffi {
     extern "Rust" {
         /// Point the path calls at the active shape layer's outline (`on`, while the active layer is a shape layer) or always at the Work Path. Off by default; the Pen tools leave it off.
         fn path_set_layer_target(view: Pin<&mut PictureView>, on: bool);
+        fn path_selection_target_key(view: &PictureView) -> QString;
 
         /// Whether the layer target is on (see `path_set_layer_target`).
         fn path_layer_target(view: &PictureView) -> bool;
@@ -177,6 +178,7 @@ pub mod ffi {
 
         /// Remove subpath `sp` and record one "Delete Path" state.
         fn path_remove_subpath(view: Pin<&mut PictureView>, sp: i32) -> bool;
+        fn path_remove_subpaths(view: Pin<&mut PictureView>, components: &[i32]) -> bool;
 
         /// Add a Freeform Pen drag (`[x0, y0, x1, y1, …]`) as a new subpath of corner anchors within `tolerance` px, closed when `close`; records one "Freeform Pen" state. False (no state) when fewer than two anchors survive.
         fn path_add_freeform(

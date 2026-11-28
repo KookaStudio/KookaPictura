@@ -1,6 +1,6 @@
 use super::super::document_session::TransformSession;
 use super::convex::keep_convex;
-use super::geometry::{quad_is_degenerate, store_quad, unmap_quad, MapParams};
+use super::geometry::{session_quad_is_degenerate, store_quad, unmap_quad, MapParams};
 
 /// The quad a Skew drag produces from `start`; the caller stores it.
 pub(super) fn skew_quad(
@@ -121,7 +121,7 @@ pub(super) fn gesture_free_skew(
     let Some(quad) = skew_quad(session.start_quad, handle, delta, alt, session.type_layer) else {
         return false;
     };
-    if quad_is_degenerate(&quad) {
+    if session_quad_is_degenerate(session, &quad) {
         return false;
     }
     let Some(base) = unmap_quad(&MapParams::of(session), &quad) else {

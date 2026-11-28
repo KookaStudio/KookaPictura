@@ -545,6 +545,10 @@ public:
     bool setTransformInterpolation(const QString& id);
     // Begin a Transform Selection session on the live selection border.
     bool beginTransformSelection();
+    bool canPathTransform(bool points, bool repeat = false) const;
+    bool beginPathTransform(const QString& mode, bool points = false, bool repeat = false);
+    bool repeatPathTransform(bool points);
+    bool pathTransformCommitInProgress() const { return pathTransformCommitInProgress_; }
     // Whether the live transform targets the selection border (the Select
     // menu locks while one is pending).
     bool transformSelectionTarget() const;
@@ -746,6 +750,7 @@ private:
     // A Distort corner's press point and start corner, for guide snapping.
     QPointF transformPressPos_;
     QPointF transformStartCorner_;
+    bool pathTransformCommitInProgress_ = false;
     bool transformGuideSnap_ = false;
     // The box is up with no session (`controlsIdle_`): on `controlsPath_`,
     // last built for `controlsKey_` (path, rect, history step).

@@ -4,7 +4,7 @@
 //! scale, rotation, and skew carry over as CS6 keeps them.
 
 use super::super::document_session::{TransformMode, TransformSession};
-use super::geometry::{pivot_point, quad_is_degenerate, session_quad};
+use super::geometry::{pivot_point, session_quad, session_quad_is_degenerate};
 
 /// Whether an open `session` may switch to `mode`. Leaving a projective mode
 /// for a similarity one is refused, as are a session editing or holding a
@@ -32,7 +32,7 @@ pub(super) fn switch_mode(session: &mut TransformSession, mode: TransformMode) -
     }
     if mode.is_projective() && !session.mode.is_projective() {
         let quad = session_quad(session);
-        if quad_is_degenerate(&quad) {
+        if session_quad_is_degenerate(session, &quad) {
             return false;
         }
         let pivot = pivot_point(session);

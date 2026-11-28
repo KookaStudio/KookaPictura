@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QList>
 #include <QtCore/QPointF>
 #include <QtCore/QRect>
 #include <QtCore/QString>
@@ -16,6 +17,14 @@ struct ParagraphSetting;
 // stay enabled for the app target (no `-fno-rtti`, no hidden visibility on the
 // handler classes). Resolve-and-discard: handlers outlive tool switches today,
 // but a future registry rebuild would stale a cached pointer.
+
+class PathSelectionSession {
+public:
+    virtual ~PathSelectionSession() = default;
+    virtual QList<int> selectedComponents() const = 0;
+    // Flattened (component, anchor) pairs.
+    virtual QList<int> selectedAnchors() const = 0;
+};
 
 // Crop and Perspective Crop both commit the region they have staged; the
 // resolver picks the active one (Perspective Crop's quad lives only while its

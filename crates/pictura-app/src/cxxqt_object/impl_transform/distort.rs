@@ -1,7 +1,8 @@
 use super::super::document_session::TransformSession;
 use super::convex::keep_convex;
 use super::geometry::{
-    projective_coefficients, quad_is_degenerate, set_pivot, store_quad, unmap_quad, MapParams,
+    projective_coefficients, session_quad_is_degenerate, set_pivot, store_quad, unmap_quad,
+    MapParams,
 };
 
 /// Map `(x, y)` through `projective_coefficients`' `QTransform`-order matrix:
@@ -75,7 +76,7 @@ pub(super) fn gesture_free_distort(
     let Some(quad) = distort_quad(session.start_quad, corner, delta) else {
         return false;
     };
-    if quad_is_degenerate(&quad) {
+    if session_quad_is_degenerate(session, &quad) {
         return false;
     }
     let pivot = carry_pivot(session.start_quad, quad, session.start_pivot);

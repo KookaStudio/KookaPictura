@@ -6,7 +6,7 @@
 
 use super::super::document_session::{RepeatTransform, TransformSession};
 use super::super::helpers::layer_has_effects;
-use super::geometry::{apply_session_transform, rect_center, source_corners, MapParams};
+use super::geometry::{apply_session_transform, source_corners, MapParams};
 use super::link_members;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate;
@@ -26,7 +26,7 @@ pub(super) fn repeatable_transform(session: &TransformSession) -> Option<RepeatT
     if session.mode.is_projective() || session.base_quad.is_some() || session.warp.is_some() {
         return None;
     }
-    let (cx, cy) = rect_center(session.orig_rect);
+    let (cx, cy) = session.source_center();
     Some(RepeatTransform {
         target: session.target,
         scale_x: session.scale_x,

@@ -26,6 +26,22 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        fn path_transform_can_begin(
+            view: &PictureView,
+            components: &[i32],
+            anchors: &[i32],
+            repeat: bool,
+        ) -> bool;
+        fn path_transform_begin(
+            view: Pin<&mut PictureView>,
+            components: &[i32],
+            anchors: &[i32],
+            mode: &QString,
+            repeat: bool,
+        ) -> bool;
+        fn path_transform_active(view: &PictureView) -> bool;
+        fn path_transform_has_repeat(view: &PictureView) -> bool;
+        fn path_transform_repeat(view: Pin<&mut PictureView>) -> bool;
         /// The active session's mode name ("free", "skew", "distort",
         /// "perspective"), or empty without a session.
         fn transform_session_mode(view: &PictureView) -> QString;

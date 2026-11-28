@@ -209,8 +209,8 @@ Source list: CS6 toolbox tools (73 catalogue entries) plus named brush-engine, b
 | P-TOOL-48 | Vertical Type | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-49 | Horizontal Type Mask | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-50 | Vertical Type Mask | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-TOOL-51 | Path Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Path operations, align/arrange, constrained dragging, and multi-select remain | TOOL-18 |
-| P-TOOL-52 | Direct Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Path operations, align/arrange, constrained dragging, and multi-select remain | TOOL-18 |
+| P-TOOL-51 | Path Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Component multi-selection and path transforms are present (#530); path operations, align/arrange, and constrained dragging remain | TOOL-18 |
+| P-TOOL-52 | Direct Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Anchor multi-selection and Transform Points Again are present (#530); segment selection and constrained dragging remain | TOOL-18 |
 | P-TOOL-53 | Rectangle | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |
 | P-TOOL-54 | Rounded Rectangle | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |
 | P-TOOL-55 | Ellipse | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |

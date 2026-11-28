@@ -88,7 +88,7 @@ void ImageView::paintPathOverlay(QPainter& painter)
     painter.setPen(QPen(blue, 1.2));
     for (int i = 0; i < o.anchors.size(); ++i) {
         const QPointF p = toWidget.map(o.anchors.at(i));
-        painter.setBrush(o.anchorsSolid || i == o.activeAnchor ? QBrush(blue)
+        painter.setBrush(o.anchorsSolid || i == o.activeAnchor || o.selectedAnchors.contains(i) ? QBrush(blue)
                                                                  : QBrush(Qt::white));
         painter.drawRect(QRectF(p.x() - 2.5, p.y() - 2.5, 5.0, 5.0));
     }

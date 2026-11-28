@@ -810,8 +810,10 @@ free	path_overlay_points	path_overlay_points	api/layers_bridge.h	pictura_app/src
 free	path_point	path_point	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_point_count	path_point_count	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_remove_subpath	path_remove_subpath	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
+free	path_remove_subpaths	path_remove_subpaths	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_replace_target_outline	path_replace_target_outline	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_resume	path_resume	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
+free	path_selection_target_key	path_selection_target_key	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_set_corner	path_set_corner	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_set_layer_target	path_set_layer_target	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
 free	path_subpath_bounds	path_subpath_bounds	api/layers_bridge.h	pictura_app/src/cxxqt_object/paths.cxxqt.h
@@ -1155,6 +1157,11 @@ free	move_preview_base_origin	move_preview_base_origin	api/transform_bridge.h	pi
 free	move_preview_content_extents	move_preview_content_extents	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	move_preview_follow	move_preview_follow	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	move_preview_scale	move_preview_scale	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
+free	path_transform_active	path_transform_active	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
+free	path_transform_begin	path_transform_begin	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
+free	path_transform_can_begin	path_transform_can_begin	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
+free	path_transform_has_repeat	path_transform_has_repeat	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
+free	path_transform_repeat	path_transform_repeat	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	perspective_crop_commit	perspective_crop_commit	api/transform_bridge.h	pictura_app/src/cxxqt_object/crop_group.cxxqt.h
 free	perspective_crop_commit_sized	perspective_crop_commit_sized	api/transform_bridge.h	pictura_app/src/cxxqt_object/crop_group.cxxqt.h
 free	perspective_crop_refusal_reason	perspective_crop_refusal_reason	api/transform_bridge.h	pictura_app/src/cxxqt_object/crop_group.cxxqt.h
