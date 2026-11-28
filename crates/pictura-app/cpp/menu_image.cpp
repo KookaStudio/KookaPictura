@@ -41,6 +41,28 @@
 
 namespace pictura {
 
+void MenuRegistrar::straightenRuler()
+{
+    QPointer<PictureView> view(activeView());
+    if (!view || !view->has_document()) return;
+    const auto line = ruler_line(*view);
+    if (line.size() != 4) return;
+    const double degrees = straightenAngle(QPointF(line[0], line[1]), QPointF(line[2], line[3]));
+    if (!std::isfinite(degrees) || std::abs(degrees) < 1e-9) return;
+    const QString interpolation = loadPreferences().imageInterpolation;
+    if (runDocumentCommand(dialogParent(), *view, tr("Rotate Canvas"),
+                           [&] { rotate_document_arbitrary_with(*view, degrees, interpolation); })) {
+        if (view) clear_ruler(*view);
+        refresh();
+        CommandParams command;
+        command.values.insert(QStringLiteral("angle"), degrees);
+        command.values.insert(QStringLiteral("interpolation"), interpolation);
+        commands_->recordCommand(command_ids::ImageRotateArbitrary, command);
+    } else {
+        reportCommitRefusal(dialogParent(), tr("rotate the canvas"));
+    }
+}
+
 // Image > Crop, Trim, Duplicate, Image Size, and Canvas Size (Image > Mode is menu_image_mode.cpp).
 // Lifted out of registerHandlers() to keep menu_registrar.cpp within its size
 // budget; the handler bodies are unchanged.

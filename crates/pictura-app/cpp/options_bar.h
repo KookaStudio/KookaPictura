@@ -67,6 +67,7 @@ signals:
     void refineEdgeRequested();
     // A type tool's Warp Text button (opens Type > Warp Text…).
     void warpTextRequested();
+    void rulerStraightenRequested();
 
 public:
     // Self-test hook: the controller the size field is wired to.
@@ -188,6 +189,7 @@ private:
 
     ToolController* controller_ = nullptr;
     QLabel* rulerReadout_ = nullptr;
+    QToolButton* rulerStraighten_ = nullptr;
     // The family option groups, resolved once from the handlers' ports; the
     // pages write these directly (the group setters clamp and notify).
     PaintOptions* paint_ = nullptr;

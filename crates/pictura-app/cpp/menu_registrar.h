@@ -105,6 +105,7 @@ public:
     void alignSelectedLayers(int edge, bool toSelection, int alignTo = 0);
     void distributeSelectedLayers(int edge);
     void updateAlignControls();
+    void straightenRuler();
     void refreshMeasurementScaleChecks();
     void updateUiSizeMenu();
 

@@ -45,7 +45,15 @@ void ImageView::setCountOverlay(const QList<CountOverlayMark>& marks)
 void ImageView::setRulerLine(const QLineF& line)
 {
     rulerLine_ = line;
+    rulerProtractorShown_ = false;
     rulerShown_ = true;
+    update();
+}
+
+void ImageView::setRulerProtractor(const QLineF& line)
+{
+    rulerProtractor_ = line;
+    rulerProtractorShown_ = true;
     update();
 }
 
@@ -53,6 +61,7 @@ void ImageView::clearRulerLine()
 {
     rulerLine_ = QLineF();
     rulerShown_ = false;
+    rulerProtractorShown_ = false;
     update();
 }
 
@@ -78,6 +87,16 @@ void ImageView::paintAnnotations(QPainter& painter)
         painter.drawLine(a, b);
         painter.setPen(QPen(Qt::black, 1));
         painter.drawLine(a, b);
+        if (rulerProtractorShown_) {
+            const QPointF v = toWidget(rulerProtractor_.p1());
+            const QPointF e = toWidget(rulerProtractor_.p2());
+            painter.setPen(QPen(Qt::white, 3));
+            painter.drawLine(v, e);
+            painter.setPen(QPen(Qt::black, 1));
+            painter.drawLine(v, e);
+            painter.setBrush(Qt::white);
+            painter.drawRect(QRectF(e.x() - 3, e.y() - 3, 6, 6));
+        }
         painter.setBrush(Qt::white);
         for (const QPointF& p : {a, b}) {
             painter.drawRect(QRectF(p.x() - 3, p.y() - 3, 6, 6));

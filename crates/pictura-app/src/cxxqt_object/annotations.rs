@@ -75,6 +75,18 @@ pub mod ffi {
         /// The Ruler's line as `[ax, ay, bx, by]`; empty when there is none.
         fn ruler_line(view: &PictureView) -> Vec<f64>;
 
+        /// Set a second arm using the primary start when `at_start`, otherwise its end.
+        fn set_ruler_protractor(
+            view: Pin<&mut PictureView>,
+            at_start: bool,
+            x: f64,
+            y: f64,
+            constrain: bool,
+        );
+
+        /// Second arm as `[vertex_x, vertex_y, end_x, end_y]`, or empty.
+        fn ruler_protractor(view: &PictureView) -> Vec<f64>;
+
         /// The Ruler readout `[X, Y, W, H, A (degrees), D1]`; empty when there is no line.
         fn ruler_measurement(view: &PictureView) -> Vec<f64>;
 

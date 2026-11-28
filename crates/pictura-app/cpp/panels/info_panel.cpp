@@ -526,7 +526,7 @@ void InfoPanel::rebuildTopRight()
     delete topRight_->widget;
     delete topRight_;
     if (rulerMode_) {
-        topRight_ = addReadout(grid_, 0, 1, {QStringLiteral("A"), QStringLiteral("L")},
+        topRight_ = addReadout(grid_, 0, 1, {QStringLiteral("A"), QStringLiteral("L"), QStringLiteral("D2")},
                                QStringLiteral("info.protractor"), QString(), MenuKind::None);
     } else {
         topRight_ = addReadout(grid_, 0, 1,
@@ -542,6 +542,17 @@ void InfoPanel::setView(PictureView* view)
 {
     view_ = view;
     refresh();
+}
+
+void InfoPanel::setRulerCoordinates(const QPointF& origin, int unit)
+{
+    rulerOrigin_ = origin;
+    if (unit != rulerUnit_ && unit >= 0 && unit <= int(MeasureUnit::Percent)) {
+        rulerUnit_ = unit;
+        position_->unit = static_cast<MeasureUnit>(unit);
+        size_->unit = position_->unit;
+    }
+    refresh(false);
 }
 
 void InfoPanel::setCursorPosition(const QPointF& imagePos)
@@ -641,8 +652,8 @@ void InfoPanel::refresh(bool full)
     const int x = int(std::floor(cursor_.x()));
     const int y = int(std::floor(cursor_.y()));
 
-    setValues(position_, {formatMeasure(x, position_->unit, width),
-                          formatMeasure(y, position_->unit, height)});
+    setValues(position_, {formatMeasure(x - rulerOrigin_.x(), position_->unit, width),
+                          formatMeasure(y - rulerOrigin_.y(), position_->unit, height)});
 
     const bool inside = x >= 0 && y >= 0 && x < width && y < height;
     if (inside) {
@@ -689,10 +700,11 @@ void InfoPanel::refresh(bool full)
     if (rulerMode_) {
         // [X, Y, W, H, A, D1]; empty when no measuring line exists.
         const ::rust::Vec<double> m = ruler_measurement(*view_);
-        if (m.size() == 6) {
+        if (m.size() >= 6) {
             const auto locale = uiNumericLocale();
             setValues(topRight_, {locale.toString(m[4], 'f', 1) + QChar(u'°'),
-                                  locale.toString(m[5], 'f', 1)});
+                                  position_->unit == MeasureUnit::Pixels ? locale.toString(m[5], 'f', 1) : formatMeasure(m[5], position_->unit, width),
+                                  m.size() == 7 ? (position_->unit == MeasureUnit::Pixels ? locale.toString(m[6], 'f', 1) : formatMeasure(m[6], position_->unit, width)) : QString()});
             setValues(size_, {formatMeasure(m[2], size_->unit, width),
                               formatMeasure(m[3], size_->unit, height)});
         } else {
@@ -801,7 +813,8 @@ QString InfoPanel::rulerTextForTest() const
     for (const QLabel* label : topRight_->values) {
         values << label->text();
     }
-    return values.join(QString()).isEmpty() ? QString() : values.join(QStringLiteral("  "));
+    while (!values.isEmpty() && values.last().isEmpty()) values.removeLast();
+    return values.join(QStringLiteral("  "));
 }
 
 QString InfoPanel::docTextForTest() const { return docLabel_->text(); }

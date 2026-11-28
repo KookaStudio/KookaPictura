@@ -154,6 +154,7 @@ pub(super) fn set_ruler(
         Ruler {
             a: (ax, ay),
             b: (bx, by),
+            protractor: None,
         }
     };
     view.rust_mut().ruler = Some(ruler);
@@ -169,10 +170,45 @@ pub(super) fn ruler_line(view: &PictureView) -> Vec<f64> {
         .map_or_else(Vec::new, |r| vec![r.a.0, r.a.1, r.b.0, r.b.1])
 }
 
+pub(super) fn set_ruler_protractor(
+    mut view: Pin<&mut PictureView>,
+    at_start: bool,
+    x: f64,
+    y: f64,
+    constrain: bool,
+) {
+    if let Some(r) = view.as_mut().rust_mut().ruler.as_mut() {
+        let vertex = if at_start { r.a } else { r.b };
+        let end = if constrain {
+            Ruler::constrained(vertex, (x, y)).b
+        } else {
+            (x, y)
+        };
+        r.protractor = Some((at_start, end));
+    }
+}
+
+pub(super) fn ruler_protractor(view: &PictureView) -> Vec<f64> {
+    view.rust()
+        .ruler
+        .and_then(|r| {
+            r.protractor.map(|(at_start, end)| {
+                let v = if at_start { r.a } else { r.b };
+                vec![v.0, v.1, end.0, end.1]
+            })
+        })
+        .unwrap_or_default()
+}
+
 pub(super) fn ruler_measurement(view: &PictureView) -> Vec<f64> {
     view.rust().ruler.map_or_else(Vec::new, |r| {
         let m = r.measure();
-        vec![m.x, m.y, m.width, m.height, m.angle, m.distance]
+        let mut values = vec![m.x, m.y, m.width, m.height, m.angle, m.distance];
+        if let Some((angle, d2)) = r.protractor_measurement() {
+            values[4] = angle;
+            values.push(d2);
+        }
+        values
     })
 }
 

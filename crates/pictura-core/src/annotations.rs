@@ -326,6 +326,7 @@ fn nearest(markers: &[Marker], x: f64, y: f64, radius: f64) -> Option<usize> {
 pub struct Ruler {
     pub a: (f64, f64),
     pub b: (f64, f64),
+    pub protractor: Option<(bool, (f64, f64))>,
 }
 
 /// The Ruler readout: CS6's X, Y, W, H, A, D1.
@@ -342,6 +343,24 @@ pub struct Measurement {
 }
 
 impl Ruler {
+    /// Included angle and length of the optional second arm.
+    pub fn protractor_measurement(&self) -> Option<(f64, f64)> {
+        let (at_start, end) = self.protractor?;
+        let (vertex, other) = if at_start {
+            (self.a, self.b)
+        } else {
+            (self.b, self.a)
+        };
+        let u = (other.0 - vertex.0, other.1 - vertex.1);
+        let v = (end.0 - vertex.0, end.1 - vertex.1);
+        let length = v.0.hypot(v.1);
+        let angle = (u.0 * v.1 - u.1 * v.0)
+            .abs()
+            .atan2(u.0 * v.0 + u.1 * v.1)
+            .to_degrees();
+        Some((angle, length))
+    }
+
     pub fn measure(&self) -> Measurement {
         let dx = self.b.0 - self.a.0;
         let dy = self.b.1 - self.a.1;
@@ -367,6 +386,7 @@ impl Ruler {
         Ruler {
             a,
             b: (a.0 + along * c, a.1 + along * s),
+            protractor: None,
         }
     }
 }
@@ -454,6 +474,7 @@ mod tests {
         let flat = Ruler {
             a: (10.0, 20.0),
             b: (60.0, 20.0),
+            protractor: None,
         }
         .measure();
         assert!(close(flat.x, 10.0) && close(flat.y, 20.0) && close(flat.width, 50.0));
@@ -461,6 +482,7 @@ mod tests {
         let down = Ruler {
             a: (0.0, 0.0),
             b: (3.0, 4.0),
+            protractor: None,
         }
         .measure();
         assert!(close(down.distance, 5.0) && close(down.height, 4.0));
@@ -472,9 +494,27 @@ mod tests {
         let up = Ruler {
             a: (0.0, 10.0),
             b: (10.0, 0.0),
+            protractor: None,
         }
         .measure();
         assert!(close(up.angle, 45.0));
+    }
+
+    #[test]
+    fn protractor_reports_included_angle_and_second_length() {
+        for vertex_at_start in [false, true] {
+            let mut r = Ruler {
+                a: (0.0, 0.0),
+                b: (20.0, 0.0),
+                protractor: None,
+            };
+            let x = if vertex_at_start { 0.0 } else { 20.0 };
+            r.protractor = Some((vertex_at_start, (x, 10.0)));
+            let (angle, distance) = r.protractor_measurement().unwrap();
+            assert!(close(angle, 90.0));
+            assert!(close(distance, 10.0));
+            assert!(close(r.measure().distance, 20.0));
+        }
     }
 
     #[test]

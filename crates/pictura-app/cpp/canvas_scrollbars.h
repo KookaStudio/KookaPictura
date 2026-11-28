@@ -49,6 +49,7 @@ signals:
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void syncFromView();
@@ -62,6 +63,7 @@ private:
     QWidget* rulerCorner_ = nullptr;
     QWidget* corner_ = nullptr;
     bool syncing_ = false;
+    bool originDragging_ = false;
     // Held for a canvas set later; the canvas's drag readouts measure in them.
     int unit_ = 1;
     bool traditionalPoints_ = false;

@@ -2,8 +2,6 @@
 #include <QtCore/QCoreApplication>
 #include "localization.h"
 
-#include <cmath>
-
 #include "color_picker_dialog.h"
 #include "icons.h"
 #include "panels/brush_preset_picker.h"
@@ -647,69 +645,6 @@ void OptionsBar::addMagneticFields(QHBoxLayout* layout, QWidget* page, Selection
     pressure->setEnabled(false);
     pressure->setToolTip(QCoreApplication::translate("PicturaUi", "Not modelled: tablet pressure is not read."));
     layout->addWidget(pressure);
-}
-
-void OptionsBar::refreshRulerReadout()
-{
-    if (!rulerReadout_) {
-        return;
-    }
-    const PictureView* view = controller_ ? controller_->view() : nullptr;
-    const auto values = view ? ruler_measurement(*view) : ::rust::Vec<double>();
-    QStringList fields;
-    const char* names[] = {"X", "Y", "W", "H", "A", "D1"};
-    const auto locale = uiNumericLocale();
-    for (int i = 0; i < 6; ++i) {
-        const QString value = values.size() == 6
-            ? locale.toString(values[i], 'f', 1) + (i == 4 ? QStringLiteral("°") : QString())
-            : QString();
-        fields << QStringLiteral("%1: %2").arg(QLatin1String(names[i]), value);
-    }
-    if (view && edition_is_extended()) {
-        const double length = calibrated_ruler_length(*view);
-        if (std::isfinite(length)) {
-            fields << tr("Length %1").arg(locale.toString(length, 'g', QLocale::FloatingPointShortest)
-                                          + QLatin1Char(' ') + measurement_scale_units(*view));
-        }
-    }
-    rulerReadout_->setText(fields.join(QStringLiteral("   ")));
-}
-
-// The annotation tools' bars, as photorust ports them: the Ruler's X, Y, W, H,
-// A, D1 readout (pixels and degrees), then Clear for every tool.
-// ponytail: no Sample Size for samplers, Straighten for the Ruler, or Author
-// and Color for notes yet.
-QWidget* OptionsBar::buildAnnotationPage(ToolId id)
-{
-    auto* page = new QWidget(stack_);
-    auto* layout = new QHBoxLayout(page);
-    layout->setContentsMargins(4, 2, 4, 2);
-    layout->addWidget(toolButton(id, page));
-
-    if (id == ToolId::Ruler) {
-        rulerReadout_ = new QLabel(page);
-        rulerReadout_->setObjectName(QStringLiteral("optionsRulerReadout"));
-        rulerReadout_->setTextFormat(Qt::PlainText);
-        rulerReadout_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        layout->addWidget(rulerReadout_);
-        refreshRulerReadout();
-        if (controller_) {
-            connect(controller_, &ToolController::rulerChanged, this, &OptionsBar::refreshRulerReadout);
-        }
-    }
-
-    auto* clear = new QToolButton(page);
-    clear->setObjectName(QStringLiteral("optionsAnnotationClear"));
-    clear->setText(id == ToolId::Note ? QCoreApplication::translate("PicturaUi", "Clear All") : QCoreApplication::translate("PicturaUi", "Clear"));
-    clear->setToolTip(id == ToolId::ColorSampler ? QCoreApplication::translate("PicturaUi", "Delete every color sampler")
-                      : id == ToolId::Note       ? QCoreApplication::translate("PicturaUi", "Delete every note")
-                                                 : QCoreApplication::translate("PicturaUi", "Remove the measuring line"));
-    layout->addWidget(clear);
-    if (controller_) {
-        connect(clear, &QToolButton::clicked, this, [this]() { controller_->clearAnnotations(); });
-    }
-    layout->addStretch(1);
-    return page;
 }
 
 // The healing tools' bars. Spot Healing picks its Type; Healing Brush toggles

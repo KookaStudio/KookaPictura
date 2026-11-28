@@ -63,6 +63,7 @@ set(PICTURA_QT_TEST_DRIVER_document
     tst_edit_refresh
     tst_image_ops
     tst_image_rotate
+    tst_ruler_tool
     tst_canvas_pan
     tst_initial_view
     tst_new_document

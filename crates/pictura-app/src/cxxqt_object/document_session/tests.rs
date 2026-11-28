@@ -567,6 +567,7 @@ fn replacement_clears_outgoing_state() {
     view.ruler = Some(pictura_core::Ruler {
         a: (0.0, 0.0),
         b: (1.0, 1.0),
+        protractor: None,
     });
     view.session
         .doc

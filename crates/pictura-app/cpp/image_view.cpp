@@ -937,6 +937,21 @@ void ImageView::mousePressEvent(QMouseEvent* event)
     QWidget::mousePressEvent(event);
 }
 
+void ImageView::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        bool handled = false;
+        emit mouseDoubleClicked(widgetToImage(event->position()), int(event->modifiers()), &handled);
+        if (handled) {
+            event->accept();
+            return;
+        }
+        mousePressEvent(event);
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
+}
+
 // Keep Qt's synthesized mouse events for the tool routing, but take the
 // tablet's pressure first so the next dab uses it.
 void ImageView::tabletEvent(QTabletEvent* event)

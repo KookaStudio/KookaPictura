@@ -492,6 +492,7 @@ public:
     void setCountOverlay(const QList<CountOverlayMark>& marks);
     void setRulerLine(const QLineF& line);
     void clearRulerLine();
+    void setRulerProtractor(const QLineF& line);
     int samplerOverlayCountForTest() const { return int(samplerOverlay_.size()); }
     int noteOverlayCountForTest() const { return int(noteOverlay_.size()); }
     int countOverlayCountForTest() const { return int(countOverlay_.size()); }
@@ -655,6 +656,10 @@ public:
 
     // The unit and resolution drag readouts measure in (the rulers').
     void setMeasureUnit(RulerUnit unit, bool traditionalPoints);
+    QPointF rulerOrigin() const { return rulerOrigin_; }
+    int rulerUnit() const { return measureUnit_; }
+    void setRulerOrigin(const QPointF& point);
+    QString rulerLength(double pixels, bool horizontal) const;
     void setPpiProvider(std::function<double()> ppi);
     // The Move tool's readout for a move of `delta` document pixels:
     // "ΔX: 0.500 in" over "ΔY: 0.250 in".
@@ -712,6 +717,7 @@ public:
 
 signals:
     void zoomChanged(double zoom);
+    void rulerOriginChanged();
     // The pan or zoom changed by any path (pan, zoom, fit, 100%, resize, the
     // Navigator proxy). The workspace scrollbars project this into their ranges.
     void viewChanged();
@@ -720,6 +726,7 @@ signals:
     void handPanned(const QPointF& delta, Qt::KeyboardModifiers mods);
     void mousePressed(const QPointF& imagePos, int button, int modifiers);
     void pointerGestureFocusLost();
+    void mouseDoubleClicked(const QPointF& imagePos, int modifiers, bool* handled);
     void mouseMoved(const QPointF& imagePos);
     void mouseReleased(const QPointF& imagePos);
     // The pointer left the canvas; a hover-only affordance (the Refine Edge
@@ -746,6 +753,7 @@ protected:
     void paintEvent(QPaintEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void tabletEvent(QTabletEvent* event) override;
@@ -821,6 +829,7 @@ private:
     void paintMoveOutline(QPainter& painter);
     QRectF moveOutline_;
     QPolygonF controlsBox_;
+    QPointF rulerOrigin_;
     int measureUnit_ = 1;
     bool measureTraditional_ = false;
     std::function<double()> measurePpi_;
@@ -862,6 +871,8 @@ private:
     QList<CountOverlayMark> countOverlay_;
     int currentNote_ = -1;
     QLineF rulerLine_;
+    QLineF rulerProtractor_;
+    bool rulerProtractorShown_ = false;
     bool rulerShown_ = false;
     QPolygonF perspectiveQuad_;
     // The perspective grid's spacing in document pixels (one inch); 0 hides it.

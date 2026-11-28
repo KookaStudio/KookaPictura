@@ -217,8 +217,9 @@ gaps are the CS6 Extended 3D object and camera tools.
       (#500)
 - [ ] Hand and Zoom options: Scrubby and animated zoom (#533), plus Bird's Eye
       View and Flick Panning (#534)
-- [ ] Ruler protractor and Straighten from the ruler (#535); eyedropper
-      modifiers and Shift-click sampler (#536)
+- [x] Ruler protractor, Straighten and ruler-origin drag (#535)
+- [ ] Eyedropper modifiers and Shift-click sampler (#536)
+- [ ] Ruler-origin snapping to guides, grid and slices (#305)
 - [ ] Clone Source overlay controls (#537)
 - [ ] Healing Mode, Source and Sample, Sample All Layers, and depth and mode
       handling (#538)
